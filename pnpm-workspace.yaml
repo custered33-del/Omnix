@@ -1,0 +1,6 @@
+packages:
+  - "packages/*"
+onlyBuiltDependencies:
+  - esbuild
+  - "@napi-rs/canvas"
+  - sharp
