@@ -185,6 +185,9 @@ export class RealtimeHub {
       case 'snapshot':
         this.toProject(e.projectId, { type: 'snapshot', projectId: e.projectId, snapshot: e.snapshot });
         break;
+      case 'code':
+        this.toProject(e.projectId, e);
+        break;
       case 'meta':
       case 'deleted':
         for (const c of this.clients.values()) this.send(c, { ...e });

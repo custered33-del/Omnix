@@ -120,7 +120,7 @@ function applyLayerTransform(ctx: Ctx2D, p: LayerProps, scale: number): void {
 }
 
 /** Render one layer (content, smart filters, mask) into a full-size transparent buffer. */
-export function renderLayerBuffer(env: Env, layer: SceneNode<'layer'>, p: LayerProps = layer.props): CanvasLike {
+export function renderLayerBuffer(env: Env, layer: SceneNode<'layer'>, p: LayerProps = layer.props, skipMask = false): CanvasLike {
   const { host, W, H, scale } = env;
   const buf = host.createCanvas(W, H);
   const ctx = ctxOf(buf);
@@ -171,7 +171,7 @@ export function renderLayerBuffer(env: Env, layer: SceneNode<'layer'>, p: LayerP
     writeRaster(buf, r);
   }
 
-  const m = layerMask(env, p);
+  const m = skipMask ? null : layerMask(env, p);
   if (m) {
     ctx.save();
     ctx.setTransform(1, 0, 0, 1, 0, 0);
@@ -254,4 +254,29 @@ export function layerBounds(host: RenderHost, state: ProjectState, layerId: stri
       return { x: 0, y: 0, width: cp.width, height: cp.height };
     }
   }
+}
+
+function envFor(host: RenderHost, state: ProjectState, layerId: string, scale: number): Env {
+  const layer = requireNodeOfType(state, layerId, 'layer');
+  let cur: SceneNode | undefined = layer;
+  while (cur && cur.type !== 'canvas') cur = cur.parentId ? state.nodes[cur.parentId] : undefined;
+  if (!cur) throw new Error('Layer is not inside a canvas');
+  const cp = (cur as SceneNode<'canvas'>).props;
+  return { host, state, W: Math.max(1, Math.round(cp.width * scale)), H: Math.max(1, Math.round(cp.height * scale)), scale, docW: cp.width, docH: cp.height, options: {} };
+}
+
+/**
+ * Render one layer's own pixels (content and smart filters, optionally its mask) at full canvas size,
+ * without its blend mode or opacity. Used for layered exports (PSD, SVG) and layer thumbnails.
+ */
+export function renderSingleLayer(host: RenderHost, state: ProjectState, layerId: string, options: { scale?: number; includeMask?: boolean } = {}): CanvasLike {
+  const env = envFor(host, state, layerId, options.scale ?? 1);
+  const layer = requireNodeOfType(state, layerId, 'layer');
+  return renderLayerBuffer(env, layer, layer.props, options.includeMask === false);
+}
+
+/** The rasterized mask of a layer (null when it has none or it is disabled). */
+export function renderLayerMask(host: RenderHost, state: ProjectState, layerId: string, scale = 1): Mask | null {
+  const env = envFor(host, state, layerId, scale);
+  return layerMask(env, requireNodeOfType(state, layerId, 'layer').props);
 }

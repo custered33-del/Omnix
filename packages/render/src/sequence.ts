@@ -16,6 +16,8 @@ export interface SequenceRenderOptions {
   editor?: { onionSkin?: boolean; showBones?: boolean };
   /** Skip effects/background removal for fast scrubbing. */
   draft?: boolean;
+  /** Leave the sequence background transparent (animated GIF/APNG/WebM with alpha). */
+  transparent?: boolean;
 }
 
 export function renderSequenceFrame(host: RenderHost, state: ProjectState, sequenceId: string, time: number, options: SequenceRenderOptions = {}): CanvasLike {
@@ -27,8 +29,10 @@ export function renderSequenceFrame(host: RenderHost, state: ProjectState, seque
   const t = sp.purpose === 'animation' ? playbackTime(sp.playback, time, sp.duration) : time;
   const out = host.createCanvas(W, H);
   const ctx = ctxOf(out);
-  ctx.fillStyle = sp.background;
-  ctx.fillRect(0, 0, W, H);
+  if (!options.transparent) {
+    ctx.fillStyle = sp.background;
+    ctx.fillRect(0, 0, W, H);
+  }
   const env: SeqEnv = { host, W, H, scale, seqW: sp.width, seqH: sp.height, fps: sp.fps, options };
   const tracks = tracksOf(state, sequenceId).slice().reverse();
   for (const track of tracks) {

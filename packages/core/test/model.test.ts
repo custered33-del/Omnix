@@ -239,3 +239,10 @@ describe('validation', () => {
     expect(validateOperation({ kind: 'create', parentId: canvas.id, nodes: [bad] }, typeOf).length).toBeGreaterThan(0);
   });
 });
+
+describe('validation of keyframed props', () => {
+  it('accepts partial keyframe maps (only the animated props)', () => {
+    expect(validateNodeProps('clip', { keyframes: { opacity: [{ time: 0, value: 1, easing: 'linear' }] } }, true)).toEqual([]);
+    expect(validateNodeProps('clip', { keyframes: { wobble: [] } }, true).length).toBeGreaterThan(0);
+  });
+});

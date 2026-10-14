@@ -19,7 +19,7 @@ export const zEasing = z.union([
   z.object({ bezier: z.tuple([z.number(), z.number(), z.number(), z.number()]) }),
 ]);
 export const zKeyframe = z.object({ time: z.number(), value: z.number(), easing: zEasing });
-export const zKeyframes = z.record(z.enum(['x', 'y', 'scale', 'rotation', 'opacity', 'volume', 'blur']), z.array(zKeyframe));
+export const zKeyframes = z.partialRecord(z.enum(['x', 'y', 'scale', 'rotation', 'opacity', 'volume', 'blur']), z.array(zKeyframe));
 
 export const zPathAnchor = z.object({ x: z.number(), y: z.number(), in: zPoint.optional(), out: zPoint.optional() });
 export const zBezierPath = z.object({ closed: z.boolean(), anchors: z.array(zPathAnchor) });

@@ -42,6 +42,13 @@ export interface OmnixInstance {
 export type OmnixModule = (instance: { services: Services; app: express.Express; router: express.Router }) => void | Promise<void>;
 
 const modules: OmnixModule[] = [];
+
+/** Register work to run when the server shuts down (flush caches, stop child processes). */
+export function onShutdown(services: Services, hook: () => Promise<void> | void): void {
+  const list = (services.ext.shutdownHooks as (() => Promise<void> | void)[] | undefined) ?? [];
+  list.push(hook);
+  services.ext.shutdownHooks = list;
+}
 /** Register a module that runs for every Omnix instance created afterwards. */
 export function useModule(m: OmnixModule): void {
   modules.push(m);
@@ -184,6 +191,13 @@ export async function createOmnix(overrides: Partial<OmnixConfig> & { memory?: b
     },
     async close() {
       hub.close();
+      for (const hook of (services.ext.shutdownHooks as (() => Promise<void> | void)[] | undefined) ?? []) {
+        try {
+          await hook();
+        } catch (e) {
+          if (config.dev) console.warn('[omnix] shutdown hook failed', e);
+        }
+      }
       await projects.flushAll();
       await new Promise<void>((resolve) => server.close(() => resolve()));
       server.closeAllConnections?.();

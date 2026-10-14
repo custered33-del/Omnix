@@ -81,7 +81,9 @@ export type ProjectEvent =
   | { type: 'proposal'; projectId: string; proposal: Proposal }
   | { type: 'snapshot'; projectId: string; snapshot: Snapshot }
   | { type: 'meta'; projectId: string; meta: ProjectMeta }
-  | { type: 'deleted'; projectId: string };
+  | { type: 'deleted'; projectId: string }
+  /** Live output from a code run (not persisted; the final outputs are committed). */
+  | { type: 'code'; projectId: string; runId: string; stream: 'stdout' | 'stderr'; text: string; cellId: string | null };
 
 /**
  * Owns every open project session. All writes go through here so validation, consent,
