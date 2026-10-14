@@ -1,0 +1,618 @@
+[
+  {
+    "name": "list_projects",
+    "title": "List projects",
+    "category": "project",
+    "access": "read",
+    "description": "List the Omnix projects this connection can see, most recently edited first. Use the ids with the other tools.",
+    "inputSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "includeArchived": {
+          "description": "Include archived projects.",
+          "type": "boolean"
+        }
+      }
+    },
+    "outputSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "projects": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "primaryTool": {
+                "type": "string"
+              },
+              "updatedAt": {
+                "type": "string"
+              },
+              "aiConsent": {
+                "type": "boolean"
+              },
+              "role": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "name",
+              "primaryTool",
+              "updatedAt",
+              "aiConsent",
+              "role"
+            ],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": [
+        "projects"
+      ],
+      "additionalProperties": false
+    },
+    "example": {
+      "input": {},
+      "output": {
+        "projects": [
+          {
+            "id": "prj_8Kq2...",
+            "name": "Product teaser",
+            "primaryTool": "video",
+            "updatedAt": "2026-10-14T18:00:00.000Z",
+            "aiConsent": true,
+            "role": "owner"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "name": "get_project",
+    "title": "Get project overview",
+    "category": "project",
+    "access": "read",
+    "description": "Read a whole project across all six tools at once: every canvas (layers), sequence (tracks and clips), code workspace (files, notebook cells), document (outline) and deck (slides), plus session-memory notes. Start here before editing.",
+    "inputSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Project id (from list_projects)."
+        },
+        "includeTree": {
+          "description": "Also return the full node tree as text (ids and labels).",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "projectId"
+      ]
+    },
+    "outputSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "outline": {},
+        "tree": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "outline"
+      ],
+      "additionalProperties": false
+    },
+    "example": {
+      "input": {
+        "projectId": "prj_8Kq2..."
+      },
+      "output": {
+        "outline": {
+          "name": "Product teaser",
+          "primaryTool": "video",
+          "documents": [
+            "..."
+          ],
+          "notes": []
+        }
+      }
+    }
+  },
+  {
+    "name": "get_node",
+    "title": "Read a node",
+    "category": "project",
+    "access": "read",
+    "description": "Read one node (layer, clip, block, slide element, file, cell...) with its properties and children ids. Large arrays such as brush points are summarized.",
+    "inputSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Project id (from list_projects)."
+        },
+        "nodeId": {
+          "type": "string",
+          "description": "Node id from get_project."
+        }
+      },
+      "required": [
+        "projectId",
+        "nodeId"
+      ]
+    },
+    "outputSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string"
+        },
+        "parentId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "children": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "props": {
+          "type": "object",
+          "propertyNames": {
+            "type": "string"
+          },
+          "additionalProperties": {}
+        }
+      },
+      "required": [
+        "id",
+        "type",
+        "parentId",
+        "children",
+        "props"
+      ],
+      "additionalProperties": false
+    },
+    "example": {
+      "input": {
+        "projectId": "prj_8Kq2...",
+        "nodeId": "lyr_x1"
+      },
+      "output": {
+        "id": "lyr_x1",
+        "type": "layer",
+        "parentId": "cnv_a",
+        "children": [],
+        "props": {
+          "name": "Sky",
+          "layerType": "raster",
+          "opacity": 1
+        }
+      }
+    }
+  },
+  {
+    "name": "get_history",
+    "title": "Read history",
+    "category": "project",
+    "access": "read",
+    "description": "List recent changes on the current branch: who made them (human or AI), when, and what. Useful to see what the user did since your last turn.",
+    "inputSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Project id (from list_projects)."
+        },
+        "limit": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 200
+        }
+      },
+      "required": [
+        "projectId"
+      ]
+    },
+    "outputSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "head": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "commits": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "label": {
+                "type": "string"
+              },
+              "author": {
+                "type": "string"
+              },
+              "authorType": {
+                "type": "string"
+              },
+              "timestamp": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "label",
+              "author",
+              "authorType",
+              "timestamp"
+            ],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": [
+        "head",
+        "commits"
+      ],
+      "additionalProperties": false
+    },
+    "example": {
+      "input": {
+        "projectId": "prj_8Kq2...",
+        "limit": 5
+      }
+    }
+  },
+  {
+    "name": "get_selection",
+    "title": "Get the user's selection",
+    "category": "project",
+    "access": "read",
+    "description": "What the user currently has selected in Omnix (layers, clips, blocks, slide elements) and where they are looking. Use it to resolve \"this\" and \"here\".",
+    "inputSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Project id (from list_projects)."
+        }
+      },
+      "required": [
+        "projectId"
+      ]
+    },
+    "outputSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "nodeIds": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "location": {
+          "anyOf": [
+            {},
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "nodeIds",
+        "location"
+      ],
+      "additionalProperties": false
+    },
+    "example": {
+      "input": {
+        "projectId": "prj_8Kq2..."
+      },
+      "output": {
+        "nodeIds": [
+          "lyr_x1"
+        ],
+        "location": {
+          "tool": "image",
+          "nodeId": "cnv_a"
+        }
+      }
+    }
+  },
+  {
+    "name": "list_notes",
+    "title": "Read session memory",
+    "category": "project",
+    "access": "read",
+    "description": "Read the project's session memory: decisions, prompts and rejected options recorded by people and AI. Read this when resuming work so you do not repeat rejected ideas.",
+    "inputSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Project id (from list_projects)."
+        }
+      },
+      "required": [
+        "projectId"
+      ]
+    },
+    "outputSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "notes": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "kind": {
+                "type": "string"
+              },
+              "text": {
+                "type": "string"
+              },
+              "author": {
+                "type": "string"
+              },
+              "createdAt": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "kind",
+              "text",
+              "author",
+              "createdAt"
+            ],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": [
+        "notes"
+      ],
+      "additionalProperties": false
+    },
+    "example": {
+      "input": {
+        "projectId": "prj_8Kq2..."
+      }
+    }
+  },
+  {
+    "name": "render_preview",
+    "title": "Render a preview image",
+    "category": "project",
+    "access": "read",
+    "description": "See the work: render a canvas, single layer, video/animation frame at a time, slide, or the whole project to an image. Use it to check your edits visually before handing back to the user.",
+    "inputSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Project id (from list_projects)."
+        },
+        "nodeId": {
+          "description": "Canvas, layer, sequence, clip, slide or deck id. Omit for a project thumbnail.",
+          "type": "string"
+        },
+        "time": {
+          "description": "Seconds, for sequences.",
+          "type": "number",
+          "minimum": 0
+        },
+        "maxSize": {
+          "description": "Longest edge in pixels (default 1024).",
+          "type": "integer",
+          "minimum": 64,
+          "maximum": 2048
+        }
+      },
+      "required": [
+        "projectId"
+      ]
+    },
+    "outputSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "width": {
+          "type": "number"
+        },
+        "height": {
+          "type": "number"
+        },
+        "mimeType": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "width",
+        "height",
+        "mimeType"
+      ],
+      "additionalProperties": false
+    },
+    "example": {
+      "input": {
+        "projectId": "prj_8Kq2...",
+        "nodeId": "seq_main",
+        "time": 4.5,
+        "maxSize": 768
+      },
+      "output": {
+        "width": 768,
+        "height": 432,
+        "mimeType": "image/png"
+      }
+    }
+  },
+  {
+    "name": "list_assets",
+    "title": "Search the asset library",
+    "category": "assets",
+    "access": "read",
+    "description": "Search images, video, audio, LUTs and fonts in the asset library by name, tag or kind. Asset ids are content hashes and can be placed into any project.",
+    "inputSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "query": {
+          "description": "Matches name and tags (case-insensitive).",
+          "type": "string"
+        },
+        "kind": {
+          "type": "string",
+          "enum": [
+            "image",
+            "video",
+            "audio",
+            "lut",
+            "font",
+            "text",
+            "data",
+            "other"
+          ]
+        },
+        "tag": {
+          "type": "string"
+        },
+        "projectId": {
+          "description": "Only assets used in this project.",
+          "type": "string"
+        },
+        "limit": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 200
+        }
+      }
+    },
+    "outputSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "assets": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "kind": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "name",
+              "kind"
+            ],
+            "additionalProperties": {}
+          }
+        }
+      },
+      "required": [
+        "assets"
+      ],
+      "additionalProperties": false
+    },
+    "example": {
+      "input": {
+        "kind": "video",
+        "query": "beach"
+      }
+    }
+  },
+  {
+    "name": "get_asset",
+    "title": "Get asset details",
+    "category": "assets",
+    "access": "read",
+    "description": "Metadata for one asset: dimensions, duration, frame rate, audio, color profile, EXIF summary and where it is used.",
+    "inputSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "assetId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "assetId"
+      ]
+    },
+    "outputSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "kind": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "kind"
+      ],
+      "additionalProperties": {}
+    },
+    "example": {
+      "input": {
+        "assetId": "9f86d081884c7d65..."
+      }
+    }
+  }
+]

@@ -5,7 +5,9 @@
   "description": "Omnix: a creative studio built for AI collaborators and the Model Context Protocol",
   "type": "module",
   "packageManager": "pnpm@10.28.0",
-  "engines": { "node": ">=22" },
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
     "dev": "node scripts/dev.mjs",
     "dev:server": "tsx watch packages/server/src/main.ts",
@@ -25,6 +27,7 @@
     "@types/node": "^22.10.0",
     "tsx": "^4.23.15",
     "typescript": "^5.9.3",
-    "vitest": "^3.2.4"
+    "vitest": "^3.2.4",
+    "zod": "^4.6.7"
   }
 }

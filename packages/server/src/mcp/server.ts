@@ -1,0 +1,91 @@
+import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import { z } from 'zod';
+import type { Services } from '../services.js';
+import { makeToolContext, ToolError, type Principal, type ToolContext, type ToolDef } from './registry.js';
+import { registerResources } from './resources.js';
+import { allTools } from './tools/index.js';
+import { ProjectError } from '../projects/service.js';
+
+export const OMNIX_VERSION = '0.1.0';
+
+export const OMNIX_INSTRUCTIONS = `Omnix is a creative studio with six tools in one project: an image editor (layers), a video editor and an animation maker (a shared timeline), Code Grounds (files, notebooks, sandboxed runs), documents, and slideshows.
+
+How to work in Omnix:
+1. Call list_projects, then get_project to see every tool's content at once. Read list_notes (session memory) when resuming so you respect earlier decisions and rejected options.
+2. Edit with the tool-specific tools (image_*, video_*, anim_*, code_*, doc_*, slides_*). Every change is recorded in the project history, attributed to you, and can be undone.
+3. Check your work visually with render_preview before handing back.
+4. Record important decisions with add_note so collaborators (human or AI) can pick up later.
+
+Permission modes: in "view only" you can read but not change anything. In "edit with approval" each change becomes a proposal the user previews and accepts, modifies or rejects in Omnix; the tool result says "Proposed". In "autonomous" changes apply directly inside the projects the user allowed, and long jobs pause at the user's approval gates. AI also needs per-project consent ("Allow AI"); if a tool says consent is missing, ask the user to turn it on.
+
+Coordinates: canvases, slides and sequences use pixels with the origin at the top-left (sequence clip x/y are offsets from the frame center). Times are in seconds. Layers stack bottom-to-top in child order; timeline tracks are listed top-first.`;
+
+/** Convert a tool result into MCP content. */
+function toContent(result: Awaited<ReturnType<ToolDef['handler']>>): CallToolResult {
+  const content: CallToolResult['content'] = [{ type: 'text', text: result.text }];
+  if (result.data !== undefined) content.push({ type: 'text', text: JSON.stringify(result.data, null, 2) });
+  for (const img of result.images ?? []) content.push({ type: 'image', data: img.data.toString('base64'), mimeType: img.mimeType });
+  return { content, ...(result.data !== undefined && typeof result.data === 'object' && !Array.isArray(result.data) ? { structuredContent: result.data as Record<string, unknown> } : {}) };
+}
+
+/** Run a tool with error mapping and activity logging. Shared by MCP and the agent runner. */
+export async function runTool(tool: ToolDef, rawArgs: unknown, ctx: ToolContext): Promise<{ ok: boolean; result: Awaited<ReturnType<ToolDef['handler']>> | null; error?: string }> {
+  const parsed = z.object(tool.input).safeParse(rawArgs ?? {});
+  const projectId = typeof (rawArgs as { projectId?: unknown })?.projectId === 'string' ? ((rawArgs as { projectId: string }).projectId as string) : null;
+  let projectName: string | null = null;
+  if (projectId) projectName = (await ctx.services.projects.getMeta(projectId).catch(() => null))?.name ?? null;
+  if (!parsed.success) {
+    const error = `Invalid arguments for ${tool.name}: ${parsed.error.issues.map((i) => `${i.path.join('.') || '(root)'}: ${i.message}`).join('; ')}`;
+    await ctx.services.activity.record({ projectId, projectName, actor: ctx.principal.author, kind: 'tool', summary: `${tool.title} failed: invalid arguments`, via: ctx.via, tool: tool.name, ok: false, ...(ctx.jobId ? { jobId: ctx.jobId } : {}) });
+    return { ok: false, result: null, error };
+  }
+  try {
+    const result = await tool.handler(parsed.data as never, ctx);
+    await ctx.services.activity.record({
+      projectId,
+      projectName,
+      actor: ctx.principal.author,
+      kind: 'tool',
+      summary: `${tool.title}: ${result.text.split('\n')[0]!.slice(0, 160)}`,
+      via: ctx.via,
+      tool: tool.name,
+      ok: true,
+      ...(ctx.jobId ? { jobId: ctx.jobId } : {}),
+    });
+    return { ok: true, result };
+  } catch (e) {
+    const expected = e instanceof ToolError || e instanceof ProjectError;
+    const message = e instanceof Error ? e.message : String(e);
+    if (!expected && ctx.services.config.dev) console.error(`[mcp] ${tool.name} failed`, e);
+    await ctx.services.activity.record({ projectId, projectName, actor: ctx.principal.author, kind: 'tool', summary: `${tool.title} failed: ${message.slice(0, 160)}`, via: ctx.via, tool: tool.name, ok: false, ...(ctx.jobId ? { jobId: ctx.jobId } : {}) });
+    return { ok: false, result: null, error: expected ? message : `Internal error in ${tool.name}: ${message}` };
+  }
+}
+
+/** Build an MCP server bound to one principal (one connection). */
+export function createMcpServer(services: Services, principal: Principal): McpServer {
+  const server = new McpServer(
+    { name: 'omnix', title: 'Omnix', version: OMNIX_VERSION },
+    { instructions: OMNIX_INSTRUCTIONS, capabilities: { tools: {}, resources: {}, logging: {} } },
+  );
+  const ctx = makeToolContext(services, principal, 'mcp');
+  for (const tool of allTools(services)) {
+    server.registerTool(
+      tool.name,
+      {
+        title: tool.title,
+        description: tool.access === 'write' ? `${tool.description}\n\n(Changes project content; follows the connection's permission mode.)` : tool.description,
+        inputSchema: tool.input,
+        annotations: { title: tool.title, readOnlyHint: tool.access === 'read', destructiveHint: false, openWorldHint: false },
+      },
+      async (args: unknown) => {
+        const r = await runTool(tool, args, ctx);
+        if (!r.ok) return { isError: true, content: [{ type: 'text', text: r.error ?? 'Tool failed' }] };
+        return toContent(r.result!);
+      },
+    );
+  }
+  registerResources(server, ctx);
+  return server;
+}
