@@ -2,7 +2,7 @@ import type { Adjustment, LayerProps, LayerType, Operation, ProjectState, SceneN
 import { childrenOf, layerProps, makeNode } from '@omnix/core';
 import { combineMasks, invertMask, type Mask, type Raster } from '@omnix/imaging';
 import { layerBounds, renderLayerMask } from '@omnix/render';
-import type { AssetSummary } from '../../lib/api.js';
+import { post, type AssetSummary } from '../../lib/api.js';
 import type { BrowserRenderHost } from '../../render/browserHost.js';
 import type { ProjectStore } from '../../state/project.js';
 import { toast } from '../../ui/toast.js';
@@ -337,4 +337,23 @@ export function alignLayer(c: ImageCtx, how: 'left' | 'hcenter' | 'right' | 'top
   if (how === 'vcenter') set.y = Math.round((cp.height - b.height) / 2 + oy);
   if (how === 'bottom') set.y = Math.round(cp.height - b.height + oy);
   updateLayer(c, l.id, set, 'Align layer');
+}
+
+/** Import a PSD as a new canvas in this project and switch to it once it arrives. */
+export async function openPsd(c: ImageCtx, asset: AssetSummary): Promise<void> {
+  await busy(c, `Importing ${asset.name}…`, async () => {
+    const s = c.store.getState();
+    const r = await post<{ canvasId: string; layers: number; notes: string[] }>(`/api/projects/${s.projectId}/import/psd`, { assetId: asset.id });
+    const open = () => {
+      if (!c.store.getState().state?.nodes[r.canvasId]) return false;
+      c.store.getState().setActiveDoc(r.canvasId);
+      return true;
+    };
+    if (!open()) {
+      const unsub = c.store.subscribe(() => open() && unsub());
+      setTimeout(unsub, 10_000);
+    }
+    toast.success(`Imported ${r.layers} ${r.layers === 1 ? 'layer' : 'layers'} from ${asset.name}`);
+    for (const n of r.notes.slice(0, 3)) toast.info(n);
+  });
 }

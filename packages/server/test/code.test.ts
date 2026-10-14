@@ -1,5 +1,6 @@
 import { describe, expect, it, beforeAll, afterAll } from 'vitest';
 import { WebSocket } from 'ws';
+import { unzipSync, strFromU8 } from 'fflate';
 import { makeNode, nodesOfType, type ProjectState } from '@omnix/core';
 import { startTestServer, json, type TestServer } from './helpers.js';
 import { codeService } from '../src/code/module.js';
@@ -75,6 +76,23 @@ describe('Code Grounds', () => {
     const log2 = await json(await ts.api(`/api/projects/${projectId}/code/${ws().id}/history`));
     expect(log2.commits[0].aiAuthored).toBe(true);
     expect(log2.commits[0].author.name).toBe('Claude');
+  }, 60_000);
+
+  it('exports the workspace as a ZIP and notebooks as Jupyter files', async () => {
+    const run = async (format: string) => {
+      const j = await json(await ts.api(`/api/projects/${projectId}/export?wait=true`, { method: 'POST', json: { nodeId: ws().id, format } }));
+      expect(j.job.status, j.job.error).toBe('done');
+      return { name: j.job.result.name as string, data: Buffer.from(await (await ts.api(j.job.result.downloadUrl)).arrayBuffer()) };
+    };
+    const zip = await run('zip');
+    expect(zip.name).toMatch(/\.zip$/);
+    const files = unzipSync(new Uint8Array(zip.data));
+    expect(Object.keys(files)).toEqual(expect.arrayContaining(['main.py', 'Notebook.ipynb']));
+    expect(strFromU8(files['main.py']!)).toContain('print');
+    const nb = await run('ipynb');
+    const parsed = JSON.parse(nb.data.toString('utf8'));
+    expect(parsed.nbformat).toBe(4);
+    expect(parsed.cells[0].source.join('')).toContain('sum(range(10))');
   }, 60_000);
 
   it('reports sandbox status', async () => {

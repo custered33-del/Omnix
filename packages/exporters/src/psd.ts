@@ -175,6 +175,10 @@ export interface ImportedPsdLayer {
   text: string | null;
   children: ImportedPsdLayer[] | null;
   mask: Raster | null;
+  /** Position of the mask raster in document coordinates, and the mask value outside it (0..255). */
+  maskLeft: number;
+  maskTop: number;
+  maskDefault: number;
 }
 
 export interface ImportedPsd {
@@ -206,6 +210,9 @@ export function importPsd(buffer: Buffer | ArrayBuffer, createCanvas?: (w: numbe
     text: l.text?.text ?? null,
     children: l.children ? l.children.map(convert) : null,
     mask: toRaster(l.mask?.imageData as never),
+    maskLeft: l.mask?.left ?? 0,
+    maskTop: l.mask?.top ?? 0,
+    maskDefault: l.mask?.defaultColor ?? 0,
   });
   return { width: psd.width, height: psd.height, layers: (psd.children ?? []).map(convert), composite: toRaster(psd.imageData as never) };
 }

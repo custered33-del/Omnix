@@ -1,6 +1,6 @@
 import { memo, useEffect, useRef, useState } from 'react';
 import { useStore } from 'zustand';
-import { Eye, EyeOff, Lock, LockOpen, Plus, Trash2, Copy, FolderPlus, ImagePlus, SlidersHorizontal, ChevronRight, ChevronDown, Type, Square, PaintBucket, Image as ImageIcon, Folder, Scan } from 'lucide-react';
+import { Eye, EyeOff, Lock, LockOpen, Plus, Trash2, Copy, FolderPlus, ImagePlus, SlidersHorizontal, ChevronRight, ChevronDown, Type, Square, PaintBucket, Image as ImageIcon, Folder, Scan, Layers } from 'lucide-react';
 import { BLEND_MODES, childrenOf, type Adjustment, type BlendMode, type LayerType, type SceneNode } from '@omnix/core';
 import { renderSingleLayer } from '@omnix/render';
 import { useProject } from '../../state/project.js';
@@ -18,7 +18,7 @@ export function LayersPanel({ ctx }: { ctx: A.ImageCtx }) {
   const state = useProject((s) => s.state)!;
   const canEdit = useProject((s) => s.meta?.role !== 'viewer' && !s.preview);
   const selectedId = useStore(ctx.ed, (s) => s.selectedLayerId);
-  const [picker, setPicker] = useState<null | 'image' | 'lut'>(null);
+  const [picker, setPicker] = useState<null | 'image' | 'lut' | 'psd'>(null);
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [drag, setDrag] = useState<{ id: string; over: string | null; where: 'before' | 'after' | 'into' } | null>(null);
   const selected = selectedId ? (state.nodes[selectedId] as SceneNode<'layer'> | undefined) : undefined;
@@ -47,6 +47,7 @@ export function LayersPanel({ ctx }: { ctx: A.ImageCtx }) {
     { label: t('image.layerTypes.fill'), icon: <PaintBucket />, onSelect: () => A.addLayer(ctx, 'fill') },
     { label: t('image.layerTypes.group'), icon: <Folder />, onSelect: () => A.addLayer(ctx, 'group') },
     { label: t('image.importImage'), icon: <ImagePlus />, onSelect: () => setPicker('image') },
+    { label: t('image.importPsd'), icon: <Layers />, onSelect: () => setPicker('psd') },
     { separator: true, label: '' },
     { label: t('image.layerTypes.adjustment'), heading: true },
     ...ADJUSTMENTS.map((k) => ({ label: t(`adjust.${k}`), icon: <SlidersHorizontal />, onSelect: () => (k === 'lut' ? setPicker('lut') : void A.addAdjustment(ctx, k)) })),
@@ -245,6 +246,7 @@ export function LayersPanel({ ctx }: { ctx: A.ImageCtx }) {
         </div>
       )}
       {picker === 'image' && <AssetPicker kinds={['image']} title={t('image.importImage')} projectId={ctx.store.getState().projectId} multiple onPick={(as) => as.forEach((a) => A.placeImage(ctx, a))} onClose={() => setPicker(null)} />}
+      {picker === 'psd' && <AssetPicker kinds={['other']} mime="image/vnd.adobe.photoshop" accept=".psd" title={t('image.importPsd')} projectId={ctx.store.getState().projectId} onPick={([a]) => a && void A.openPsd(ctx, a)} onClose={() => setPicker(null)} />}
       {picker === 'lut' && <AssetPicker kinds={['lut']} title={t('image.lutImport')} projectId={ctx.store.getState().projectId} onPick={([a]) => a && A.addAdjustment(ctx, 'lut', a.id)} onClose={() => setPicker(null)} />}
     </section>
   );

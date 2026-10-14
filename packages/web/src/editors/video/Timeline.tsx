@@ -487,7 +487,8 @@ function ClipView({ clip, track, pps, selected, host, onDown, onMenu, onSelect }
       onPointerDown={(e) => onDown(e, clip, 'body')}
       onContextMenu={(e) => onMenu(e, clip)}
       onKeyDown={(e) => {
-        if (e.key === 'Enter' || e.key === ' ') {
+        // Space stays play/pause everywhere on the timeline; Enter selects a focused clip.
+        if (e.key === 'Enter') {
           e.preventDefault();
           onSelect();
         }

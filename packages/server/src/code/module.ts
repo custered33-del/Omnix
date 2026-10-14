@@ -6,7 +6,9 @@ import type { Services } from '../services.js';
 import { onShutdown, useModule } from '../app.js';
 import { h, requireUser, author as authorOf } from '../http/middleware.js';
 import { ProjectError, type ProjectEvent } from '../projects/service.js';
-import { CodeHistory } from './history.js';
+import { zipSync, strToU8 } from 'fflate';
+import { CodeHistory, notebookJson } from './history.js';
+import { registerExportHandler } from '../export/module.js';
 
 /**
  * Code Grounds server module: sandboxed runs for files and notebook cells, live output
@@ -190,9 +192,44 @@ export function codeService(services: Services): CodeService {
   return s;
 }
 
+/** Workspace as files: code files as-is, notebooks as Jupyter JSON. */
+export function workspaceArchive(state: ProjectState, workspaceId: string): Map<string, string> {
+  const files = new Map<string, string>();
+  for (const n of childrenOf(state, workspaceId)) {
+    if (n.type === 'codeFile') files.set((n as SceneNode<'codeFile'>).props.path.replace(/^\/+/, ''), (n as SceneNode<'codeFile'>).props.content);
+    else if (n.type === 'notebook') files.set(`${fileSafe((n as SceneNode<'notebook'>).props.name)}.ipynb`, notebookJson(state, n as SceneNode<'notebook'>));
+  }
+  return files;
+}
+
+const fileSafe = (s: string) => s.replace(/[^\w\- .]+/g, '').trim().replace(/\s+/g, '-').slice(0, 80) || 'notebook';
+
 useModule(({ services, router }) => {
   const code = new CodeService(services);
   services.ext.code = code;
+
+  // Exports: the whole workspace as a ZIP, or notebooks as .ipynb.
+  registerExportHandler(services, async (_s, state, node, req) => {
+    if (node.type === 'codeWorkspace') {
+      const ws = node as SceneNode<'codeWorkspace'>;
+      const files = workspaceArchive(state, ws.id);
+      if (req.format === 'ipynb') {
+        const nb = childrenOf(state, ws.id).find((n) => n.type === 'notebook') as SceneNode<'notebook'> | undefined;
+        if (!nb) throw new ProjectError('This workspace has no notebook to export', 400);
+        return { data: Buffer.from(notebookJson(state, nb)), name: `${fileSafe(nb.props.name)}.ipynb`, mime: 'application/x-ipynb+json', notes: [] };
+      }
+      if (req.format !== 'zip') throw new ProjectError('Code exports as zip or ipynb', 400);
+      const entries: Record<string, Uint8Array> = {};
+      for (const [p, content] of files) entries[p] = strToU8(content);
+      return { data: Buffer.from(zipSync(entries, { level: 6 })), name: `${fileSafe(ws.props.name)}.zip`, mime: 'application/zip', notes: files.size ? [] : ['The workspace is empty.'] };
+    }
+    if (node.type === 'notebook') {
+      if (req.format !== 'ipynb') throw new ProjectError('Notebooks export as ipynb', 400);
+      const nb = node as SceneNode<'notebook'>;
+      return { data: Buffer.from(notebookJson(state, nb)), name: `${fileSafe(nb.props.name)}.ipynb`, mime: 'application/x-ipynb+json', notes: [] };
+    }
+    return null;
+  });
   onShutdown(services, async () => {
     await code.history.flushAll();
     code.sandbox.shutdown();

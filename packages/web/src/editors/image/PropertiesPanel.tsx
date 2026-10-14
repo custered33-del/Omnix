@@ -9,6 +9,7 @@ import { AssetPicker } from '../../components/AssetPicker.js';
 import { t } from '../../i18n/index.js';
 import * as A from './actions.js';
 import { FontSelect } from '../shared/FontSelect.js';
+import { textEdit } from './Viewport.js';
 
 const FILTERS: FilterKind[] = ['gaussianBlur', 'sharpen', 'noise', 'pixelate', 'grayscale', 'sepia', 'vignette', 'emboss', 'edgeDetect'];
 
@@ -207,7 +208,7 @@ function TextSection({ ctx, layer }: { ctx: A.ImageCtx; layer: SceneNode<'layer'
         rows={3}
         aria-label={t('video.text')}
         value={p.text ?? ''}
-        onChange={(ev) => e.input({ text: ev.target.value })}
+        onChange={(ev) => e.input(textEdit(layer.props, ev.target.value))}
         onBlur={() => ctx.store.getState().commitTransient('Edit text')}
       />
       <div className="row" style={{ gap: 6 }}>

@@ -14,6 +14,12 @@ importers:
       '@types/node':
         specifier: ^22.10.0
         version: 22.20.5
+      '@vitejs/plugin-react':
+        specifier: ^5.2.0
+        version: 5.2.0(vite@7.3.7(@types/node@22.20.5)(tsx@4.23.15))
+      jsdom:
+        specifier: ^26.1.0
+        version: 26.1.0
       tsx:
         specifier: ^4.23.15
         version: 4.23.15
@@ -124,6 +130,9 @@ importers:
       express:
         specifier: ^5.1.0
         version: 5.3.0
+      fflate:
+        specifier: ^0.8.3
+        version: 0.8.3
       isomorphic-git:
         specifier: ^1.34.0
         version: 1.44.2
@@ -1610,6 +1619,9 @@ packages:
     peerDependenciesMeta:
       picomatch:
         optional: true
+
+  fflate@0.8.3:
+    resolution: {integrity: sha512-tbZNuJrLwGUp3zshBtdy4W+ORxZuIh8a5ilyIEQDC5rY1f3U20JMry0Ll3WBzU58EZKsEuJFXhb5gwv8CsPvgA==}
 
   finalhandler@2.1.1:
     resolution: {integrity: sha512-S8KoZgRZN+a5rNwqTxlZZePjT/4cnm0ROV70LedRHZ0p8u9fRID0hJUZQpkKLzro8LfmC8sx23bY6tVNxv8pQA==}
@@ -3708,6 +3720,8 @@ snapshots:
   fdir@6.5.0(picomatch@4.0.7):
     optionalDependencies:
       picomatch: 4.0.7
+
+  fflate@0.8.3: {}
 
   finalhandler@2.1.1:
     dependencies:

@@ -815,7 +815,7 @@ function TextEditOverlay({ layer, zoom, pan, onDone }: { layer: SceneNode<'layer
         zIndex: 6,
       }}
       onPointerDown={(e) => e.stopPropagation()}
-      onChange={(e) => store.getState().setTransient(layer.id, { text: e.target.value })}
+      onChange={(e) => store.getState().setTransient(layer.id, textEdit(p, e.target.value))}
       onBlur={() => {
         store.getState().commitTransient('Edit text');
         onDone();
@@ -826,6 +826,16 @@ function TextEditOverlay({ layer, zoom, pan, onDone }: { layer: SceneNode<'layer
       }}
     />
   );
+}
+
+/** Text layers are named after their first line until someone renames them. */
+export function textEdit(p: LayerProps, text: string): Partial<LayerProps> {
+  const auto = p.name === 'Text' || p.name === 'Text layer' || p.name === autoName(p.text ?? '');
+  return auto && text.trim() ? { text, name: autoName(text) } : { text };
+}
+
+function autoName(text: string): string {
+  return text.split('\n')[0]!.trim().slice(0, 40);
 }
 
 export function selectionOf(state: ProjectState, canvasId: string): Selection | null {
