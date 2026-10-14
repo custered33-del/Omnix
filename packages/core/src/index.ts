@@ -14,3 +14,5 @@ export * from './markdown.js';
 export * from './timeline.js';
 export * from './summary.js';
 export * from './schemas.js';
+export * from './documents.js';
+export * from './decks.js';

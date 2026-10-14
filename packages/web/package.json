@@ -27,6 +27,7 @@
     "@omnix/core": "workspace:*",
     "@omnix/imaging": "workspace:*",
     "@omnix/render": "workspace:*",
+    "diff": "^8.0.4",
     "lucide-react": "^1.57.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",

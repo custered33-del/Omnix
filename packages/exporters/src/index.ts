@@ -5,3 +5,5 @@ export * from './lottie.js';
 export * from './captions.js';
 export * from './spritesheet.js';
 export * from './ffmpeg.js';
+export * from './document.js';
+export * from './fonts.js';

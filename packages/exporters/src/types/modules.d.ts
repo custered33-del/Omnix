@@ -19,3 +19,8 @@ declare module 'upng-js' {
   };
   export default UPNG;
 }
+
+declare module 'fontkit' {
+  export function openSync(path: string): unknown;
+  export function create(buffer: Uint8Array): unknown;
+}

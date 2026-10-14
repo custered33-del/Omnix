@@ -1,6 +1,7 @@
 import type { CellOutput } from '@omnix/core';
 import { post } from '../../lib/api.js';
 import type { ProjectStore } from '../../state/project.js';
+import type { makeTextCommitter } from '../../state/textCommitter.js';
 
 export interface RunResult {
   ok: boolean;
@@ -31,40 +32,4 @@ export async function restartKernel(ctx: CodeCtx): Promise<void> {
   await post(`/api/projects/${ctx.store.getState().projectId}/code/restart`, { workspaceId: ctx.workspaceId });
 }
 
-/**
- * Debounced text editing: each keystroke shows immediately (as a transient override) and the
- * change is committed after a short pause, so history gets one entry per burst of typing.
- */
-export function makeTextCommitter(store: ProjectStore, delay = 700) {
-  const timers = new Map<string, number>();
-  return {
-    edit(nodeId: string, prop: string, value: string, label: string) {
-      const s = store.getState();
-      s.setTransient(nodeId, { [prop]: value });
-      const prev = timers.get(nodeId);
-      if (prev) window.clearTimeout(prev);
-      timers.set(
-        nodeId,
-        window.setTimeout(() => {
-          timers.delete(nodeId);
-          const st = store.getState();
-          const pending = st.transient[nodeId];
-          if (!pending) return;
-          st.clearTransient(nodeId);
-          if (st.state?.nodes[nodeId]) st.commit({ kind: 'update', id: nodeId, set: pending }, label);
-        }, delay),
-      );
-    },
-    flushAll() {
-      for (const [id, timer] of timers) {
-        window.clearTimeout(timer);
-        timers.delete(id);
-        const st = store.getState();
-        const pending = st.transient[id];
-        if (!pending) continue;
-        st.clearTransient(id);
-        if (st.state?.nodes[id]) st.commit({ kind: 'update', id, set: pending }, 'Edit code');
-      }
-    },
-  };
-}
+export { makeTextCommitter } from '../../state/textCommitter.js';
