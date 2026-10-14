@@ -105,6 +105,8 @@ export interface Stroke {
   spacing: number;
   /** For clone/heal: offset from destination to sample source. */
   sourceOffset?: Point;
+  /** Paint only inside this selection (canvas coordinates), like painting with an active selection. */
+  clip?: Selection | null;
   points: StrokePoint[];
 }
 

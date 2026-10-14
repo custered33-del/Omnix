@@ -41,6 +41,7 @@ export const zStroke = z.object({
   tip: z.union([z.enum(['round', 'square']), z.object({ assetId: z.string() })]),
   spacing: z.number().min(0.01).max(10),
   sourceOffset: zPoint.optional(),
+  clip: z.lazy(() => zSelection).nullable().optional(),
   points: z.array(z.object({ x: z.number(), y: z.number(), pressure: z.number().min(0).max(1) })).max(100000),
 });
 

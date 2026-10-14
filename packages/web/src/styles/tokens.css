@@ -1,0 +1,187 @@
+/*
+ * Omnix design tokens. Components use roles, never raw colors.
+ * Themes: light (default), dark, high contrast. "system" follows the OS.
+ */
+:root {
+  color-scheme: light;
+  --bg: #f7f6f3;
+  --surface: #ffffff;
+  --surface-2: #f1f0ec;
+  --surface-3: #e9e7e1;
+  --border: #e2e0d9;
+  --border-strong: #c9c6bd;
+  --text: #1d1f24;
+  --text-2: #464b57;
+  --muted: #6b6f78;
+  --accent: #3b5bdb;
+  --accent-hover: #3250c4;
+  --accent-fg: #ffffff;
+  --accent-soft: #e8edfc;
+  --ai: #6a48d7;
+  --ai-soft: #efeafd;
+  --success: #2b8a3e;
+  --success-soft: #e6f4ea;
+  --warning: #b35c00;
+  --warning-soft: #fff1dc;
+  --danger: #c92a2a;
+  --danger-soft: #fdecec;
+  --focus: #3b5bdb;
+  --overlay: rgba(20, 22, 28, 0.42);
+  --shadow-1: 0 1px 2px rgba(20, 22, 28, 0.06), 0 1px 1px rgba(20, 22, 28, 0.04);
+  --shadow-2: 0 6px 18px rgba(20, 22, 28, 0.1), 0 2px 6px rgba(20, 22, 28, 0.06);
+  --shadow-3: 0 18px 50px rgba(20, 22, 28, 0.18);
+  --canvas-bg: #e9e8e4;
+  --checker-a: #ffffff;
+  --checker-b: #e3e3e3;
+  --selection: rgba(59, 91, 219, 0.16);
+
+  --font: 'Inter Variable', Inter, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --fs-xs: 11px;
+  --fs-sm: 12.5px;
+  --fs-md: 14px;
+  --fs-lg: 16px;
+  --fs-xl: 20px;
+  --fs-2xl: 26px;
+  --fs-3xl: 34px;
+
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-5: 20px;
+  --sp-6: 24px;
+  --sp-8: 32px;
+  --sp-10: 40px;
+  --sp-12: 48px;
+
+  --r-sm: 6px;
+  --r-md: 10px;
+  --r-lg: 14px;
+  --r-xl: 20px;
+
+  --dur-fast: 120ms;
+  --dur: 180ms;
+  --dur-slow: 280ms;
+  --ease: cubic-bezier(0.2, 0, 0, 1);
+  --focus-ring: 0 0 0 2px var(--bg), 0 0 0 4px var(--focus);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']):not([data-theme='high-contrast']) {
+    color-scheme: dark;
+    --bg: #121316;
+    --surface: #1a1b1f;
+    --surface-2: #222328;
+    --surface-3: #2b2c32;
+    --border: #2e3036;
+    --border-strong: #44464e;
+    --text: #ecebe8;
+    --text-2: #c7c6c1;
+    --muted: #9a9ca3;
+    --accent: #7891ff;
+    --accent-hover: #8fa3ff;
+    --accent-fg: #0f1220;
+    --accent-soft: #232a45;
+    --ai: #a58cff;
+    --ai-soft: #2a2442;
+    --success: #5fcf7a;
+    --success-soft: #1c2f22;
+    --warning: #f0a442;
+    --warning-soft: #33271a;
+    --danger: #ff7a7a;
+    --danger-soft: #3a1f21;
+    --focus: #8fa3ff;
+    --overlay: rgba(0, 0, 0, 0.6);
+    --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.4);
+    --shadow-2: 0 6px 18px rgba(0, 0, 0, 0.45);
+    --shadow-3: 0 18px 50px rgba(0, 0, 0, 0.6);
+    --canvas-bg: #0d0e10;
+    --checker-a: #2a2b30;
+    --checker-b: #232428;
+    --selection: rgba(120, 145, 255, 0.22);
+  }
+}
+
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  --bg: #121316;
+  --surface: #1a1b1f;
+  --surface-2: #222328;
+  --surface-3: #2b2c32;
+  --border: #2e3036;
+  --border-strong: #44464e;
+  --text: #ecebe8;
+  --text-2: #c7c6c1;
+  --muted: #9a9ca3;
+  --accent: #7891ff;
+  --accent-hover: #8fa3ff;
+  --accent-fg: #0f1220;
+  --accent-soft: #232a45;
+  --ai: #a58cff;
+  --ai-soft: #2a2442;
+  --success: #5fcf7a;
+  --success-soft: #1c2f22;
+  --warning: #f0a442;
+  --warning-soft: #33271a;
+  --danger: #ff7a7a;
+  --danger-soft: #3a1f21;
+  --focus: #8fa3ff;
+  --overlay: rgba(0, 0, 0, 0.6);
+  --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-2: 0 6px 18px rgba(0, 0, 0, 0.45);
+  --shadow-3: 0 18px 50px rgba(0, 0, 0, 0.6);
+  --canvas-bg: #0d0e10;
+  --checker-a: #2a2b30;
+  --checker-b: #232428;
+  --selection: rgba(120, 145, 255, 0.22);
+}
+
+/* High contrast: pure black and white with a strong yellow accent and thick focus rings. */
+:root[data-theme='high-contrast'] {
+  color-scheme: dark;
+  --bg: #000000;
+  --surface: #000000;
+  --surface-2: #0b0b0b;
+  --surface-3: #1a1a1a;
+  --border: #ffffff;
+  --border-strong: #ffffff;
+  --text: #ffffff;
+  --text-2: #ffffff;
+  --muted: #e6e6e6;
+  --accent: #ffd400;
+  --accent-hover: #ffe24d;
+  --accent-fg: #000000;
+  --accent-soft: #332b00;
+  --ai: #ffd400;
+  --ai-soft: #332b00;
+  --success: #7dff9b;
+  --success-soft: #002b0d;
+  --warning: #ffb84d;
+  --warning-soft: #331f00;
+  --danger: #ff8080;
+  --danger-soft: #330000;
+  --focus: #ffd400;
+  --overlay: rgba(0, 0, 0, 0.85);
+  --shadow-1: none;
+  --shadow-2: 0 0 0 1px #ffffff;
+  --shadow-3: 0 0 0 2px #ffffff;
+  --canvas-bg: #000000;
+  --checker-a: #222222;
+  --checker-b: #000000;
+  --selection: rgba(255, 212, 0, 0.3);
+  --focus-ring: 0 0 0 2px #000, 0 0 0 5px #ffd400;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root:not([data-motion='full']) {
+    --dur-fast: 0ms;
+    --dur: 0ms;
+    --dur-slow: 0ms;
+  }
+}
+:root[data-motion='reduced'] {
+  --dur-fast: 0ms;
+  --dur: 0ms;
+  --dur-slow: 0ms;
+}

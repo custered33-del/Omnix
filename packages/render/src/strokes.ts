@@ -96,7 +96,7 @@ function withAlpha(hex: string, a: number): string {
  * Paint strokes onto a layer canvas (layer-local coordinates). Each stroke is built on its own
  * buffer so overlapping dabs never exceed the stroke's opacity, like a real brush with flow 100%.
  */
-export function renderStrokes(host: RenderHost, layer: CanvasLike, strokes: readonly Stroke[]): void {
+export function renderStrokes(host: RenderHost, layer: CanvasLike, strokes: readonly Stroke[], clipMask?: (sel: NonNullable<Stroke['clip']>) => CanvasLike | null): void {
   const ctx = ctxOf(layer);
   for (const stroke of strokes) {
     const dabs = strokeDabs(stroke);
@@ -121,6 +121,15 @@ export function renderStrokes(host: RenderHost, layer: CanvasLike, strokes: read
       ctxOf(snapshot).drawImage(drawable(layer), 0, 0);
       bctx.globalCompositeOperation = 'source-in';
       bctx.drawImage(drawable(snapshot), -off.x, -off.y);
+    }
+    if (stroke.clip && clipMask) {
+      const m = clipMask(stroke.clip);
+      if (m) {
+        bctx.save();
+        bctx.globalCompositeOperation = 'destination-in';
+        bctx.drawImage(drawable(m), 0, 0);
+        bctx.restore();
+      }
     }
     ctx.save();
     ctx.globalAlpha = stroke.opacity;

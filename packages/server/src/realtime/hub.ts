@@ -57,6 +57,8 @@ function parseCookies(header: string | undefined): Record<string, string> {
 export class RealtimeHub {
   private wss: WebSocketServer;
   private clients = new Map<string, Client>();
+  /** Recently applied client op ids -> commit id, so retried sends are acknowledged, not re-applied. */
+  private seenOps = new Map<string, string>();
 
   constructor(
     private readonly services: Services,
@@ -153,12 +155,21 @@ export class RealtimeHub {
           break;
         case 'commit': {
           await this.services.projects.requireAccess(msg.projectId, c.user.id, 'write');
+          const dedupeKey = `${c.user.id}:${msg.clientOpId}`;
+          const already = this.seenOps.get(dedupeKey);
+          if (already) {
+            this.send(c, { type: 'ack', clientOpId: msg.clientOpId, commitId: already, duplicate: true });
+            break;
+          }
           try {
             const commit = await this.services.projects.commit(msg.projectId, msg.op, authorOf(c.user), {
               ...(msg.label ? { label: msg.label } : {}),
               via: 'ui',
+              clientOpId: msg.clientOpId,
               ...(msg.baseHead !== undefined ? { baseHead: msg.baseHead } : {}),
             });
+            this.seenOps.set(dedupeKey, commit.id);
+            if (this.seenOps.size > 5000) this.seenOps.delete(this.seenOps.keys().next().value!);
             this.send(c, { type: 'ack', clientOpId: msg.clientOpId, commitId: commit.id });
           } catch (e) {
             this.send(c, { type: 'nack', clientOpId: msg.clientOpId, error: e instanceof Error ? e.message : String(e) });
@@ -174,7 +185,7 @@ export class RealtimeHub {
   private onProjectEvent(e: ProjectEvent): void {
     switch (e.type) {
       case 'commit':
-        this.toProject(e.projectId, { type: 'commit', projectId: e.projectId, commit: e.commit, head: e.head });
+        this.toProject(e.projectId, { type: 'commit', projectId: e.projectId, commit: e.commit, head: e.head, ...(e.clientOpId ? { clientOpId: e.clientOpId } : {}) });
         break;
       case 'checkout':
         this.toProject(e.projectId, { type: 'checkout', projectId: e.projectId, head: e.head });

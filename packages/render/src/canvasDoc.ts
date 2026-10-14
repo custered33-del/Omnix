@@ -23,7 +23,22 @@ export interface RenderCanvasOptions {
   overrides?: ReadonlyMap<string, Partial<LayerProps>>;
   /** Render only this layer subtree (layer thumbnails). */
   onlyLayer?: string;
+  /**
+   * Reuse rendered layer buffers between frames. Entries are keyed by layer id and reused while
+   * the layer node is the same object (state is immutable), at the same scale and host media version.
+   */
+  cache?: LayerCache;
+  /** Bump when host media finishes loading so cached layers that were missing pixels re-render. */
+  hostVersion?: number;
 }
+
+export interface LayerCacheEntry {
+  node: unknown;
+  scale: number;
+  hostVersion: number;
+  canvas: CanvasLike;
+}
+export type LayerCache = Map<string, LayerCacheEntry>;
 
 export function renderCanvasDocument(host: RenderHost, state: ProjectState, canvasId: string, options: RenderCanvasOptions = {}): CanvasLike {
   const canvas = requireNodeOfType(state, canvasId, 'canvas');
@@ -74,13 +89,26 @@ function compositeLayer(env: Env, acc: CanvasLike, layer: SceneNode<'layer'>): v
     applyAdjustmentLayer(env, acc, p);
     return;
   }
-  const buf = renderLayerBuffer(env, layer, p);
+  const buf = cachedLayerBuffer(env, layer, p);
   const ctx = ctxOf(acc);
   ctx.save();
   ctx.globalAlpha = Math.min(1, Math.max(0, p.opacity));
   ctx.globalCompositeOperation = (p.blendMode === 'normal' ? 'source-over' : p.blendMode) as GlobalCompositeOperation;
   ctx.drawImage(drawable(buf), 0, 0);
   ctx.restore();
+}
+
+function cachedLayerBuffer(env: Env, layer: SceneNode<'layer'>, p: LayerProps): CanvasLike {
+  const cache = env.options.cache;
+  const cacheable = cache && p.layerType !== 'group' && !env.options.overrides?.has(layer.id);
+  const hv = env.options.hostVersion ?? 0;
+  if (cacheable) {
+    const hit = cache.get(layer.id);
+    if (hit && hit.node === layer && hit.scale === env.scale && hit.hostVersion === hv) return hit.canvas;
+  }
+  const buf = renderLayerBuffer(env, layer, p);
+  if (cacheable) cache.set(layer.id, { node: layer, scale: env.scale, hostVersion: hv, canvas: buf });
+  return buf;
 }
 
 /** Rasterize a selection at output resolution. */
@@ -192,7 +220,23 @@ function drawRasterLayer(env: Env, ctx: Ctx2D, p: LayerProps): void {
   const local = host.createCanvas(lw, lh);
   const lctx = ctxOf(local);
   if (img) lctx.drawImage(drawable(img), 0, 0, lw, lh);
-  if (strokes.length) renderStrokes(host, local, strokes);
+  if (strokes.length) {
+    // Selections are in canvas coordinates; map them into this layer's local space.
+    const clipMask = (sel: Selection): CanvasLike | null => {
+      const m = selectionMask(host, sel, env.docW, env.docH, 1);
+      const docMask = maskToCanvas(host, m);
+      const out = host.createCanvas(lw, lh);
+      const c = ctxOf(out);
+      c.save();
+      if (p.scaleX !== 1 || p.scaleY !== 1) c.scale(1 / p.scaleX, 1 / p.scaleY);
+      if (p.rotation) c.rotate((-p.rotation * Math.PI) / 180);
+      c.translate(-p.x, -p.y);
+      c.drawImage(drawable(docMask), 0, 0);
+      c.restore();
+      return out;
+    };
+    renderStrokes(host, local, strokes, clipMask);
+  }
   applyLayerTransform(ctx, p, scale);
   ctx.drawImage(drawable(local), 0, 0);
 }

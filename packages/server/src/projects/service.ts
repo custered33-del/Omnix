@@ -73,10 +73,12 @@ export interface CommitOptions {
   trusted?: boolean;
   /** Reject when the project head moved since the client last saw it. */
   baseHead?: string | null;
+  /** Client-generated id echoed in the realtime broadcast so the sender can match its optimistic edit. */
+  clientOpId?: string;
 }
 
 export type ProjectEvent =
-  | { type: 'commit'; projectId: string; commit: Commit; head: string | null }
+  | { type: 'commit'; projectId: string; commit: Commit; head: string | null; clientOpId?: string }
   | { type: 'checkout'; projectId: string; head: string | null }
   | { type: 'proposal'; projectId: string; proposal: Proposal }
   | { type: 'snapshot'; projectId: string; snapshot: Snapshot }
@@ -94,6 +96,8 @@ export class ProjectService extends EventEmitter {
   private sessions = new Map<string, Promise<ProjectSession>>();
   private dirty = new Map<string, NodeJS.Timeout>();
   private lastAccess = new Map<string, number>();
+  /** Set while a commit is being applied, so the synchronous session event can carry it. */
+  private emittingClientOpId: string | undefined;
 
   constructor(
     private readonly store: DocStore,
@@ -247,7 +251,7 @@ export class ProjectService extends EventEmitter {
       this.markDirty(projectId);
       switch (e.type) {
         case 'commit':
-          this.emit('event', { type: 'commit', projectId, commit: e.commit, head: session.head } satisfies ProjectEvent);
+          this.emit('event', { type: 'commit', projectId, commit: e.commit, head: session.head, ...(this.emittingClientOpId ? { clientOpId: this.emittingClientOpId } : {}) } satisfies ProjectEvent);
           break;
         case 'checkout':
           this.emit('event', { type: 'checkout', projectId, head: e.head } satisfies ProjectEvent);
@@ -346,11 +350,14 @@ export class ProjectService extends EventEmitter {
     }
     if (!options.trusted) this.validate(session.state, op);
     let commit: Commit;
+    this.emittingClientOpId = options.clientOpId;
     try {
       commit = session.commit(op, { author, ...(options.label ? { label: options.label } : {}), ...(options.jobId ? { jobId: options.jobId } : {}) });
     } catch (e) {
       if (e instanceof OpError) throw new ProjectError(e.message, 400);
       throw e;
+    } finally {
+      this.emittingClientOpId = undefined;
     }
     await this.store.append(commitLog(projectId), commit);
     await this.touch(meta);

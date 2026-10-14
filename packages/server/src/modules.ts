@@ -5,3 +5,5 @@
 import './export/module.js';
 import './code/module.js';
 import './captions/module.js';
+import './templates/module.js';
+import './claude/module.js';

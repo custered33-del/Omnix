@@ -1,0 +1,191 @@
+import type { CanvasLike, Drawable, RenderHost } from '@omnix/render';
+import { parseCubeLut, type Lut3D, type Mask } from '@omnix/imaging';
+import { get, assetUrl, proxyUrl, thumbUrl, type AssetSummary } from '../lib/api.js';
+
+type Entry<T> = { state: 'loading' } | { state: 'ready'; value: T } | { state: 'error' };
+
+/**
+ * Render host for the browser. Media loads lazily: the first render shows placeholders,
+ * and `subscribe` listeners fire when assets arrive so views can redraw.
+ */
+export class BrowserRenderHost implements RenderHost {
+  fontFallback = '"Inter Variable", Inter, "Helvetica Neue", Arial, sans-serif';
+  scheme: 'light' | 'dark' = 'light';
+  private meta = new Map<string, Entry<AssetSummary>>();
+  private images = new Map<string, Entry<ImageBitmap>>();
+  private luts = new Map<string, Entry<Lut3D>>();
+  private masks = new Map<string, Mask>();
+  private videos = new Map<string, HTMLVideoElement>();
+  private listeners = new Set<() => void>();
+  /** Bumped whenever any media finishes loading (part of cache keys). */
+  version = 0;
+  private notifyQueued = false;
+
+  createCanvas(width: number, height: number): CanvasLike {
+    const c = document.createElement('canvas');
+    c.width = Math.max(1, Math.round(width));
+    c.height = Math.max(1, Math.round(height));
+    return c as unknown as CanvasLike;
+  }
+
+  subscribe(fn: () => void): () => void {
+    this.listeners.add(fn);
+    return () => this.listeners.delete(fn);
+  }
+
+  private notify(): void {
+    this.version++;
+    if (this.notifyQueued) return;
+    this.notifyQueued = true;
+    requestAnimationFrame(() => {
+      this.notifyQueued = false;
+      for (const l of this.listeners) l();
+    });
+  }
+
+  assetMeta(id: string): AssetSummary | null {
+    const e = this.meta.get(id);
+    if (e?.state === 'ready') return e.value;
+    if (!e) {
+      this.meta.set(id, { state: 'loading' });
+      get<{ asset: AssetSummary }>(`/api/assets/${id}`).then(
+        (r) => {
+          this.meta.set(id, { state: 'ready', value: r.asset });
+          this.notify();
+        },
+        () => this.meta.set(id, { state: 'error' }),
+      );
+    }
+    return null;
+  }
+
+  image(id: string): Drawable | null {
+    const e = this.images.get(id);
+    if (e?.state === 'ready') return e.value as unknown as Drawable;
+    if (e) return null;
+    this.images.set(id, { state: 'loading' });
+    void (async () => {
+      try {
+        let meta = this.meta.get(id);
+        if (!meta || meta.state !== 'ready') {
+          const r = await get<{ asset: AssetSummary }>(`/api/assets/${id}`);
+          this.meta.set(id, { state: 'ready', value: r.asset });
+          meta = this.meta.get(id);
+        }
+        const kind = meta?.state === 'ready' ? meta.value.kind : 'image';
+        const url = kind === 'image' ? assetUrl(id) : thumbUrl(id);
+        const res = await fetch(url, { credentials: 'same-origin' });
+        if (!res.ok) throw new Error(String(res.status));
+        const bitmap = await createImageBitmap(await res.blob());
+        this.images.set(id, { state: 'ready', value: bitmap });
+        this.notify();
+      } catch {
+        this.images.set(id, { state: 'error' });
+      }
+    })();
+    return null;
+  }
+
+  /** Preload an image and resolve when it is ready (used by tools that need pixels). */
+  async imageAsync(id: string): Promise<ImageBitmap | null> {
+    this.image(id);
+    for (let i = 0; i < 600; i++) {
+      const e = this.images.get(id);
+      if (e?.state === 'ready') return e.value;
+      if (e?.state === 'error') return null;
+      await new Promise((r) => setTimeout(r, 25));
+    }
+    return null;
+  }
+
+  /** A video element on the editing proxy for an asset. */
+  videoElement(id: string): HTMLVideoElement {
+    let v = this.videos.get(id);
+    if (!v) {
+      v = document.createElement('video');
+      v.src = proxyUrl(id);
+      v.muted = true;
+      v.preload = 'auto';
+      v.playsInline = true;
+      v.crossOrigin = 'use-credentials';
+      // The renderer reads width/height for layout; mirror the intrinsic video size onto them.
+      v.addEventListener('loadedmetadata', () => {
+        v!.width = v!.videoWidth;
+        v!.height = v!.videoHeight;
+      });
+      v.addEventListener('seeked', () => this.notify());
+      v.addEventListener('loadeddata', () => this.notify());
+      this.videos.set(id, v);
+    }
+    return v;
+  }
+
+  videoFrame(id: string, time: number): Drawable | null {
+    const meta = this.assetMeta(id);
+    if (meta && meta.kind !== 'video') return this.image(id);
+    const v = this.videoElement(id);
+    if (v.readyState >= 2) {
+      const fps = meta?.fps ?? 30;
+      if (!v.seeking && Math.abs(v.currentTime - time) > 0.5 / fps && v.paused) v.currentTime = Math.max(0, time);
+      return v as unknown as Drawable;
+    }
+    if (v.readyState === 0 && !v.seeking) v.currentTime = Math.max(0, time);
+    return this.image(id);
+  }
+
+  lut(id: string): Lut3D | undefined {
+    const e = this.luts.get(id);
+    if (e?.state === 'ready') return e.value;
+    if (!e) {
+      this.luts.set(id, { state: 'loading' });
+      fetch(assetUrl(id), { credentials: 'same-origin' })
+        .then((r) => r.text())
+        .then((txt) => {
+          this.luts.set(id, { state: 'ready', value: parseCubeLut(txt) });
+          this.notify();
+        })
+        .catch(() => this.luts.set(id, { state: 'error' }));
+    }
+    return undefined;
+  }
+
+  mask(id: string): Mask | undefined {
+    const cached = this.masks.get(id);
+    if (cached) return cached;
+    const img = this.image(id) as unknown as ImageBitmap | null;
+    if (!img) return undefined;
+    const c = document.createElement('canvas');
+    c.width = img.width;
+    c.height = img.height;
+    const ctx = c.getContext('2d', { willReadFrequently: true })!;
+    ctx.drawImage(img, 0, 0);
+    const data = ctx.getImageData(0, 0, c.width, c.height).data;
+    const m = new Uint8ClampedArray(c.width * c.height);
+    for (let p = 0; p < m.length; p++) m[p] = Math.round((data[p * 4]! * data[p * 4 + 3]!) / 255);
+    const mask = { width: c.width, height: c.height, data: m };
+    this.masks.set(id, mask);
+    return mask;
+  }
+
+  /** Register a mask computed locally (before its asset upload finishes). */
+  putMask(id: string, mask: Mask): void {
+    this.masks.set(id, mask);
+    this.notify();
+  }
+
+  /** Register a decoded image under an asset id (e.g. right after uploading it). */
+  putImage(id: string, bitmap: ImageBitmap): void {
+    this.images.set(id, { state: 'ready', value: bitmap });
+    this.notify();
+  }
+
+  dispose(): void {
+    for (const v of this.videos.values()) {
+      v.pause();
+      v.removeAttribute('src');
+      v.load();
+    }
+    this.videos.clear();
+    this.listeners.clear();
+  }
+}
