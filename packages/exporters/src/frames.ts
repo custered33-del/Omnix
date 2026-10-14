@@ -2,8 +2,9 @@ import * as gifencModule from 'gifenc';
 import UPNG from 'upng-js';
 import type { Raster } from '@omnix/imaging';
 
-// gifenc ships CommonJS for Node and ESM for bundlers; Node only exposes it as a default export.
-const gifenc = ((gifencModule as unknown as { default?: typeof gifencModule }).default ?? gifencModule) as typeof gifencModule;
+// gifenc ships CommonJS for Node (where the functions sit on the default export) and ESM for
+// bundlers (named exports, with a default that is just the encoder).
+const gifenc = ('quantize' in gifencModule && typeof gifencModule.quantize === 'function' ? gifencModule : (gifencModule as unknown as { default: typeof gifencModule }).default) as typeof gifencModule;
 const { GIFEncoder, quantize, applyPalette } = gifenc;
 
 /**
