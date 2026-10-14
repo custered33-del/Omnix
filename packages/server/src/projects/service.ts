@@ -92,6 +92,17 @@ export type ProjectEvent =
  * permissions, persistence, realtime fan-out and the activity feed are applied uniformly
  * no matter whether a change came from the UI, the REST API, MCP or the agent runner.
  */
+/** Changes from the same AI within this window stack into one proposal. */
+export const STACK_WINDOW_MS = 30 * 60_000;
+
+/** The open proposal an author's next change would join, if any. */
+export function stackTarget(session: ProjectSession, author: Author, jobId?: string): Proposal | undefined {
+  return session
+    .listProposals('open')
+    .filter((x) => x.author.id === author.id && !x.sealed && (x.jobId ?? null) === (jobId ?? null) && Date.now() - new Date(x.updatedAt ?? x.createdAt).getTime() < STACK_WINDOW_MS && x.ops.length < 400)
+    .sort((a, b) => (b.updatedAt ?? b.createdAt).localeCompare(a.updatedAt ?? a.createdAt))[0];
+}
+
 export class ProjectService extends EventEmitter {
   private sessions = new Map<string, Promise<ProjectSession>>();
   private dirty = new Map<string, NodeJS.Timeout>();
@@ -434,9 +445,23 @@ export class ProjectService extends EventEmitter {
 
   /* Proposals ------------------------------------------------------ */
 
-  async propose(projectId: string, ops: Operation[], meta: { author: Author; label: string; description?: string; jobId?: string; via?: Via }): Promise<Proposal> {
+  async propose(projectId: string, ops: Operation[], meta: { author: Author; label: string; description?: string; jobId?: string; via?: Via; stack?: boolean }): Promise<Proposal> {
     const { session, meta: pm } = await this.guard(projectId, meta.author);
     for (const op of ops) this.validate(session.state, op);
+    if (meta.stack) {
+      // Keep building the same author's open proposal while it is fresh, so related changes review together.
+      const recent = stackTarget(session, meta.author, meta.jobId);
+      if (recent) {
+        try {
+          const p = session.extendProposal(recent.id, ops, meta.label);
+          await this.flush(projectId);
+          await this.activity.record({ projectId, projectName: pm.name, actor: meta.author, kind: 'proposal.created', summary: `Proposed: ${meta.label}`, via: meta.via ?? 'mcp', proposalId: p.id, ...(meta.jobId ? { jobId: meta.jobId } : {}) });
+          return p;
+        } catch {
+          // The changes do not combine (for example they conflict); start a separate proposal.
+        }
+      }
+    }
     let p: Proposal;
     try {
       p = session.propose(ops, { author: meta.author, label: meta.label, ...(meta.description ? { description: meta.description } : {}), ...(meta.jobId ? { jobId: meta.jobId } : {}) });
@@ -445,6 +470,29 @@ export class ProjectService extends EventEmitter {
     }
     await this.flush(projectId);
     await this.activity.record({ projectId, projectName: pm.name, actor: meta.author, kind: 'proposal.created', summary: `Proposed: ${meta.label}`, via: meta.via ?? 'mcp', proposalId: p.id, ...(meta.jobId ? { jobId: meta.jobId } : {}) });
+    return p;
+  }
+
+  /**
+   * The project as an author sees it while drafting: the current state with that author's open
+   * stacked proposal applied, so follow-up changes can build on changes still awaiting review.
+   */
+  async workingState(projectId: string, author: Author, jobId?: string): Promise<{ state: ProjectState; proposalId: string | null }> {
+    const session = await this.session(projectId);
+    const p = stackTarget(session, author, jobId);
+    if (!p) return { state: session.state, proposalId: null };
+    try {
+      return { state: applyOp(session.state, { kind: 'batch', ops: p.ops }).state, proposalId: p.id };
+    } catch {
+      return { state: session.state, proposalId: null };
+    }
+  }
+
+  /** Close an open proposal to further stacking (the AI's next change starts a new proposal). */
+  async sealProposal(projectId: string, proposalId: string): Promise<Proposal> {
+    const session = await this.session(projectId);
+    const p = session.sealProposal(proposalId);
+    await this.flush(projectId);
     return p;
   }
 

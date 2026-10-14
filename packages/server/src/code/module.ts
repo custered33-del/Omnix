@@ -9,6 +9,8 @@ import { ProjectError, type ProjectEvent } from '../projects/service.js';
 import { zipSync, strToU8 } from 'fflate';
 import { CodeHistory, notebookJson } from './history.js';
 import { registerExportHandler } from '../export/module.js';
+import { registerToolProvider } from '../mcp/tools/index.js';
+import { codeTools } from './tools.js';
 
 /**
  * Code Grounds server module: sandboxed runs for files and notebook cells, live output
@@ -111,7 +113,7 @@ export class CodeService {
     return out;
   }
 
-  async run(projectId: string, target: CodeRunTarget, by: { userId: string; author: Author; via: 'ui' | 'mcp' | 'agent' | 'api'; jobId?: string }): Promise<CodeRunResult> {
+  async run(projectId: string, target: CodeRunTarget, by: { userId: string; author: Author; via: 'ui' | 'mcp' | 'agent' | 'api'; jobId?: string; persist?: boolean }): Promise<CodeRunResult> {
     const state = await this.services.projects.state(projectId);
     const ws = requireNodeOfType(state, target.workspaceId, 'codeWorkspace');
     const runId = `run_${Date.now().toString(36)}_${++runSeq}`;
@@ -152,7 +154,7 @@ export class CodeService {
     });
     const outputs = await this.finalize(result.outputs, projectId, by.userId);
     let commitId: string | undefined;
-    if (cell) {
+    if (cell && by.persist !== false) {
       const fresh = await this.services.projects.state(projectId);
       if (fresh.nodes[cell.id]) {
         const c = await this.services.projects.commit(
@@ -207,6 +209,7 @@ const fileSafe = (s: string) => s.replace(/[^\w\- .]+/g, '').trim().replace(/\s+
 useModule(({ services, router }) => {
   const code = new CodeService(services);
   services.ext.code = code;
+  registerToolProvider(services, () => codeTools(code));
 
   // Exports: the whole workspace as a ZIP, or notebooks as .ipynb.
   registerExportHandler(services, async (_s, state, node, req) => {

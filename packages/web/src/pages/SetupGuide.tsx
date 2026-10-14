@@ -7,6 +7,7 @@ import { formatRelative, t, type MessageKey } from '../i18n/index.js';
 import { formatShortcut } from '../ui/shortcuts.js';
 import { toast } from '../ui/toast.js';
 import { useClaudeStatus } from '../components/ClaudeStatus.js';
+import { PresetPicker, MODE_LABEL } from '../components/PresetPicker.js';
 import '../styles/setup.css';
 
 export const SETUP_STEPS = ['account', 'open-connectors', 'add-connector', 'oauth', 'scope', 'test', 'first-project'] as const;
@@ -23,7 +24,6 @@ const STEP_TITLE: Record<SetupStep, MessageKey> = {
   'first-project': 'setup.steps.firstProject',
 };
 
-const MODE_LABEL: Record<Mode, MessageKey> = { view: 'claude.modeView', approve: 'claude.modeApprove', autonomous: 'claude.modeAutonomous' };
 
 /** Claude's connector settings (the same page serves claude.ai and the Claude apps). */
 export const CLAUDE_CONNECTORS_URL = 'https://claude.ai/settings/connectors';
@@ -262,47 +262,10 @@ function OAuthStep() {
 }
 
 function ScopeStep({ preset, onChange }: { preset: Mode; onChange: (m: Mode) => void }) {
-  const cards: { mode: Mode; can: MessageKey; cannot: MessageKey; recommended?: boolean }[] = [
-    { mode: 'view', can: 'setup.scope.viewCan', cannot: 'setup.scope.viewCannot' },
-    { mode: 'approve', can: 'setup.scope.approveCan', cannot: 'setup.scope.approveCannot', recommended: true },
-    { mode: 'autonomous', can: 'setup.scope.autoCan', cannot: 'setup.scope.autoCannot' },
-  ];
-  const refs = useRef<(HTMLButtonElement | null)[]>([]);
-  const onKey = (e: React.KeyboardEvent, i: number) => {
-    const d = e.key === 'ArrowRight' || e.key === 'ArrowDown' ? 1 : e.key === 'ArrowLeft' || e.key === 'ArrowUp' ? -1 : 0;
-    if (!d) return;
-    e.preventDefault();
-    const j = (i + d + cards.length) % cards.length;
-    onChange(cards[j]!.mode);
-    refs.current[j]?.focus();
-  };
   return (
     <>
       <p>{t('setup.scope.intro')}</p>
-      <div className="preset-grid" role="radiogroup" aria-label={t('setup.steps.scope')}>
-        {cards.map((c, i) => (
-          <button key={c.mode} ref={(el) => void (refs.current[i] = el)} role="radio" aria-checked={preset === c.mode} tabIndex={preset === c.mode ? 0 : -1} className="preset-card" onClick={() => onChange(c.mode)} onKeyDown={(e) => onKey(e, i)}>
-            <span className="preset-head">
-              <strong>{t(MODE_LABEL[c.mode])}</strong>
-              {c.recommended && <span className="badge accent">{t('setup.scope.recommended')}</span>}
-            </span>
-            <span className="preset-row ok">
-              <Check aria-hidden="true" />
-              <span>
-                <span className="sr-only">{t('setup.scope.can')}: </span>
-                {t(c.can)}
-              </span>
-            </span>
-            <span className="preset-row no">
-              <CircleSlash aria-hidden="true" />
-              <span>
-                <span className="sr-only">{t('setup.scope.cannot')}: </span>
-                {t(c.cannot)}
-              </span>
-            </span>
-          </button>
-        ))}
-      </div>
+      <PresetPicker value={preset} onChange={onChange} label={t('setup.steps.scope')} />
       <Callout tone="info">{t('setup.scope.consent')}</Callout>
     </>
   );

@@ -1,18 +1,32 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Sparkles, Clock, ShieldCheck, Hourglass } from 'lucide-react';
-import { get } from '../lib/api.js';
+import { get, patch } from '../lib/api.js';
 import { realtime } from '../state/realtime.js';
 import { formatRelative, plural, t } from '../i18n/index.js';
+import { toast } from '../ui/toast.js';
 
 export interface ClaudeStatusData {
   connected: boolean;
-  connections: { id: string; kind: 'token' | 'oauth'; name: string; mode: 'view' | 'approve' | 'autonomous'; lastUsedAt: string | null }[];
+  connections: { id: string; kind: 'token' | 'oauth'; name: string; mode: 'view' | 'approve' | 'autonomous'; projectIds: 'all' | string[]; lastUsedAt: string | null }[];
   lastActivity: { ts: string; summary: string; projectId: string | null; projectName: string | null } | null;
   jobs: { running: number; awaitingApproval: number; list: { id: string; title: string; status: string; progress: number; projectId: string | null; message: string }[] };
   openProposals: number;
   proposalsByProject: { projectId: string; name: string; count: number }[];
   mcpUrl: string;
+}
+
+const STATUS_EVENT = 'omnix:claude-status';
+
+/** Ask every status view to reload (after changing or revoking a connection). */
+export function refreshClaudeStatus(): void {
+  window.dispatchEvent(new Event(STATUS_EVENT));
+}
+
+/** Change a connection's permission mode; it applies to Claude's next request. */
+export async function setConnectionMode(id: string, mode: 'view' | 'approve' | 'autonomous'): Promise<void> {
+  await patch(`/api/claude/connections/${encodeURIComponent(id)}`, { mode });
+  refreshClaudeStatus();
 }
 
 /** Claude connection status, refreshed on live events (and every `pollMs` when given, for read-only calls that emit none). */
@@ -23,6 +37,7 @@ export function useClaudeStatus(pollMs?: number) {
     const load = () => get<ClaudeStatusData>('/api/claude/status').then((d) => alive && setData(d)).catch(() => {});
     void load();
     const poll = pollMs ? window.setInterval(load, pollMs) : null;
+    window.addEventListener(STATUS_EVENT, load);
     let timer: number | null = null;
     const debounced = () => {
       if (timer) window.clearTimeout(timer);
@@ -32,6 +47,7 @@ export function useClaudeStatus(pollMs?: number) {
     return () => {
       alive = false;
       if (poll) window.clearInterval(poll);
+      window.removeEventListener(STATUS_EVENT, load);
       offs.forEach((o) => o());
     };
   }, [pollMs]);
@@ -73,9 +89,17 @@ export function ClaudeStatusCard() {
           {main && (
             <div className="status-line">
               <ShieldCheck aria-hidden="true" />
-              <span>
-                {t(MODE_LABEL[main.mode])} · {main.name}
-              </span>
+              <label className="sr-only" htmlFor="claude-mode">
+                {t('claude.permission', { name: main.name })}
+              </label>
+              <select id="claude-mode" className="select sm status-mode" value={main.mode} onChange={(e) => void setConnectionMode(main.id, e.target.value as 'view' | 'approve' | 'autonomous').catch((err: Error) => toast.error(err.message))}>
+                {(['view', 'approve', 'autonomous'] as const).map((m) => (
+                  <option key={m} value={m}>
+                    {t(MODE_LABEL[m])}
+                  </option>
+                ))}
+              </select>
+              <span className="muted">· {main.name}</span>
             </div>
           )}
           <div className="status-line">

@@ -45,6 +45,11 @@ export interface Proposal {
   error?: string;
   /** Free-form reason given on rejection; also recorded in session memory by the server. */
   reason?: string;
+  /** One label per change when an AI stacks several changes into one reviewable proposal. */
+  steps?: string[];
+  /** A sealed proposal takes no more stacked changes; the next change starts a new proposal. */
+  sealed?: boolean;
+  updatedAt?: string;
 }
 
 export interface Snapshot {
@@ -315,6 +320,29 @@ export class ProjectSession {
     };
     if (meta.jobId) p.jobId = meta.jobId;
     this.proposals.set(p.id, p);
+    this.emit({ type: 'proposal', proposal: p });
+    return p;
+  }
+
+  /**
+   * Add more changes to an open proposal, so a run of related AI edits (create a slide, then
+   * fill it) is reviewed as one diff. The combined operations must still apply cleanly.
+   */
+  extendProposal(id: string, ops: Operation[], label: string): Proposal {
+    const p = this.requireOpenProposal(id);
+    if (p.sealed) throw new OpError(`Proposal ${id} is sealed`);
+    const combined = [...p.ops, ...ops];
+    applyOp(this._state, { kind: 'batch', ops: combined }); // validates; throws on failure
+    const steps = [...(p.steps ?? [p.label]), label];
+    Object.assign(p, { ops: combined, steps, label: `${steps[0]} and ${steps.length - 1} more ${steps.length === 2 ? 'change' : 'changes'}`, updatedAt: new Date().toISOString() });
+    this.emit({ type: 'proposal', proposal: p });
+    return p;
+  }
+
+  /** Stop stacking into a proposal (the next change starts a new one). */
+  sealProposal(id: string): Proposal {
+    const p = this.requireOpenProposal(id);
+    p.sealed = true;
     this.emit({ type: 'proposal', proposal: p });
     return p;
   }

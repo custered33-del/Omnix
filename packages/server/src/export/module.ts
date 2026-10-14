@@ -18,6 +18,10 @@ import { DecoderPool } from './decoders.js';
 import { ProjectError } from '../projects/service.js';
 import { clipsOf, clipEnd, tracksOf } from '@omnix/core';
 import { useModule } from '../app.js';
+import { defineTool, ToolError, zProjectId, type ToolDef } from '../mcp/registry.js';
+import { registerToolProvider } from '../mcp/tools/index.js';
+import { signedFileUrl, verifyFileSignature } from '../http/signedUrls.js';
+import { sendBlob } from '../http/assetRoutes.js';
 
 export const IMAGE_FORMATS = ['png', 'jpeg', 'webp', 'avif', 'svg', 'psd'] as const;
 export const ANIMATION_FORMATS = ['gif', 'apng', 'webm', 'mp4', 'lottie', 'spritesheet'] as const;
@@ -219,7 +223,49 @@ export async function runExport(services: Services, projectId: string, req: Expo
   return { assetId: asset.id, name: output.name, mime: asset.mime, size: asset.size, notes: output.notes, downloadUrl: `/api/assets/${asset.id}/file?download=1` };
 }
 
+function exportTools(services: Services): ToolDef[] {
+  return [
+    defineTool({
+      name: 'export_file',
+      title: 'Export a file',
+      description:
+        'Export a canvas or layer (png, jpeg, webp, avif, svg, psd), a video or animation sequence (a preset id such as youtube-1080p or instagram-reel, or gif, apng, webm, mp4, lottie, spritesheet; srt or vtt for captions), a document (docx, pdf, md, html), a slideshow (pptx, pdf, pdf-notes, png) or a code workspace (zip, ipynb). Returns a download link that works for 24 hours, and the file is also saved in the asset library.',
+      category: 'export',
+      access: 'read',
+      input: { projectId: zProjectId, nodeId: z.string(), format: z.string().min(2).max(40), scale: z.number().min(0.05).max(4).optional(), quality: z.number().min(1).max(100).optional(), start: z.number().min(0).optional(), end: z.number().min(0).optional(), transparent: z.boolean().optional() },
+      output: z.object({ name: z.string(), url: z.string(), expiresAt: z.string(), assetId: z.string(), size: z.number(), notes: z.array(z.string()) }),
+      example: { input: { projectId: 'prj_8Kq2...', nodeId: 'dck_1', format: 'pptx' }, output: { name: 'Launch.pptx', url: 'https://omnix.example.com/api/files/9f2c...?exp=1760000000&sig=...', expiresAt: '2026-10-15T18:00:00.000Z', assetId: '9f2c...', size: 482113, notes: [] } },
+      async handler(args, ctx) {
+        await ctx.requireProject(args.projectId, 'read');
+        const { projectId, ...rest } = args;
+        const request = ExportRequest.parse(rest);
+        const job = await services.jobs.enqueue('export', { projectId, request }, { title: `Export ${request.format.toUpperCase()}`, ownerId: ctx.principal.user.id, projectId });
+        const done = await services.jobs.wait(job.id);
+        if (done.status !== 'done') throw new ToolError(`Export failed: ${done.error ?? done.status}`);
+        const r = done.result as Awaited<ReturnType<typeof runExport>>;
+        const link = await signedFileUrl(services, r.assetId);
+        return { text: `Exported ${r.name} (${Math.round(r.size / 1024)} KB). Download: ${link.url}${r.notes.length ? `\nNotes: ${r.notes.join(' ')}` : ''}`, data: { name: r.name, url: link.url, expiresAt: link.expiresAt, assetId: r.assetId, size: r.size, notes: r.notes } };
+      },
+    }),
+  ] as unknown as ToolDef[];
+}
+
 useModule(({ services, router }) => {
+  registerToolProvider(services, exportTools);
+
+  /** Signed, expiring download links (see signedFileUrl). */
+  router.get(
+    '/files/:id',
+    h(async (req, res) => {
+      const id = String(req.params.id);
+      if (!(await verifyFileSignature(services, id, String(req.query.exp ?? ''), String(req.query.sig ?? '')))) throw new ProjectError('This download link is invalid or has expired.', 403);
+      const a = await services.assets.get(id);
+      if (!a) throw new ProjectError('File not found', 404);
+      res.set('Content-Disposition', `attachment; filename="${a.name.replace(/["\\]/g, '_')}"`);
+      await sendBlob(services, req, res, a.id, a.mime);
+    }),
+  );
+
   services.jobs.register<{ projectId: string; request: ExportRequest }, Awaited<ReturnType<typeof runExport>>>('export', async (ctx) => {
     const meta = await services.projects.getMeta(ctx.job.input.projectId);
     const result = await runExport(services, ctx.job.input.projectId, ctx.job.input.request, ctx.job.ownerId, { signal: ctx.signal, progress: ctx.progress });

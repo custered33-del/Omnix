@@ -23,7 +23,7 @@ async function requireVisible(services: Services, userId: string, id: string): P
 }
 
 /** Send a blob with HTTP range support so video can stream and scrub in the browser. */
-async function sendBlob(services: Services, req: express.Request, res: express.Response, blobId: string, mime: string, filename?: string): Promise<void> {
+export async function sendBlob(services: Services, req: express.Request, res: express.Response, blobId: string, mime: string, filename?: string): Promise<void> {
   res.set('Content-Type', mime);
   res.set('Cache-Control', 'private, max-age=31536000, immutable');
   if (filename && req.query.download === '1') res.set('Content-Disposition', `attachment; filename="${filename.replace(/["\\]/g, '_')}"`);

@@ -15,6 +15,7 @@ const AssetsPage = lazy(() => import('./pages/AssetsPage.js').then((m) => ({ def
 const SettingsPage = lazy(() => import('./pages/SettingsPage.js').then((m) => ({ default: m.SettingsPage })));
 const ActivityPage = lazy(() => import('./pages/ActivityPage.js').then((m) => ({ default: m.ActivityPage })));
 const SetupGuide = lazy(() => import('./pages/SetupGuide.js').then((m) => ({ default: m.SetupGuide })));
+const ConnectPage = lazy(() => import('./pages/ConnectPage.js').then((m) => ({ default: m.ConnectPage })));
 const Troubleshooting = lazy(() => import('./pages/Troubleshooting.js').then((m) => ({ default: m.Troubleshooting })));
 const PresentPage = lazy(() => import('./pages/PresentPage.js').then((m) => ({ default: m.PresentPage })));
 
@@ -47,6 +48,8 @@ function Authed() {
             <Route path="help/troubleshooting" element={<Troubleshooting />} />
           </Route>
           <Route path="projects/:projectId" element={<ProjectPage />} />
+          {/* Claude's connector sign-in lands here (after /oauth/authorize). */}
+          <Route path="connect/:requestId" element={<ConnectPage />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </Suspense>

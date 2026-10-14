@@ -63,6 +63,13 @@ export async function runTool(tool: ToolDef, rawArgs: unknown, ctx: ToolContext)
   }
 }
 
+const contexts = new WeakMap<McpServer, ToolContext>();
+
+/** The tool context behind an MCP server, so transports can refresh its principal per request. */
+export function mcpContextOf(server: McpServer): ToolContext | undefined {
+  return contexts.get(server);
+}
+
 /** Build an MCP server bound to one principal (one connection). */
 export function createMcpServer(services: Services, principal: Principal): McpServer {
   const server = new McpServer(
@@ -70,6 +77,7 @@ export function createMcpServer(services: Services, principal: Principal): McpSe
     { instructions: OMNIX_INSTRUCTIONS, capabilities: { tools: {}, resources: {}, logging: {} } },
   );
   const ctx = makeToolContext(services, principal, 'mcp');
+  contexts.set(server, ctx);
   for (const tool of allTools(services)) {
     server.registerTool(
       tool.name,

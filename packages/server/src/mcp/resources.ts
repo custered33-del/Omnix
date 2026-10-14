@@ -43,7 +43,7 @@ export function registerResources(server: McpServer, ctx: ToolContext): void {
     { title: 'Project overview', description: 'Cross-tool outline of a project.', mimeType: 'application/json' },
     async (uri, { projectId }) => {
       await ctx.requireProject(String(projectId), 'read');
-      return json(uri, outlineProject(await ctx.services.projects.state(String(projectId))));
+      return json(uri, outlineProject(await ctx.state(String(projectId))));
     },
   );
 
@@ -53,7 +53,7 @@ export function registerResources(server: McpServer, ctx: ToolContext): void {
     { title: 'Scene graph', description: 'Every node with id and label, as indented text.', mimeType: 'text/plain' },
     async (uri, { projectId }) => {
       await ctx.requireProject(String(projectId), 'read');
-      return text(uri, projectTreeText(await ctx.services.projects.state(String(projectId)), 2000));
+      return text(uri, projectTreeText(await ctx.state(String(projectId)), 2000));
     },
   );
 
@@ -63,7 +63,7 @@ export function registerResources(server: McpServer, ctx: ToolContext): void {
     { title: 'Layer tree', description: 'Layers of a canvas, bottom to top, with blend modes, masks and filters.', mimeType: 'application/json' },
     async (uri, { projectId, canvasId }) => {
       await ctx.requireProject(String(projectId), 'read');
-      const state = await ctx.services.projects.state(String(projectId));
+      const state = await ctx.state(String(projectId));
       const canvas = state.nodes[String(canvasId)];
       if (!canvas || canvas.type !== 'canvas') throw new Error('Canvas not found');
       const walkLayers = (id: string): unknown[] =>
@@ -80,7 +80,7 @@ export function registerResources(server: McpServer, ctx: ToolContext): void {
     { title: 'Timeline', description: 'Tracks (top first) and clips with timing, speed, transitions and keyframed properties.', mimeType: 'application/json' },
     async (uri, { projectId, sequenceId }) => {
       await ctx.requireProject(String(projectId), 'read');
-      const state = await ctx.services.projects.state(String(projectId));
+      const state = await ctx.state(String(projectId));
       const seq = state.nodes[String(sequenceId)];
       if (!seq || seq.type !== 'sequence') throw new Error('Sequence not found');
       return json(uri, {
@@ -103,7 +103,7 @@ export function registerResources(server: McpServer, ctx: ToolContext): void {
     { title: 'Code tree', description: 'Files and notebook cells of a code workspace.', mimeType: 'application/json' },
     async (uri, { projectId, workspaceId }) => {
       await ctx.requireProject(String(projectId), 'read');
-      const state = await ctx.services.projects.state(String(projectId));
+      const state = await ctx.state(String(projectId));
       const ws = state.nodes[String(workspaceId)];
       if (!ws || ws.type !== 'codeWorkspace') throw new Error('Workspace not found');
       return json(uri, outlineDocument(state, ws));
@@ -116,7 +116,7 @@ export function registerResources(server: McpServer, ctx: ToolContext): void {
     { title: 'Document', description: 'Document outline and blocks (inline markdown).', mimeType: 'application/json' },
     async (uri, { projectId, documentId }) => {
       await ctx.requireProject(String(projectId), 'read');
-      const state = await ctx.services.projects.state(String(projectId));
+      const state = await ctx.state(String(projectId));
       const doc = state.nodes[String(documentId)];
       if (!doc || doc.type !== 'document') throw new Error('Document not found');
       return json(uri, {
@@ -134,7 +134,7 @@ export function registerResources(server: McpServer, ctx: ToolContext): void {
     { title: 'Slide list', description: 'Slides with elements, notes and transitions.', mimeType: 'application/json' },
     async (uri, { projectId, deckId }) => {
       await ctx.requireProject(String(projectId), 'read');
-      const state = await ctx.services.projects.state(String(projectId));
+      const state = await ctx.state(String(projectId));
       const deck = state.nodes[String(deckId)];
       if (!deck || deck.type !== 'deck') throw new Error('Deck not found');
       return json(uri, {
@@ -168,7 +168,7 @@ export function registerResources(server: McpServer, ctx: ToolContext): void {
     { title: 'Session memory', description: 'Decisions, prompts and rejected options for this project.', mimeType: 'application/json' },
     async (uri, { projectId }) => {
       await ctx.requireProject(String(projectId), 'read');
-      const state = await ctx.services.projects.state(String(projectId));
+      const state = await ctx.state(String(projectId));
       return json(
         uri,
         childrenOf(state, notesContainer(state).id).map((n) => ({ id: n.id, ...(n.props as object) })),

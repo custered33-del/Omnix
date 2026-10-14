@@ -5,7 +5,7 @@ import { SSEServerTransport } from '@modelcontextprotocol/sdk/server/sse.js';
 import { isInitializeRequest } from '@modelcontextprotocol/sdk/types.js';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { Services } from '../services.js';
-import { createMcpServer } from './server.js';
+import { createMcpServer, mcpContextOf } from './server.js';
 import { modeFromScopes, type Principal } from './registry.js';
 
 /**
@@ -48,7 +48,6 @@ function bearer(req: Request): string | null {
 export function mcpRouter(services: Services): Router {
   const router = express.Router();
   const sessions = new Map<string, SessionEntry>();
-  const resourceMetadata = `${services.config.publicUrl}/.well-known/oauth-protected-resource`;
 
   // Expire idle sessions.
   const sweep = setInterval(() => {
@@ -68,7 +67,7 @@ export function mcpRouter(services: Services): Router {
     if (!principal) {
       res
         .status(401)
-        .set('WWW-Authenticate', `Bearer realm="omnix", resource_metadata="${resourceMetadata}"${token ? ', error="invalid_token"' : ''}`)
+        .set('WWW-Authenticate', `Bearer realm="omnix", resource_metadata="${services.config.publicUrl}/.well-known/oauth-protected-resource"${token ? ', error="invalid_token"' : ''}`)
         .json({ error: 'unauthorized', error_description: token ? 'The access token is invalid or expired. Reconnect Omnix in Claude.' : 'Sign in required. Connect Omnix as a Claude connector or use a personal access token.' });
       return null;
     }
@@ -107,6 +106,9 @@ export function mcpRouter(services: Services): Router {
       entry = { transport, server, principalKey: auth.key, lastSeen: Date.now() };
     }
     entry.lastSeen = Date.now();
+    // Mode and project changes made in Omnix apply from the next request on.
+    const ctx = mcpContextOf(entry.server);
+    if (ctx) ctx.principal = auth.principal;
     await (entry.transport as StreamableHTTPServerTransport).handleRequest(req, res, req.body);
   });
 
@@ -149,6 +151,8 @@ export function mcpRouter(services: Services): Router {
       return;
     }
     entry.lastSeen = Date.now();
+    const ctx = mcpContextOf(entry.server);
+    if (ctx) ctx.principal = auth.principal;
     await entry.transport.handlePostMessage(req, res, req.body);
   });
 

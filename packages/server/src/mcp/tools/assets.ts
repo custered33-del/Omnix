@@ -1,4 +1,6 @@
 import { z } from 'zod';
+import { signedFileUrl } from '../../http/signedUrls.js';
+import { importFromUrl } from '../../http/assetRoutes.js';
 import { defineTool, ToolError } from '../registry.js';
 import type { AssetRecord } from '../../assets/pipeline.js';
 import type { Services } from '../../services.js';
@@ -75,8 +77,45 @@ export const assetReadTools = [
     example: { input: { assetId: '9f86d081884c7d65...' } },
     async handler(args, ctx) {
       const a = await requireAsset(ctx.services, ctx.principal.user.id, args.assetId);
-      const data = { ...assetSummary(a, ctx.services.config.publicUrl), exif: a.exif ?? {}, projectIds: a.projectIds, proxyStatus: a.proxyStatus, source: a.source };
+      const link = await signedFileUrl(ctx.services, a.id);
+      const data = { ...assetSummary(a, ctx.services.config.publicUrl), downloadUrl: link.url, exif: a.exif ?? {}, projectIds: a.projectIds, proxyStatus: a.proxyStatus, source: a.source };
       return { text: `${a.name}: ${a.kind}${a.width ? ` ${a.width}x${a.height}` : ''}${a.duration ? ` ${a.duration.toFixed(2)}s` : ''}`, data };
+    },
+  }),
+];
+
+export const assetWriteTools = [
+  defineTool({
+    name: 'import_asset',
+    title: 'Import a file from a URL',
+    description: 'Download an image, video, audio file, font or LUT from a public URL (or a data: URL) into the asset library, optionally attached to a project, so it can be placed in canvases, timelines, documents and slides. Identical files are stored once.',
+    category: 'assets',
+    access: 'write',
+    input: { url: z.string().url(), name: z.string().max(200).optional(), projectId: z.string().optional(), tags: z.array(z.string().max(40)).max(20).optional() },
+    output: z.object({ id: z.string(), name: z.string(), kind: z.string() }).passthrough(),
+    example: { input: { url: 'https://example.com/photos/beach.jpg', projectId: 'prj_8Kq2...', tags: ['reference'] }, output: { id: '3f9a...', name: 'beach.jpg', kind: 'image', width: 3000, height: 2000 } },
+    async handler(args, ctx) {
+      if (ctx.principal.mode === 'view') throw new ToolError('This connection is view-only.');
+      if (args.projectId) await ctx.requireProject(args.projectId, 'write');
+      const a = await importFromUrl(ctx.services, args.url, { ownerId: ctx.principal.user.id, ...(args.name ? { name: args.name } : {}), ...(args.projectId ? { projectId: args.projectId } : {}), tags: args.tags ?? [], source: { kind: 'url', url: args.url, tool: 'mcp' } });
+      const s = assetSummary(a, ctx.services.config.publicUrl);
+      return { text: `Imported ${a.name} (${a.kind}${a.width ? ` ${a.width}x${a.height}` : ''}${a.duration ? ` ${a.duration.toFixed(1)}s` : ''}) as ${a.id}.`, data: s };
+    },
+  }),
+  defineTool({
+    name: 'tag_asset',
+    title: 'Rename or tag an asset',
+    description: 'Rename an asset or replace its tags, to keep the library searchable.',
+    category: 'assets',
+    access: 'write',
+    input: { assetId: z.string(), name: z.string().min(1).max(200).optional(), tags: z.array(z.string().max(40)).max(50).optional() },
+    output: z.object({ id: z.string(), name: z.string(), tags: z.array(z.string()) }),
+    example: { input: { assetId: '3f9a...', tags: ['beach', 'summer', 'b-roll'] }, output: { id: '3f9a...', name: 'beach.jpg', tags: ['beach', 'summer', 'b-roll'] } },
+    async handler(args, ctx) {
+      if (ctx.principal.mode === 'view') throw new ToolError('This connection is view-only.');
+      const a = await requireAsset(ctx.services, ctx.principal.user.id, args.assetId);
+      const next = await ctx.services.assets.update(a.id, { ...(args.name ? { name: args.name } : {}), ...(args.tags ? { tags: [...new Set(args.tags.map((t) => t.trim()).filter(Boolean))] } : {}) });
+      return { text: `Updated ${next.name}: ${next.tags.join(', ') || 'no tags'}.`, data: { id: next.id, name: next.name, tags: next.tags } };
     },
   }),
 ];
