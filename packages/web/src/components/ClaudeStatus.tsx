@@ -15,12 +15,14 @@ export interface ClaudeStatusData {
   mcpUrl: string;
 }
 
-export function useClaudeStatus() {
+/** Claude connection status, refreshed on live events (and every `pollMs` when given, for read-only calls that emit none). */
+export function useClaudeStatus(pollMs?: number) {
   const [data, setData] = useState<ClaudeStatusData | null>(null);
   useEffect(() => {
     let alive = true;
     const load = () => get<ClaudeStatusData>('/api/claude/status').then((d) => alive && setData(d)).catch(() => {});
     void load();
+    const poll = pollMs ? window.setInterval(load, pollMs) : null;
     let timer: number | null = null;
     const debounced = () => {
       if (timer) window.clearTimeout(timer);
@@ -29,9 +31,10 @@ export function useClaudeStatus() {
     const offs = [realtime.on('proposal', debounced), realtime.on('job', debounced), realtime.on('activity', (m: { entry: { actor: { type: string } } }) => m.entry.actor.type === 'ai' && debounced())];
     return () => {
       alive = false;
+      if (poll) window.clearInterval(poll);
       offs.forEach((o) => o());
     };
-  }, []);
+  }, [pollMs]);
   return data;
 }
 

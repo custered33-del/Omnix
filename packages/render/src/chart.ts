@@ -190,8 +190,10 @@ export function drawChart(ctx: Ctx2D, spec: ChartSpec, x: number, y: number, w: 
   if (spec.type === 'bar') {
     const k = spec.series.length;
     const gap = 2;
-    const groupW = Math.min(band * 0.72, 24 * k + gap * (k - 1));
-    const barW = Math.max(2, Math.min(24, (groupW - gap * (k - 1)) / k));
+    // Thin marks, but scaled with the chart's typography so big slide charts are not spindly.
+    const maxBar = 24 * Math.max(1, options.fontScale ?? 1);
+    const groupW = Math.min(band * 0.72, maxBar * k + gap * (k - 1));
+    const barW = Math.max(2, Math.min(maxBar, (groupW - gap * (k - 1)) / k));
     spec.series.forEach((s, si) => {
       ctx.fillStyle = seriesColor(spec, si, scheme);
       s.values.forEach((v, i) => {

@@ -1,6 +1,6 @@
 import type { CanvasLike, Drawable, RenderHost } from '@omnix/render';
 import { parseCubeLut, type Lut3D, type Mask } from '@omnix/imaging';
-import { get, assetUrl, audioUrl, frameUrl, proxyUrl, thumbUrl, type AssetSummary } from '../lib/api.js';
+import { get, type AssetSummary } from '../lib/api.js';
 
 /** What this browser can decode (some builds ship without H.264/AAC). Probed once. */
 let codecCache: { h264: boolean; vp9: boolean; aac: boolean } | null = null;
@@ -33,6 +33,16 @@ export class BrowserRenderHost implements RenderHost {
   private listeners = new Set<() => void>();
   /** Bumped whenever any media finishes loading (part of cache keys). */
   version = 0;
+
+  /**
+   * Where asset files come from: the signed-in API by default, or a public presentation link
+   * (`/api/present/<shareId>/assets`) that only serves the media its deck uses.
+   */
+  constructor(private readonly base = '/api/assets') {}
+
+  private url(id: string, path = '') {
+    return `${this.base}/${id}${path}`;
+  }
   private notifyQueued = false;
 
   createCanvas(width: number, height: number): CanvasLike {
@@ -62,7 +72,7 @@ export class BrowserRenderHost implements RenderHost {
     if (e?.state === 'ready') return e.value;
     if (!e) {
       this.meta.set(id, { state: 'loading' });
-      get<{ asset: AssetSummary }>(`/api/assets/${id}`).then(
+      get<{ asset: AssetSummary }>(this.url(id)).then(
         (r) => {
           this.meta.set(id, { state: 'ready', value: r.asset });
           this.notify();
@@ -82,12 +92,12 @@ export class BrowserRenderHost implements RenderHost {
       try {
         let meta = this.meta.get(id);
         if (!meta || meta.state !== 'ready') {
-          const r = await get<{ asset: AssetSummary }>(`/api/assets/${id}`);
+          const r = await get<{ asset: AssetSummary }>(this.url(id));
           this.meta.set(id, { state: 'ready', value: r.asset });
           meta = this.meta.get(id);
         }
         const kind = meta?.state === 'ready' ? meta.value.kind : 'image';
-        const url = kind === 'image' ? assetUrl(id) : thumbUrl(id);
+        const url = kind === 'image' ? this.url(id, '/file') : this.url(id, '/thumbnail');
         const res = await fetch(url, { credentials: 'same-origin' });
         if (!res.ok) throw new Error(String(res.status));
         const bitmap = await createImageBitmap(await res.blob());
@@ -130,9 +140,9 @@ export class BrowserRenderHost implements RenderHost {
   audioSource(id: string): string {
     const meta = this.meta.get(id);
     const m = meta?.state === 'ready' ? meta.value : null;
-    if (m?.kind === 'audio' && document.createElement('audio').canPlayType(m.mime) !== '') return assetUrl(id);
-    if (m?.kind === 'video' && codecs().aac && this.canPlayVideo(id)) return proxyUrl(id);
-    return audioUrl(id);
+    if (m?.kind === 'audio' && document.createElement('audio').canPlayType(m.mime) !== '') return this.url(id, '/file');
+    if (m?.kind === 'video' && codecs().aac && this.canPlayVideo(id)) return this.url(id, '/proxy');
+    return this.url(id, '/audio');
   }
 
   /** Frame from the server at time t (quantized to the source frame rate); shows the nearest loaded frame meanwhile. */
@@ -152,7 +162,7 @@ export class BrowserRenderHost implements RenderHost {
       if (st.loading !== null || st.frames.has(st.want)) return;
       const f = st.want;
       st.loading = f;
-      fetch(frameUrl(id, f / fps), { credentials: 'same-origin' })
+      fetch(this.url(id, `/frame?t=${(f / fps).toFixed(3)}&w=960`), { credentials: 'same-origin' })
         .then((r) => (r.ok ? r.blob() : Promise.reject(new Error(String(r.status)))))
         .then((b) => createImageBitmap(b))
         .then((bmp) => {
@@ -172,12 +182,17 @@ export class BrowserRenderHost implements RenderHost {
     return (e.last as unknown as Drawable) ?? this.image(id);
   }
 
+  /** URL of an asset's editing proxy (video playback in presentations). */
+  proxySource(id: string): string {
+    return this.url(id, '/proxy');
+  }
+
   /** A video element on the editing proxy for an asset. */
   videoElement(id: string): HTMLVideoElement {
     let v = this.videos.get(id);
     if (!v) {
       v = document.createElement('video');
-      v.src = proxyUrl(id);
+      v.src = this.url(id, '/proxy');
       v.muted = true;
       v.preload = 'auto';
       v.playsInline = true;
@@ -217,7 +232,7 @@ export class BrowserRenderHost implements RenderHost {
     if (e?.state === 'ready') return e.value;
     if (!e) {
       this.luts.set(id, { state: 'loading' });
-      fetch(assetUrl(id), { credentials: 'same-origin' })
+      fetch(this.url(id, '/file'), { credentials: 'same-origin' })
         .then((r) => r.text())
         .then((txt) => {
           this.luts.set(id, { state: 'ready', value: parseCubeLut(txt) });

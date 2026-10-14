@@ -141,6 +141,7 @@ export const zElementAnimation = z.object({
   duration: z.number().min(0),
   easing: zEasing,
   trigger: z.enum(['on-enter', 'on-click', 'with-previous']),
+  click: z.number().int().min(1).max(200).nullable().optional(),
   keyframes: zKeyframes.optional(),
 });
 
@@ -384,6 +385,7 @@ export const PROP_SCHEMAS: Record<NodeType, z.ZodObject> = {
     fontFamily: z.string().nullable().optional(),
     color: zColor.nullable().optional(),
     align: z.enum(['left', 'center', 'right']).optional(),
+    valign: z.enum(['top', 'middle', 'bottom']).nullable().optional(),
     bold: z.boolean().optional(),
     assetId: z.string().nullable().optional(),
     shape: zVectorShape.nullable().optional(),

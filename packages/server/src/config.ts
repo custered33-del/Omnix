@@ -23,6 +23,10 @@ export interface OmnixConfig {
   dev: boolean;
   ffmpegPath: string;
   ffprobePath: string;
+  /** Poppler's pdftoppm, used to import PDF pages as slides. */
+  pdftoppmPath: string;
+  /** LibreOffice, used to convert .ppt, .odp and .key files before importing them. */
+  sofficePath: string;
   /** Maximum upload size in bytes. */
   maxUploadBytes: number;
   /** Allow anyone to sign up (otherwise only the first account, plus invites). */
@@ -58,6 +62,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): OmnixConfig {
     dev: env.NODE_ENV !== 'production',
     ffmpegPath: env.OMNIX_FFMPEG ?? 'ffmpeg',
     ffprobePath: env.OMNIX_FFPROBE ?? 'ffprobe',
+    pdftoppmPath: env.OMNIX_PDFTOPPM ?? 'pdftoppm',
+    sofficePath: env.OMNIX_SOFFICE ?? 'soffice',
     maxUploadBytes: Number(env.OMNIX_MAX_UPLOAD_MB ?? 4096) * 1024 * 1024,
     openSignup: env.OMNIX_OPEN_SIGNUP === 'true',
   };

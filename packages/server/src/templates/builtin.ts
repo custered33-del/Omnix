@@ -6,6 +6,7 @@ import {
   markdownToBlocks,
   nodesOfType,
   childrenOf,
+  primaryDocumentNodes,
   type Operation,
   type ProjectState,
   type SceneNode,
@@ -205,7 +206,98 @@ function pitchDeck(): ProjectState {
   return s;
 }
 
+/** Add another document (canvas, notebook, document, deck…) to a project state. */
+function addDocument(s: ProjectState, tool: ToolKind, name: string): { s: ProjectState; root: SceneNode } {
+  const nodes = primaryDocumentNodes(tool, name);
+  return { s: commit(s, { kind: 'create', parentId: s.rootId, nodes }), root: nodes[0]! };
+}
+
+/**
+ * The sample project from the setup guide: one launch, every tool. A notebook makes the chart,
+ * the brief and the slides show it through live links, and the slides also show the poster.
+ */
+function launchKit(): ProjectState {
+  let s = createProjectState({ name: 'Sample: Launch kit', primaryTool: 'slides' });
+  // Numbers: a notebook cell whose chart output is already there, so links show it right away.
+  let r = addDocument(s, 'code', 'Numbers');
+  s = r.s;
+  const nb = nodesOfType(s, 'notebook')[0]!;
+  for (const c of childrenOf(s, nb.id)) s = commit(s, { kind: 'delete', id: c.id });
+  const spec = { type: 'bar' as const, title: 'Pre-orders by week', labels: ['Week 1', 'Week 2', 'Week 3', 'Week 4'], series: [{ name: 'Pre-orders', values: [120, 260, 410, 690] }] };
+  const cell = makeNode('cell', {
+    cellType: 'code',
+    language: 'python',
+    source: [
+      'import omnix',
+      'weeks = ["Week 1", "Week 2", "Week 3", "Week 4"]',
+      'preorders = [120, 260, 410, 690]',
+      'omnix.chart(type="bar", title="Pre-orders by week", labels=weeks,',
+      '            series=[{"name": "Pre-orders", "values": preorders}])',
+    ].join('\n'),
+    outputs: [{ kind: 'chart', spec }],
+    executionCount: 1,
+  });
+  s = commit(s, { kind: 'create', parentId: nb.id, nodes: [cell] });
+
+  // Poster.
+  r = addDocument(s, 'image', 'Poster');
+  s = r.s;
+  const canvas = r.root;
+  const bg = childrenOf(s, canvas.id)[0]!;
+  s = commit(s, { kind: 'update', id: canvas.id, set: { width: 1080, height: 1350 } });
+  s = commit(s, { kind: 'update', id: bg.id, set: { fillColor: '#14213d' } });
+  const glow = makeNode('layer', layerProps('vector', { name: 'Glow', opacity: 0.6, blendMode: 'screen', shapes: [{ id: 'g', kind: 'ellipse', x: 380, y: -200, width: 900, height: 900, fill: '#3b5bdb', stroke: null, strokeWidth: 0 }], filters: [{ id: 'blur', filter: 'gaussianBlur', params: { radius: 140 }, enabled: true, opacity: 1 }] }));
+  const head = makeNode('layer', layerProps('text', { name: 'Headline', text: 'Launching\nthis spring', x: 90, y: 760, fontSize: 124, fontWeight: 800, color: '#ffffff', lineHeight: 1.02, letterSpacing: -2 }));
+  const sub = makeNode('layer', layerProps('text', { name: 'Date', text: 'April 14 · Pre-order now', x: 94, y: 1060, fontSize: 44, fontWeight: 500, color: '#c9d4ff' }));
+  for (const l of [glow, head, sub]) s = commit(s, { kind: 'create', parentId: canvas.id, nodes: [l] });
+
+  // Brief.
+  r = addDocument(s, 'document', 'Launch brief');
+  s = r.s;
+  const doc = r.root;
+  for (const c of childrenOf(s, doc.id)) s = commit(s, { kind: 'delete', id: c.id });
+  const md = `# Launch brief
+
+We launch on **April 14**. This brief, the poster and the slides all live in one project, so a change in one place shows up everywhere it is linked.
+
+## Pre-orders
+
+The chart below is a live link to the notebook in *Numbers*. Re-run the cell with new data and this chart (and the one in the slides) updates.
+
+!embed[chart](${cell.id})
+
+## Ask Claude
+
+- "Summarize this brief in three bullet points."
+- "Make the poster headline warmer and propose the change for me to approve."
+- "Add a slide about pricing after the chart slide."
+`;
+  for (const b of markdownToBlocks(md)) s = commit(s, { kind: 'create', parentId: doc.id, nodes: [makeNode('block', b)] });
+
+  // Slides: title, live chart, poster.
+  const deck = nodesOfType(s, 'deck')[0]!;
+  s = commit(s, { kind: 'update', id: deck.id, set: { name: 'Launch slides' } });
+  const first = nodesOfType(s, 'slide')[0]!;
+  const [title, subtitle] = childrenOf(s, first.id);
+  if (title) s = commit(s, { kind: 'update', id: title.id, set: { text: 'Spring launch' } });
+  if (subtitle) s = commit(s, { kind: 'update', id: subtitle.id, set: { text: 'Plan, numbers and creative' } });
+  s = commit(s, { kind: 'update', id: first.id, set: { notes: 'Welcome. Thirty seconds on why this launch matters.' } });
+  const W = deck.props.width;
+  const H = deck.props.height;
+  const slide = (name: string, heading: string, embed: SceneNode<'slideElement'>, notes: string) => {
+    const sl = makeNode('slide', { name, layout: 'title-body', masterId: 'master-title-body', notes, transition: { kind: 'push', duration: 0.5, easing: 'ease-in-out' } });
+    const t = makeNode('slideElement', { elementType: 'text', role: 'title', text: heading, x: W * 0.06, y: H * 0.06, w: W * 0.88, h: H * 0.14, bold: true });
+    for (const e of [t, embed]) e.parentId = sl.id;
+    sl.children = [t.id, embed.id];
+    return [sl, t, embed];
+  };
+  s = commit(s, { kind: 'create', parentId: deck.id, nodes: slide('Pre-orders', 'Pre-orders keep climbing', makeNode('slideElement', { elementType: 'embed', x: W * 0.1, y: H * 0.24, w: W * 0.8, h: H * 0.66, embed: { kind: 'chart', ref: cell.id }, animations: [{ id: 'a1', kind: 'fade-in', delay: 0, duration: 0.6, easing: 'ease-out', trigger: 'on-click', click: 1 }] }), 'The chart is linked to the notebook, so it is always current.') });
+  s = commit(s, { kind: 'create', parentId: deck.id, nodes: slide('Poster', 'The poster', makeNode('slideElement', { elementType: 'embed', x: (W - H * 0.66 * 0.8) / 2, y: H * 0.24, w: H * 0.66 * 0.8, h: H * 0.66, embed: { kind: 'canvas', ref: canvas.id }, animations: [{ id: 'a2', kind: 'zoom-in', delay: 0, duration: 0.5, easing: 'ease-out', trigger: 'on-enter' }] }), 'Edits to the poster in the image editor show up here.') });
+  return s;
+}
+
 const BUILTIN: { info: TemplateInfo; build: () => ProjectState }[] = [
+  { info: { id: 'builtin-launch-kit', name: 'Sample: Launch kit', tool: 'slides', description: 'A sample with every tool working together: a notebook chart linked live into a brief and slides, plus a poster.', builtIn: true }, build: launchKit },
   { info: { id: 'builtin-social-post', name: 'Social post', tool: 'image', description: 'A 1080x1080 post with a headline, subtitle and soft glow.', builtIn: true }, build: socialPost },
   { info: { id: 'builtin-product-teaser', name: 'Product teaser', tool: 'video', description: 'A 30-second sequence with intro and outro titles, music ducking under voice.', builtIn: true }, build: productTeaser },
   { info: { id: 'builtin-bouncing-ball', name: 'Bouncing ball', tool: 'animation', description: 'A looping bounce with squash, the classic animation exercise.', builtIn: true }, build: bouncingBall },

@@ -490,6 +490,83 @@
     }
   },
   {
+    "name": "add_note",
+    "title": "Add to session memory",
+    "category": "project",
+    "access": "write",
+    "description": "Record a decision, a prompt that worked, a rejected option or a reminder in the project's session memory, so the next session (yours, another AI's or a person's) can pick up where this one left off. Follows the connection's permission mode: in edit-with-approval mode the note waits for the user to approve it.",
+    "inputSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Project id (from list_projects)."
+        },
+        "kind": {
+          "default": "note",
+          "description": "decision: something agreed; prompt: an instruction worth reusing; rejected: an option the user turned down; note: anything else.",
+          "type": "string",
+          "enum": [
+            "decision",
+            "prompt",
+            "rejected",
+            "note"
+          ]
+        },
+        "text": {
+          "default": "",
+          "description": "The note. Keep it to one or two sentences.",
+          "type": "string",
+          "maxLength": 5000
+        }
+      },
+      "required": [
+        "projectId"
+      ]
+    },
+    "outputSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "status": {
+          "type": "string",
+          "enum": [
+            "committed",
+            "proposed"
+          ]
+        },
+        "noteId": {
+          "type": "string"
+        },
+        "commitId": {
+          "type": "string"
+        },
+        "proposalId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "status",
+        "noteId"
+      ],
+      "additionalProperties": false
+    },
+    "example": {
+      "input": {
+        "projectId": "prj_8Kq2...",
+        "kind": "rejected",
+        "text": "Seb preferred the warm palette over the neon one."
+      },
+      "output": {
+        "status": "proposed",
+        "noteId": "note_3Fz...",
+        "proposalId": "prop_9a..."
+      }
+    }
+  },
+  {
     "name": "list_assets",
     "title": "Search the asset library",
     "category": "assets",

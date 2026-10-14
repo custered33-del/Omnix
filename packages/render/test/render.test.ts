@@ -22,6 +22,9 @@ import {
   animLayerTransform,
   elementStateAt,
   slideStepCount,
+  animationGroups,
+  fitShape,
+  slideTextLook,
   collectAssetNeeds,
   niceTicks,
   compactNumber,
@@ -299,6 +302,35 @@ describe('slides', () => {
     expect(px(after, 10, 10)).toEqual([255, 0, 0, 255]);
     const vs = elementStateAt((state.nodes[el.id] as SceneNode<'slideElement'>).props, { step: 1, t: 0.5 }, 1920);
     expect(vs.opacity).toBeCloseTo(0.5);
+  });
+
+  it('runs on-click animations on their own click across elements', () => {
+    const a = (trigger: 'on-enter' | 'on-click' | 'with-previous', click?: number) => ({ id: Math.random().toString(36), kind: 'fade-in' as const, delay: 0, duration: 0.5, easing: 'linear' as const, trigger, ...(click ? { click } : {}) });
+    // Without a click number an on-click animation takes the next click for this element.
+    expect(animationGroups([a('on-enter'), a('on-click'), a('with-previous'), a('on-click')])).toEqual([0, 1, 1, 2]);
+    // With one, element B can wait for the third click even though it has a single animation.
+    expect(animationGroups([a('on-click', 3), a('with-previous')])).toEqual([3, 3]);
+    let state = createProjectState({ name: 'Deck', primaryTool: 'slides' });
+    const slide = nodesOfType(state, 'slide')[0]!;
+    state = commit(state, { kind: 'create', parentId: slide.id, nodes: [makeNode('slideElement', { elementType: 'text', text: 'B', animations: [a('on-click', 3)] })] });
+    expect(slideStepCount(state, slide.id)).toBe(3);
+  });
+
+  it('stretches polygons and lines with their element', () => {
+    const line = fitShape({ id: 'l', kind: 'line', x: 0, y: 0, width: 400, height: 4, points: [{ x: 0, y: 2 }, { x: 400, y: 2 }], fill: null, stroke: '#000', strokeWidth: 4 }, 800, 8);
+    expect(line.points).toEqual([{ x: 0, y: 4 }, { x: 800, y: 4 }]);
+    const tri = fitShape({ id: 't', kind: 'polygon', x: 0, y: 0, width: 10, height: 10, points: [{ x: 5, y: 0 }, { x: 10, y: 10 }, { x: 0, y: 10 }], fill: '#f00', stroke: null, strokeWidth: 0 }, 100, 50);
+    expect(tri.points).toEqual([{ x: 50, y: 0 }, { x: 100, y: 50 }, { x: 0, y: 50 }]);
+  });
+
+  it('makes titles bold unless an element says otherwise', () => {
+    const state = createProjectState({ name: 'Deck', primaryTool: 'slides' });
+    const deck = nodesOfType(state, 'deck')[0]!.props;
+    const base = { elementType: 'text' as const, x: 0, y: 0, w: 100, h: 100, rotation: 0, opacity: 1, animations: [] };
+    expect(slideTextLook({ ...base, role: 'title' }, deck, false).bold).toBe(true);
+    expect(slideTextLook({ ...base, role: 'title', bold: false }, deck, false).bold).toBe(false);
+    expect(slideTextLook({ ...base, role: 'title', valign: 'middle' }, deck, false).valign).toBe('middle');
+    expect(slideTextLook({ ...base, role: 'body' }, deck, true).color).toBe('#ffffff');
   });
 });
 

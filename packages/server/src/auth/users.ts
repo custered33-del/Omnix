@@ -11,6 +11,10 @@ export interface SetupProgress {
   /** Step the user was on last (resume point). */
   current: string;
   dismissed: boolean;
+  /** Permission preset chosen in step 5; the default on the connector consent screen. */
+  preset?: 'view' | 'approve' | 'autonomous';
+  /** The small project the connection test writes its blank note into. */
+  testProjectId?: string | null;
   updatedAt: string;
 }
 

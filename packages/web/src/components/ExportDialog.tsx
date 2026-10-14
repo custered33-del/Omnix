@@ -42,7 +42,17 @@ function formatsFor(node: SceneNode, presets: Preset[]): { group: string; option
     case 'document':
       return [{ group: 'Document', options: [{ value: 'docx', label: 'Word (DOCX)' }, { value: 'pdf', label: 'PDF' }, { value: 'md', label: 'Markdown' }, { value: 'html', label: 'HTML' }] }];
     case 'deck':
-      return [{ group: 'Slides', options: [{ value: 'pptx', label: 'PowerPoint (PPTX)' }, { value: 'pdf', label: 'PDF' }] }];
+      return [
+        {
+          group: 'Slides',
+          options: [
+            { value: 'pptx', label: 'PowerPoint (PPTX)', hint: 'Editable text, shapes, charts, video, notes, transitions and builds' },
+            { value: 'pdf', label: 'PDF', hint: 'One page per slide, searchable text' },
+            { value: 'pdf-notes', label: 'PDF handout with notes', hint: 'Slide and speaker notes on each page' },
+            { value: 'png', label: 'PNG images (ZIP)', hint: 'One picture per slide' },
+          ],
+        },
+      ];
     case 'codeWorkspace':
       return [{ group: 'Code', options: [{ value: 'zip', label: 'ZIP of all files' }, { value: 'ipynb', label: 'Jupyter notebook (.ipynb)' }] }];
     default:

@@ -9,3 +9,4 @@ import './templates/module.js';
 import './claude/module.js';
 import './import/module.js';
 import './documents/module.js';
+import './slides/module.js';

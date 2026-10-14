@@ -146,11 +146,25 @@ export function assetRoutes(services: Services): express.Router {
     }),
   );
 
+  r.use(assetFileRoutes(services, (req, id) => requireVisible(services, requireUser(req).id, id)));
+
+  return r;
+}
+
+const frameCache = new Map<string, Buffer>();
+const audioJobs = new Map<string, Promise<string>>();
+
+/**
+ * Routes that serve an asset's bytes (original, thumbnail, editing proxy, single frames and
+ * MP3 audio). `resolve` decides which assets a request may see: the signed-in library, or
+ * only the media a shared presentation uses.
+ */
+export function assetFileRoutes(services: Services, resolve: (req: express.Request, id: string) => Promise<AssetRecord>): express.Router {
+  const r = express.Router({ mergeParams: true });
   r.get(
     '/:id/file',
     h(async (req, res) => {
-      const user = requireUser(req);
-      const a = await requireVisible(services, user.id, String(req.params.id));
+      const a = await resolve(req, String(req.params.id));
       await sendBlob(services, req, res, a.id, a.mime, a.name);
     }),
   );
@@ -158,8 +172,7 @@ export function assetRoutes(services: Services): express.Router {
   r.get(
     '/:id/thumbnail',
     h(async (req, res) => {
-      const user = requireUser(req);
-      const a = await requireVisible(services, user.id, String(req.params.id));
+      const a = await resolve(req, String(req.params.id));
       if (!a.thumbnailBlob) throw new ProjectError('No thumbnail for this asset', 404);
       await sendBlob(services, req, res, a.thumbnailBlob, 'image/webp');
     }),
@@ -169,8 +182,7 @@ export function assetRoutes(services: Services): express.Router {
   r.get(
     '/:id/proxy',
     h(async (req, res) => {
-      const user = requireUser(req);
-      const a = await requireVisible(services, user.id, String(req.params.id));
+      const a = await resolve(req, String(req.params.id));
       if (a.proxyBlob) await sendBlob(services, req, res, a.proxyBlob, 'video/mp4');
       else await sendBlob(services, req, res, a.id, a.mime);
     }),
@@ -180,12 +192,10 @@ export function assetRoutes(services: Services): express.Router {
    * A single decoded frame (JPEG). Fallback for browsers that cannot decode the video codec;
    * frames are cached in memory by time and size.
    */
-  const frameCache = new Map<string, Buffer>();
   r.get(
     '/:id/frame',
     h(async (req, res) => {
-      const user = requireUser(req);
-      const a = await requireVisible(services, user.id, String(req.params.id));
+      const a = await resolve(req, String(req.params.id));
       if (a.kind !== 'video') throw new ProjectError('Frames are only available for video assets', 400);
       const fps = a.fps ?? 30;
       const t = Math.min(Math.max(0, Number(req.query.t ?? 0) || 0), Math.max(0, (a.duration ?? 0) - 1 / fps));
@@ -205,12 +215,10 @@ export function assetRoutes(services: Services): express.Router {
   );
 
   /** MP3 audio, transcoded on first request and kept (for browsers without AAC and other codecs). */
-  const audioJobs = new Map<string, Promise<string>>();
   r.get(
     '/:id/audio',
     h(async (req, res) => {
-      const user = requireUser(req);
-      const a = await requireVisible(services, user.id, String(req.params.id));
+      const a = await resolve(req, String(req.params.id));
       if (a.kind !== 'video' && a.kind !== 'audio') throw new ProjectError('This asset has no audio', 400);
       let blob = a.audioProxyBlob ?? null;
       if (!blob) {

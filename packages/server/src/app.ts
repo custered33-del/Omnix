@@ -185,7 +185,10 @@ export async function createOmnix(overrides: Partial<OmnixConfig> & { memory?: b
         server.once('error', reject);
         server.listen(port, config.host, () => {
           const addr = server.address();
-          resolve(typeof addr === 'object' && addr ? addr.port : port);
+          const bound = typeof addr === 'object' && addr ? addr.port : port;
+          // Self-checks (the Claude connection test) call the server on its real port.
+          services.ext.boundPort = bound;
+          resolve(bound);
         });
       });
     },

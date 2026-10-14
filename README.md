@@ -9,6 +9,7 @@ Omnix is a creative studio where an AI collaborator is a first-class participant
 - Node.js 22 or newer and pnpm 10 (`corepack enable` gives you pnpm)
 - ffmpeg and ffprobe on your `PATH` (video and audio import, proxies, export)
 - Optional: PostgreSQL (otherwise Omnix stores everything in a local folder)
+- Optional: Poppler's `pdftoppm` (import PDF pages as slides) and LibreOffice (import `.ppt`, `.odp` and `.key` slideshows)
 
 ## Run Omnix locally
 
@@ -47,15 +48,27 @@ Useful scripts:
 | `OMNIX_S3_BUCKET`, `OMNIX_S3_ENDPOINT`, `OMNIX_S3_REGION`, `OMNIX_S3_ACCESS_KEY_ID`, `OMNIX_S3_SECRET_ACCESS_KEY` | unset | S3-compatible media storage |
 | `OMNIX_OPEN_SIGNUP` | `false` | Allow more than the first account to sign up |
 | `OMNIX_FFMPEG`, `OMNIX_FFPROBE` | `ffmpeg`, `ffprobe` | Paths to the media tools |
+| `OMNIX_PDFTOPPM` | `pdftoppm` | Poppler tool used to import PDF pages as slides |
+| `OMNIX_SOFFICE` | `soffice` | LibreOffice, used to convert `.ppt`, `.odp` and `.key` files before importing them |
 | `ANTHROPIC_API_KEY` | unset | Optional: lets Omnix's own agent runner and command parser call Claude directly |
 | `OMNIX_AGENT_MODEL` | newest available | Model for the agent runner; when unset Omnix picks the newest model your key can use |
 | `OMNIX_STT_URL` | unset | OpenAI-compatible speech-to-text endpoint for automatic captions (otherwise speech detection leaves timed caption slots) |
 
 ## Connect Omnix to Claude
 
-Omnix speaks MCP at `http://localhost:4317/mcp` (Streamable HTTP) and `/sse` (legacy).
+The quickest way is the built-in guide: **Help → Claude setup guide** (`/setup`). It walks through seven steps, saves your progress, and ends with a connection test that reads your project list and writes a blank test note exactly as Claude would, with a fix for anything that fails. **Help → Troubleshooting** covers connection errors, expired sign-ins, permission problems and disconnecting.
 
-**Claude Desktop or Claude Code (stdio).** Create a personal access token in **Settings → Access tokens**, then add Omnix as a local MCP server:
+Omnix speaks MCP at `http://localhost:4317/mcp` (Streamable HTTP) and `/sse` (legacy). Claude.ai and the Claude apps reach connectors over the internet, so a server on your own computer needs an HTTPS address (for example a tunnel such as `cloudflared tunnel --url http://localhost:4317`) set as `OMNIX_PUBLIC_URL`. Claude Code and Claude Desktop with a local config work with `localhost` directly.
+
+> Adding Omnix as a custom connector in claude.ai signs in with OAuth, which arrives in Phase 4. Until then, connect with Claude Code or Claude Desktop and an access token as shown below.
+
+**Claude Code (HTTP).** Create an access token under **Settings → Claude**, then:
+
+```bash
+claude mcp add --transport http omnix http://localhost:4317/mcp --header "Authorization: Bearer omx_..."
+```
+
+**Claude Desktop or Claude Code (stdio).** Create an access token in **Settings → Claude**, then add Omnix as a local MCP server:
 
 ```json
 {
@@ -78,10 +91,10 @@ Each change Claude makes is attributed to Claude in the project history, appears
 | `packages/core` | Scene graph, operations, history (undo, redo, branches, proposals, snapshots), keyframes, paths, IK, timeline edits, markdown, validation |
 | `packages/imaging` | Pixel algorithms shared by browser and server (adjustments, LUTs, filters, blend modes, selections, content-aware fill, background removal, upscaling, style transfer) |
 | `packages/render` | Canvas 2D renderer for canvases, video and animation frames, slides, charts and thumbnails |
-| `packages/exporters` | PSD (read and write), SVG, GIF, APNG, Lottie, sprite sheets, captions and ffmpeg export pipelines |
+| `packages/exporters` | PSD (read and write), SVG, GIF, APNG, Lottie, sprite sheets, captions, ffmpeg pipelines, DOCX/PDF/Markdown/HTML documents, PowerPoint export and import, slide PDFs |
 | `packages/sandbox` | Isolated code kernels for Code Grounds (Python via Pyodide, JavaScript, TypeScript) |
-| `packages/server` | HTTP API, realtime hub, storage, asset pipeline, jobs, exports, imports, MCP server |
-| `packages/web` | The web app: dashboard, editors, history, proposals and settings |
+| `packages/server` | HTTP API, realtime hub, storage, asset pipeline, jobs, exports, imports, public presentation links, the Claude connection test, MCP server |
+| `packages/web` | The web app: dashboard, the six editors, presenter, history, proposals, settings, the Claude setup guide and troubleshooting |
 
 Documentation:
 

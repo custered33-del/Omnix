@@ -1,4 +1,4 @@
-import type { DeckProps, ElementAnimation, ProjectState, SceneNode, SlideElementProps } from '@omnix/core';
+import type { DeckProps, ElementAnimation, ProjectState, SceneNode, SlideElementProps, VectorShape } from '@omnix/core';
 import { childrenOf, ease, evaluateKeyframes, requireNodeOfType } from '@omnix/core';
 import { ctxOf, drawable, drawFitted, fontStack, type CanvasLike, type Ctx2D, type RenderHost } from './host.js';
 import { drawRichText } from './text.js';
@@ -25,6 +25,13 @@ export interface RenderSlideOptions {
   /** Hide exit animations in static renders so content stays visible. */
   ignoreExits?: boolean;
   depth?: number;
+  /**
+   * Seconds since the slide appeared (presenting). Video elements and animation or video embeds
+   * play from their start time; static renders leave it unset and show the first frame.
+   */
+  mediaTime?: number;
+  /** Elements drawn by the caller instead (e.g. live HTML video during a presentation). */
+  skipElements?: ReadonlySet<string>;
 }
 
 export interface ElementVisualState {
@@ -39,11 +46,16 @@ export interface ElementVisualState {
 const ENTRANCES = new Set(['fade-in', 'fly-in', 'zoom-in']);
 const EXITS = new Set(['fade-out', 'fly-out']);
 
-/** Group animations into click steps: group 0 is on-enter, each on-click starts a new group. */
+/**
+ * The click step each animation runs in: 0 is when the slide appears, on-click animations run on
+ * their `click` (or the click after this element's previous animation), with-previous joins the
+ * previous animation's step.
+ */
 export function animationGroups(animations: readonly ElementAnimation[]): number[] {
   let g = 0;
   return animations.map((a) => {
-    if (a.trigger === 'on-click') g += 1;
+    if (a.trigger === 'on-enter') g = 0;
+    else if (a.trigger === 'on-click') g = a.click && a.click > 0 ? Math.round(a.click) : g + 1;
     return g;
   });
 }
@@ -128,14 +140,14 @@ export function renderSlide(host: RenderHost, state: ProjectState, slideId: stri
   const H = Math.max(1, Math.round(dp.height * scale));
   const out = host.createCanvas(W, H);
   const ctx = ctxOf(out);
-  const master = dp.masters.find((m) => m.id === slide.props.masterId);
-  ctx.fillStyle = slide.props.background ?? master?.background ?? dp.theme.colors.background;
+  const bg = slideBackground(dp, slide.props);
+  ctx.fillStyle = bg;
   ctx.fillRect(0, 0, W, H);
   ctx.scale(scale, scale);
   const playhead = options.playhead ?? BUILT;
-  const isDarkBg = isDark(slide.props.background ?? master?.background ?? dp.theme.colors.background);
+  const isDarkBg = isDarkColor(bg);
   for (const n of childrenOf(state, slideId)) {
-    if (n.type !== 'slideElement') continue;
+    if (n.type !== 'slideElement' || options.skipElements?.has(n.id)) continue;
     const el = (n as SceneNode<'slideElement'>).props;
     const vs = elementStateAt(el, playhead, dp.width, options.ignoreExits ?? playhead === BUILT);
     if (!vs.visible) continue;
@@ -154,7 +166,13 @@ export function renderSlide(host: RenderHost, state: ProjectState, slideId: stri
   return out;
 }
 
-function isDark(color: string): boolean {
+/** The color behind a slide: its own, its master's, or the theme background. */
+export function slideBackground(deck: DeckProps, slide: { masterId: string | null; background: string | null }): string {
+  const master = deck.masters.find((m) => m.id === slide.masterId);
+  return slide.background ?? master?.background ?? deck.theme.colors.background;
+}
+
+export function isDarkColor(color: string): boolean {
   const h = color.replace('#', '');
   if (h.length < 6) return false;
   const r = parseInt(h.slice(0, 2), 16);
@@ -177,30 +195,47 @@ export function defaultFontSize(el: SlideElementProps, deck: DeckProps): number 
   }
 }
 
+/** How a text element looks with theme defaults applied (shared by rendering and PowerPoint export). */
+export function slideTextLook(el: SlideElementProps, deck: DeckProps, darkBg: boolean) {
+  const theme = deck.theme;
+  const heading = el.role === 'title' || el.role === 'subtitle';
+  return {
+    fontFamily: el.fontFamily ?? (heading ? theme.fonts.heading : theme.fonts.body),
+    monoFamily: theme.fonts.mono,
+    fontSize: defaultFontSize(el, deck),
+    // Titles are bold unless the element says otherwise (imported decks often do).
+    bold: el.bold ?? el.role === 'title',
+    color: el.color ?? (darkBg ? '#ffffff' : el.role === 'subtitle' || el.role === 'footer' ? theme.colors.muted : theme.colors.text),
+    linkColor: theme.colors.accent,
+    align: el.align ?? 'left',
+    valign: el.valign ?? (el.role === 'title' && deck.masters.length ? 'bottom' : 'top'),
+    lineHeight: heading ? 1.15 : 1.4,
+  } as const;
+}
+
 /** Draw an element in its local box (origin at the element's top-left). */
 function drawElement(host: RenderHost, state: ProjectState, ctx: Ctx2D, el: SlideElementProps, deck: DeckProps, darkBg: boolean, options: RenderSlideOptions, scale: number): void {
   const theme = deck.theme;
   switch (el.elementType) {
     case 'text': {
-      const heading = el.role === 'title' || el.role === 'subtitle';
-      const color = el.color ?? (darkBg ? '#ffffff' : el.role === 'subtitle' || el.role === 'footer' ? theme.colors.muted : theme.colors.text);
+      const look = slideTextLook(el, deck, darkBg);
       drawRichText(
         ctx,
         el.text ?? '',
         {
-          fontFamily: fontStack(host, el.fontFamily ?? (heading ? theme.fonts.heading : theme.fonts.body)),
-          monoFamily: fontStack(host, theme.fonts.mono),
-          fontSize: defaultFontSize(el, deck),
-          fontWeight: el.bold || el.role === 'title' ? 700 : 400,
-          color,
-          linkColor: theme.colors.accent,
-          align: el.align ?? 'left',
-          lineHeight: heading ? 1.15 : 1.4,
+          fontFamily: fontStack(host, look.fontFamily),
+          monoFamily: fontStack(host, look.monoFamily),
+          fontSize: look.fontSize,
+          fontWeight: look.bold ? 700 : 400,
+          color: look.color,
+          linkColor: look.linkColor,
+          align: look.align,
+          lineHeight: look.lineHeight,
         },
         0,
         0,
         el.w,
-        { height: el.h, valign: el.role === 'title' && deck.masters.length ? 'bottom' : 'top' },
+        { height: el.h, valign: look.valign },
       );
       break;
     }
@@ -211,10 +246,11 @@ function drawElement(host: RenderHost, state: ProjectState, ctx: Ctx2D, el: Slid
       break;
     }
     case 'video': {
-      const img = el.assetId ? host.videoFrame?.(el.assetId, 0) ?? host.image(el.assetId) : null;
+      const img = el.assetId ? host.videoFrame?.(el.assetId, options.mediaTime ?? 0) ?? host.image(el.assetId) : null;
       if (img) drawFitted(ctx, img, 0, 0, el.w, el.h, 'cover');
       else placeholder(ctx, el.w, el.h, 'Video');
       // Play glyph so static exports read as video.
+      if (options.mediaTime !== undefined) break;
       ctx.save();
       ctx.fillStyle = 'rgba(0,0,0,0.45)';
       const r = Math.min(el.w, el.h) * 0.12;
@@ -232,14 +268,15 @@ function drawElement(host: RenderHost, state: ProjectState, ctx: Ctx2D, el: Slid
       break;
     }
     case 'shape':
-      if (el.shape) drawShape(ctx, { ...el.shape, x: 0, y: 0, width: el.w, height: el.h });
+      if (el.shape) drawShape(ctx, fitShape(el.shape, el.w, el.h));
       break;
     case 'chart':
       if (el.chart) drawChart(ctx, el.chart, 0, 0, el.w, el.h, { scheme: darkBg ? 'dark' : 'light', fontScale: deck.width / 960, fontFamily: fontStack(host, theme.fonts.body), background: false });
       break;
     case 'embed':
       if (el.embed) {
-        const ok = drawEmbed(ctx, el.embed, 0, 0, el.w, el.h, {
+        const embed = options.mediaTime !== undefined && el.embed.kind === 'sequence-frame' ? { ...el.embed, time: playEmbedTime(state, el.embed.ref, (el.embed.time ?? 0) + options.mediaTime) } : el.embed;
+        const ok = drawEmbed(ctx, embed, 0, 0, el.w, el.h, {
           host,
           state,
           scheme: darkBg ? 'dark' : 'light',
@@ -255,6 +292,30 @@ function drawElement(host: RenderHost, state: ProjectState, ctx: Ctx2D, el: Slid
       break;
   }
   void scale;
+}
+
+/** A slide shape stretched to its element box: points and paths scale from the shape's own frame. */
+export function fitShape(shape: VectorShape, w: number, h: number): VectorShape {
+  const sx = shape.width ? w / shape.width : 1;
+  const sy = shape.height ? h / shape.height : 1;
+  const pt = (p: { x: number; y: number }) => ({ x: (p.x - shape.x) * sx, y: (p.y - shape.y) * sy });
+  return {
+    ...shape,
+    x: 0,
+    y: 0,
+    width: w,
+    height: h,
+    ...(shape.points ? { points: shape.points.map(pt) } : {}),
+    ...(shape.path ? { path: { closed: shape.path.closed, anchors: shape.path.anchors.map((a) => ({ ...pt(a), ...(a.in ? { in: pt(a.in) } : {}), ...(a.out ? { out: pt(a.out) } : {}) })) } } : {}),
+  };
+}
+
+/** Animations loop while presenting; videos hold their last frame. */
+function playEmbedTime(state: ProjectState, seqId: string, t: number): number {
+  const seq = state.nodes[seqId] as SceneNode<'sequence'> | undefined;
+  if (!seq || seq.type !== 'sequence') return t;
+  const d = Math.max(0.01, seq.props.duration);
+  return seq.props.purpose === 'animation' ? t % d : Math.min(t, d);
 }
 
 function placeholder(ctx: Ctx2D, w: number, h: number, label: string): void {

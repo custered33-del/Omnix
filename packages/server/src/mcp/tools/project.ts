@@ -1,6 +1,6 @@
 import { z } from 'zod';
-import { childrenOf, notesContainer, outlineProject, projectTreeText, type SceneNode } from '@omnix/core';
-import { defineTool, zProjectId, ToolError } from '../registry.js';
+import { childrenOf, makeNode, notesContainer, outlineProject, projectTreeText, type SceneNode } from '@omnix/core';
+import { defineTool, outcomeText, zProjectId, ToolError } from '../registry.js';
 import { renderNode } from '../../render/renderNode.js';
 
 /** Trim very large prop values so node reads stay prompt-sized. */
@@ -149,6 +149,31 @@ export const projectReadTools = [
       const state = await ctx.services.projects.state(args.projectId);
       const img = await renderNode(ctx.services, state, { nodeId: args.nodeId ?? null, ...(args.time !== undefined ? { time: args.time } : {}), maxSize: args.maxSize ?? 1024, format: 'png' });
       return { text: `Rendered ${args.nodeId ?? 'project'} at ${img.width}x${img.height}.`, data: { width: img.width, height: img.height, mimeType: img.mime }, images: [{ data: img.data, mimeType: img.mime }] };
+    },
+  }),
+];
+
+export const projectWriteTools = [
+  defineTool({
+    name: 'add_note',
+    title: 'Add to session memory',
+    description:
+      "Record a decision, a prompt that worked, a rejected option or a reminder in the project's session memory, so the next session (yours, another AI's or a person's) can pick up where this one left off. Follows the connection's permission mode: in edit-with-approval mode the note waits for the user to approve it.",
+    category: 'project',
+    access: 'write',
+    input: {
+      projectId: zProjectId,
+      kind: z.enum(['decision', 'prompt', 'rejected', 'note']).default('note').describe('decision: something agreed; prompt: an instruction worth reusing; rejected: an option the user turned down; note: anything else.'),
+      text: z.string().max(5000).default('').describe('The note. Keep it to one or two sentences.'),
+    },
+    output: z.object({ status: z.enum(['committed', 'proposed']), noteId: z.string(), commitId: z.string().optional(), proposalId: z.string().optional() }),
+    example: { input: { projectId: 'prj_8Kq2...', kind: 'rejected', text: 'Seb preferred the warm palette over the neon one.' }, output: { status: 'proposed', noteId: 'note_3Fz...', proposalId: 'prop_9a...' } },
+    async handler(args, ctx) {
+      await ctx.requireProject(args.projectId, 'write');
+      const state = await ctx.services.projects.state(args.projectId);
+      const note = makeNode('note', { kind: args.kind, text: args.text, author: ctx.principal.author, createdAt: new Date().toISOString() });
+      const out = await ctx.apply(args.projectId, [{ kind: 'create', parentId: notesContainer(state).id, nodes: [note] }], args.text ? `Add note: ${args.text.slice(0, 60)}` : 'Add a blank note');
+      return { text: outcomeText(out), data: { status: out.status, noteId: note.id, ...(out.commitId ? { commitId: out.commitId } : {}), ...(out.proposalId ? { proposalId: out.proposalId } : {}) } };
     },
   }),
 ];

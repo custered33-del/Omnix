@@ -144,6 +144,9 @@ export class ProjectService extends EventEmitter {
     if (input.state) {
       // Templates arrive as full states; give the copy a fresh identity and the requested name.
       state = reidentify(input.state, name, input.primaryTool);
+      // AI consent is the creator's choice, never inherited from the template.
+      const r = rootNode(state);
+      state = { ...state, nodes: { ...state.nodes, [r.id]: { ...r, props: { ...r.props, aiConsent: input.aiConsent ?? false } } } };
     }
     const root = rootNode(state);
     const now = new Date().toISOString();

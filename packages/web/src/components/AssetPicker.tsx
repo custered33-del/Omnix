@@ -19,7 +19,7 @@ const ACCEPT: Partial<Record<Kind, string>> = {
 /**
  * Choose an asset from the library (or upload a new one). Used by every editor that places media.
  */
-export function AssetPicker(props: { kinds: Kind[]; title?: string; projectId?: string; multiple?: boolean; /** Only files of this type (e.g. PSDs among "other"). */ mime?: string; accept?: string; onPick: (assets: AssetSummary[]) => void; onClose: () => void }) {
+export function AssetPicker(props: { kinds: Kind[]; title?: string; projectId?: string; multiple?: boolean; /** Only files of these types (e.g. PSDs among "other"). */ mime?: string | string[]; accept?: string; onPick: (assets: AssetSummary[]) => void; onClose: () => void }) {
   const [q, setQ] = useState('');
   const [assets, setAssets] = useState<AssetSummary[] | null>(null);
   const [picked, setPicked] = useState<string[]>([]);
@@ -32,7 +32,7 @@ export function AssetPicker(props: { kinds: Kind[]; title?: string; projectId?: 
       if (q) p.set('q', q);
       if (props.kinds.length === 1) p.set('kind', props.kinds[0]!);
       get<{ assets: AssetSummary[] }>(`/api/assets?${p}`).then(
-        (r) => setAssets(r.assets.filter((a) => props.kinds.includes(a.kind) && !a.tags.includes('mask') && (!props.mime || a.mime === props.mime))),
+        (r) => setAssets(r.assets.filter((a) => props.kinds.includes(a.kind) && !a.tags.includes('mask') && (!props.mime || (Array.isArray(props.mime) ? props.mime : [props.mime]).includes(a.mime)))),
         (e) => toast.error(e.message),
       );
     }, 120);

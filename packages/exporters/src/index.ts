@@ -7,3 +7,6 @@ export * from './spritesheet.js';
 export * from './ffmpeg.js';
 export * from './document.js';
 export * from './fonts.js';
+export * from './deck.js';
+export * from './pptxImport.js';
+export { OoxmlPackage, parseXml } from './ooxml.js';

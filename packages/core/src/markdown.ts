@@ -119,6 +119,47 @@ export function inlineToPlain(src: string): string {
     .join('');
 }
 
+/** Escape characters that would otherwise start inline formatting. */
+export function escapeInline(text: string): string {
+  return text.replace(/([\\*_`~[\]])/g, '\\$1');
+}
+
+const SPAN_KEYS = ['link', 'bold', 'italic', 'strike', 'code'] as const;
+
+/** Keep whitespace outside the markers so "**bold **" never appears. */
+function wrapMarkers(inner: string, open: string, close: string): string {
+  const lead = /^\s*/.exec(inner)![0];
+  const trail = /\s*$/.exec(inner)![0];
+  const core = inner.slice(lead.length, inner.length - trail.length);
+  return core ? `${lead}${open}${core}${close}${trail}` : inner;
+}
+
+/** Styled spans back to inline markdown (the inverse of parseInline). Used by importers. */
+export function spansToInline(spans: readonly InlineSpan[]): string {
+  const render = (list: readonly InlineSpan[], depth: number): string => {
+    const key = SPAN_KEYS[depth];
+    if (!key) return list.map((s) => escapeInline(s.text)).join('');
+    let out = '';
+    let i = 0;
+    while (i < list.length) {
+      const v = list[i]![key];
+      let j = i + 1;
+      while (j < list.length && list[j]![key] === v) j++;
+      const group = list.slice(i, j);
+      if (!v) out += render(group, depth + 1);
+      else if (key === 'code') out += wrapMarkers(group.map((s) => s.text.replace(/`/g, '')).join(''), '`', '`');
+      else if (key === 'link') out += wrapMarkers(render(group, depth + 1), '[', `](${String(v).replace(/[()\s]/g, (c) => (c === '(' ? '%28' : c === ')' ? '%29' : '%20'))})`);
+      else {
+        const m = key === 'bold' ? '**' : key === 'italic' ? '*' : '~~';
+        out += wrapMarkers(render(group, depth + 1), m, m);
+      }
+      i = j;
+    }
+    return out;
+  };
+  return render(spans, 0);
+}
+
 /** Escape HTML special characters. */
 export function escapeHtml(s: string): string {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');

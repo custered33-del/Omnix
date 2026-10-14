@@ -19,6 +19,10 @@ import {
   slideElements,
   suggestOp,
   wordCount,
+  deckDependencies,
+  makeNode,
+  parseInline,
+  spansToInline,
   type Operation,
   type ProjectState,
   type SceneNode,
@@ -144,5 +148,44 @@ describe('slideshows', () => {
     state = apply(state, r.op);
     state = apply(state, { kind: 'batch', ops: [{ kind: 'update', id: first!.id, set: { rehearsalSeconds: 30 } }, { kind: 'update', id: r.slideId, set: { rehearsalSeconds: 45, hidden: true } }] });
     expect(rehearsalTotal(state, deck.id)).toBe(30);
+  });
+
+  it('follows live links to find everything a shared deck needs', () => {
+    let state = createProjectState({ primaryTool: 'slides', name: 'Pitch' });
+    const deck = nodesOfType(state, 'deck')[0]!;
+    const canvas = makeNode('canvas', { name: 'Poster' });
+    const pic = makeNode('layer', { name: 'Pic', layerType: 'raster', assetId: 'asset-poster' });
+    pic.parentId = canvas.id;
+    canvas.children = [pic.id];
+    const unrelated = makeNode('canvas', { name: 'Private' });
+    const secret = makeNode('layer', { name: 'Secret', layerType: 'raster', assetId: 'asset-secret' });
+    secret.parentId = unrelated.id;
+    unrelated.children = [secret.id];
+    state = apply(state, { kind: 'create', parentId: state.rootId, nodes: [canvas, pic] });
+    state = apply(state, { kind: 'create', parentId: state.rootId, nodes: [unrelated, secret] });
+    const slide = deckSlides(state, deck.id)[0]!;
+    state = apply(state, { kind: 'create', parentId: slide.id, nodes: [makeNode('slideElement', { elementType: 'embed', embed: { kind: 'canvas', ref: canvas.id } })] });
+    state = apply(state, { kind: 'create', parentId: slide.id, nodes: [makeNode('slideElement', { elementType: 'image', assetId: 'asset-photo' })] });
+    const deps = deckDependencies(state, deck.id);
+    expect(deps.nodeIds.has(canvas.id)).toBe(true);
+    expect(deps.nodeIds.has(pic.id)).toBe(true);
+    expect(deps.nodeIds.has(unrelated.id)).toBe(false);
+    expect([...deps.assetIds].sort()).toEqual(['asset-photo', 'asset-poster']);
+    expect(deps.embedRoots).toEqual([{ id: canvas.id }]);
+  });
+});
+
+describe('inline markdown', () => {
+  it('turns styled spans back into markdown that parses to the same spans', () => {
+    for (const src of ['Hello **Seb**', '**a *b***', '***b* a**', '[**x** y](https://e.com/a)', '`co*de`', '~~gone~~ 2\\*3', 'x\\_y \\[z\\]']) {
+      const spans = parseInline(src);
+      expect(parseInline(spansToInline(spans)), src).toEqual(spans);
+    }
+  });
+
+  it('keeps spaces outside markers and escapes literal characters', () => {
+    expect(spansToInline([{ text: 'a ' }, { text: 'bold ', bold: true }, { text: 'end' }])).toBe('a **bold** end');
+    expect(spansToInline([{ text: '2*3 [x]' }])).toBe('2\\*3 \\[x\\]');
+    expect(spansToInline([{ text: 'see', link: 'https://e.com/a b(c)' }])).toBe('[see](https://e.com/a%20b%28c%29)');
   });
 });

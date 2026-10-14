@@ -124,7 +124,7 @@ export function Shell() {
             {t('app.offline')}
           </span>
         )}
-        <button className="btn btn-ghost btn-sm" onClick={() => openPalette(true)} aria-label={t('nav.commandPalette')}>
+        <button className="btn btn-ghost btn-sm palette-btn" onClick={() => openPalette(true)} aria-label={t('nav.commandPalette')}>
           <Search />
           <span className="muted">{formatShortcut('mod+k')}</span>
         </button>

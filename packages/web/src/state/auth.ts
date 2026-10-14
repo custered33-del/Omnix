@@ -10,7 +10,7 @@ export interface User {
   name: string;
   role: 'owner' | 'member';
   preferences: { theme: Theme; reducedMotion: 'system' | 'on' | 'off'; locale: string; pressureGamma: number };
-  setup: { completed: string[]; current: string; dismissed: boolean; updatedAt: string };
+  setup: { completed: string[]; current: string; dismissed: boolean; preset?: 'view' | 'approve' | 'autonomous'; testProjectId?: string | null; updatedAt: string };
   createdAt: string;
 }
 

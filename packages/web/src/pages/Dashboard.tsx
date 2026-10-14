@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { LayoutTemplate, MoreHorizontal, Archive, Trash2, Pencil, ArchiveRestore, Upload, FolderOpen } from 'lucide-react';
 import { TOOL_KINDS, type ToolKind } from '@omnix/core';
 import { del, get, patch, uploadFile, thumbUrl, type AssetSummary } from '../lib/api.js';
@@ -11,6 +11,7 @@ import { ConfirmDialog, Dialog, MenuButton, Spinner, Switch } from '../ui/primit
 import { toast } from '../ui/toast.js';
 import { ActivityFeed } from '../components/ActivityFeed.js';
 import { ClaudeStatusCard } from '../components/ClaudeStatus.js';
+import { DASHBOARD_TOUR, Tour } from '../components/Tour.js';
 import { formatRelative, plural, t } from '../i18n/index.js';
 
 function useProjects(includeArchived: boolean) {
@@ -248,6 +249,9 @@ export function Dashboard() {
   const { projects, reload } = useProjects(showArchived);
   const [templatesOpen, setTemplatesOpen] = useState(false);
   const [creating, setCreating] = useState<ToolKind | null>(null);
+  const [params, setParams] = useSearchParams();
+  // The setup guide links here with ?tour=1; the tour starts once the page has its content.
+  const touring = params.get('tour') === '1' && projects !== null;
 
   useEffect(() => {
     // Show the Claude setup guide on first launch.
@@ -362,6 +366,7 @@ export function Dashboard() {
         </aside>
       </div>
       {templatesOpen && <TemplatesDialog onClose={() => setTemplatesOpen(false)} />}
+      {touring && <Tour steps={DASHBOARD_TOUR} onClose={() => setParams({}, { replace: true })} />}
     </div>
   );
 }

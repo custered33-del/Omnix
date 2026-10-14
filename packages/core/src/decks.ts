@@ -1,7 +1,7 @@
-import type { DeckProps, MasterSlide, SceneNode, SlideElementProps, SlideProps, ThemeTokens } from './nodes.js';
+import type { DeckProps, EmbedRef, MasterSlide, SceneNode, SlideElementProps, SlideProps, ThemeTokens } from './nodes.js';
 import type { Operation } from './ops.js';
 import { OpError } from './ops.js';
-import { childrenOf, requireNodeOfType, type ProjectState } from './state.js';
+import { childrenOf, requireNodeOfType, subtreeIds, type ProjectState } from './state.js';
 import { DEFAULT_THEME, makeNode } from './defaults.js';
 
 /**
@@ -141,4 +141,59 @@ export function applyThemeOp(state: ProjectState, deckId: string, theme: ThemeTo
 export function rehearsalTotal(state: ProjectState, deckId: string): number | null {
   const times = deckSlides(state, deckId).filter((s) => !s.props.hidden).map((s) => s.props.rehearsalSeconds);
   return times.some((t) => t !== null) ? times.reduce<number>((a, t) => a + (t ?? 0), 0) : null;
+}
+
+/**
+ * Everything a deck needs to render on its own: its slides and elements, plus whatever live
+ * links point at (a canvas, a sequence, a code cell, a slide of another deck), followed
+ * recursively, and every asset those use. Used for public presentation links and exports.
+ */
+export function deckDependencies(state: ProjectState, deckId: string): { nodeIds: Set<string>; assetIds: Set<string>; embedRoots: { id: string; time?: number }[] } {
+  requireNodeOfType(state, deckId, 'deck');
+  const nodeIds = new Set<string>();
+  const assetIds = new Set<string>();
+  const embedRoots: { id: string; time?: number }[] = [];
+  const scan = (v: unknown, key?: string): void => {
+    if (!v || typeof v !== 'object') {
+      if (key === 'assetId' && typeof v === 'string' && v) assetIds.add(v);
+      return;
+    }
+    if (Array.isArray(v)) {
+      for (const x of v) scan(x);
+      return;
+    }
+    const rec = v as Record<string, unknown>;
+    if (key === 'embed' && typeof rec.kind === 'string' && typeof rec.ref === 'string') follow(rec as unknown as EmbedRef);
+    for (const [k, x] of Object.entries(rec)) scan(x, k);
+  };
+  const addNode = (id: string) => {
+    const n = state.nodes[id];
+    if (!n || nodeIds.has(id)) return false;
+    nodeIds.add(id);
+    scan(n.props);
+    return true;
+  };
+  const addSubtree = (id: string) => {
+    for (const sid of subtreeIds(state, id)) addNode(sid);
+  };
+  const follow = (e: EmbedRef) => {
+    if (e.kind === 'asset') {
+      assetIds.add(e.ref);
+      return;
+    }
+    const target = state.nodes[e.ref];
+    if (!target) return;
+    if (!nodeIds.has(target.id)) embedRoots.push({ id: target.id, ...(e.time !== undefined ? { time: e.time } : {}) });
+    if (e.kind === 'slide') {
+      // The slide's deck supplies size and theme; only this slide comes along.
+      if (target.parentId) addNode(target.parentId);
+      addSubtree(target.id);
+    } else if (e.kind === 'cell-output' || e.kind === 'chart') {
+      addNode(target.id);
+    } else {
+      addSubtree(target.id);
+    }
+  };
+  addSubtree(deckId);
+  return { nodeIds, assetIds, embedRoots };
 }

@@ -80,6 +80,7 @@ export function authRoutes(services: Services): express.Router {
               completed: z.array(z.enum(SETUP_STEPS)).optional(),
               current: z.enum(SETUP_STEPS).optional(),
               dismissed: z.boolean().optional(),
+              preset: z.enum(['view', 'approve', 'autonomous']).optional(),
             })
             .optional(),
         })

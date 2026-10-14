@@ -568,6 +568,11 @@ export interface ElementAnimation {
   duration: number;
   easing: Easing;
   trigger: 'on-enter' | 'on-click' | 'with-previous';
+  /**
+   * For on-click animations: which click of the slide starts it (1 = first click). Without it,
+   * the animation takes the click after this element's previous animation.
+   */
+  click?: number | null;
   /** Custom keyframes reuse the animation engine. */
   keyframes?: Partial<Record<AnimatableProp, Keyframe[]>>;
 }
@@ -589,8 +594,11 @@ export interface SlideElementProps {
   fontFamily?: string | null;
   color?: Color | null;
   align?: 'left' | 'center' | 'right';
+  /** Vertical text alignment in the box (default: titles sit at the bottom, other text at the top). */
+  valign?: 'top' | 'middle' | 'bottom' | null;
   bold?: boolean;
   assetId?: string | null;
+  /** Shape geometry. Polygon points and paths are in the shape's own width × height frame and scale with the element. */
   shape?: VectorShape | null;
   chart?: ChartSpec | null;
   embed?: EmbedRef | null;
