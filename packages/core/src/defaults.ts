@@ -39,7 +39,7 @@ export const DEFAULT_THEME: ThemeTokens = {
     accent2: '#e8590c',
   },
   fonts: { heading: 'Inter', body: 'Inter', mono: 'JetBrains Mono' },
-  sizes: { title: 64, heading: 44, body: 26, caption: 18 },
+  sizes: { title: 72, heading: 52, body: 34, caption: 22 },
 };
 
 export const DEFAULT_MASTERS: MasterSlide[] = [
