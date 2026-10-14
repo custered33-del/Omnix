@@ -89,7 +89,7 @@ export function drawRig(host: RenderHost, ctx: Ctx2D, bones: readonly Bone[], an
 }
 
 /** Draw a single frame's content (shapes, strokes, image) in layer-local space. */
-function drawFrameContent(host: RenderHost, ctx: Ctx2D, p: AnimLayerProps, index: number, seqW: number, seqH: number): void {
+export function drawFrameContent(host: RenderHost, ctx: Ctx2D, p: AnimLayerProps, index: number, seqW: number, seqH: number): void {
   const frame = p.frames[index];
   if (!frame) return;
   if (frame.assetId) {

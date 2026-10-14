@@ -161,8 +161,8 @@ function TransformSection({ ctx, layer }: { ctx: A.ImageCtx; layer: SceneNode<'l
       <div className="grid-2">
         <NumberField compact slider={false} label="X" value={Math.round(p.x)} min={-100000} max={100000} unit="px" onCommit={(v) => e.commit({ x: v }, 'Move layer')} />
         <NumberField compact slider={false} label="Y" value={Math.round(p.y)} min={-100000} max={100000} unit="px" onCommit={(v) => e.commit({ y: v }, 'Move layer')} />
-        <NumberField compact slider={false} label="Width %" value={Math.round(p.scaleX * 1000) / 10} min={1} max={2000} step={0.1} unit="%" onCommit={(v) => e.commit(linked ? { scaleX: v / 100, scaleY: (p.scaleY * v) / 100 / p.scaleX } : { scaleX: v / 100 }, 'Scale layer')} />
-        <NumberField compact slider={false} label="Height %" value={Math.round(p.scaleY * 1000) / 10} min={1} max={2000} step={0.1} unit="%" onCommit={(v) => e.commit(linked ? { scaleY: v / 100, scaleX: (p.scaleX * v) / 100 / p.scaleY } : { scaleY: v / 100 }, 'Scale layer')} />
+        <NumberField compact slider={false} label="W" value={Math.round(p.scaleX * 1000) / 10} min={1} max={2000} step={0.1} unit="%" onCommit={(v) => e.commit(linked ? { scaleX: v / 100, scaleY: (p.scaleY * v) / 100 / p.scaleX } : { scaleX: v / 100 }, 'Scale layer')} />
+        <NumberField compact slider={false} label="H" value={Math.round(p.scaleY * 1000) / 10} min={1} max={2000} step={0.1} unit="%" onCommit={(v) => e.commit(linked ? { scaleY: v / 100, scaleX: (p.scaleX * v) / 100 / p.scaleY } : { scaleY: v / 100 }, 'Scale layer')} />
       </div>
       <div className="row" style={{ gap: 8 }}>
         <IconButton small label={linked ? 'Unlink width and height' : 'Link width and height'} pressed={linked} onClick={() => setLinked(!linked)}>

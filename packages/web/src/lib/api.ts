@@ -97,3 +97,7 @@ export interface AssetSummary {
 export const assetUrl = (id: string) => `/api/assets/${id}/file`;
 export const thumbUrl = (id: string) => `/api/assets/${id}/thumbnail`;
 export const proxyUrl = (id: string) => `/api/assets/${id}/proxy`;
+/** One decoded video frame as JPEG (for browsers without the video codec). */
+export const frameUrl = (id: string, t: number, w = 960) => `/api/assets/${id}/frame?t=${t.toFixed(3)}&w=${w}`;
+/** MP3 audio track (for browsers without the original audio codec). */
+export const audioUrl = (id: string) => `/api/assets/${id}/audio`;

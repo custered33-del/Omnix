@@ -66,7 +66,20 @@ export function seriesColor(spec: ChartSpec, index: number, scheme: 'light' | 'd
   return index < pal.length ? pal[index]! : CHART_CHROME[scheme].muted;
 }
 
-export function drawChart(ctx: Ctx2D, spec: ChartSpec, x: number, y: number, w: number, h: number, options: ChartOptions = {}): void {
+/** Where the plot landed, for hover hit-testing (null for pie charts). */
+export interface ChartGeometry {
+  left: number;
+  right: number;
+  top: number;
+  bottom: number;
+  /** Width of one category band. */
+  band: number;
+  count: number;
+  yMin: number;
+  yMax: number;
+}
+
+export function drawChart(ctx: Ctx2D, spec: ChartSpec, x: number, y: number, w: number, h: number, options: ChartOptions = {}): ChartGeometry | null {
   const scheme = options.scheme ?? 'light';
   const chrome = CHART_CHROME[scheme];
   const fs = Math.max(9, 12 * (options.fontScale ?? 1));
@@ -115,7 +128,7 @@ export function drawChart(ctx: Ctx2D, spec: ChartSpec, x: number, y: number, w: 
   if (spec.type === 'pie') {
     drawPie(ctx, spec, x + pad, top, w - pad * 2, y + h - pad - top, scheme, fs, family);
     ctx.restore();
-    return;
+    return null;
   }
 
   const values = spec.series.flatMap((s) => s.values).filter((v) => Number.isFinite(v));
@@ -244,6 +257,7 @@ export function drawChart(ctx: Ctx2D, spec: ChartSpec, x: number, y: number, w: 
     }
   }
   ctx.restore();
+  return { left, right, top, bottom, band, count: n, yMin, yMax };
 }
 
 /** A bar with a 4px rounded data-end and a square baseline end. */

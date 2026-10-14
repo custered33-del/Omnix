@@ -87,6 +87,10 @@ export interface ProjectStoreState {
   snapshot(name: string): Promise<void>;
   updateMeta(patch: Partial<Pick<ProjectMeta, 'name' | 'archived' | 'aiConsent' | 'description'>>): Promise<void>;
   canEdit(): boolean;
+  /** Forget a finished code run's streamed output. */
+  dropCodeStream(runId: string): void;
+  /** Resolve once every local edit has been confirmed by the server (or after a timeout). */
+  flushed(timeoutMs?: number): Promise<boolean>;
   dispose(): void;
 }
 
@@ -299,6 +303,29 @@ export function createProjectStore(projectId: string): ProjectStore {
       canEdit() {
         const m = get().meta;
         return !!m && m.role !== 'viewer' && !get().preview;
+      },
+
+      dropCodeStream(runId) {
+        if (!get().codeStreams[runId]) return;
+        const codeStreams = { ...get().codeStreams };
+        delete codeStreams[runId];
+        set({ codeStreams });
+      },
+
+      flushed(timeoutMs = 8000) {
+        if (!get().pending.length) return Promise.resolve(true);
+        return new Promise((resolve) => {
+          const timer = setTimeout(() => {
+            unsub();
+            resolve(false);
+          }, timeoutMs);
+          const unsub = store.subscribe((st) => {
+            if (st.pending.length) return;
+            clearTimeout(timer);
+            unsub();
+            resolve(true);
+          });
+        });
       },
 
       dispose() {

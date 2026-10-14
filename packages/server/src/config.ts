@@ -12,8 +12,11 @@ export interface OmnixConfig {
   /** S3-compatible blob storage (optional; local content-addressed storage otherwise). */
   s3: { endpoint: string; region: string; bucket: string; accessKeyId: string; secretAccessKey: string; forcePathStyle: boolean } | null;
   anthropicApiKey: string | null;
-  /** Model used by the built-in agent runner and natural-language commands when an API key is set. */
-  agentModel: string;
+  /**
+   * Model for the built-in agent runner and natural-language commands. When unset, the newest
+   * model the API key can use is looked up from the Models API at runtime.
+   */
+  agentModel: string | null;
   /** Directory with the built web app to serve (packages/web/dist). */
   webDist: string | null;
   /** Dev mode: relaxed cookies, verbose logs. */
@@ -50,7 +53,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): OmnixConfig {
     databaseUrl: env.OMNIX_DATABASE_URL ?? env.DATABASE_URL ?? null,
     s3,
     anthropicApiKey: env.ANTHROPIC_API_KEY ?? null,
-    agentModel: env.OMNIX_AGENT_MODEL ?? 'claude-opus-5-5',
+    agentModel: env.OMNIX_AGENT_MODEL ?? null,
     webDist: env.OMNIX_WEB_DIST ?? defaultDist,
     dev: env.NODE_ENV !== 'production',
     ffmpegPath: env.OMNIX_FFMPEG ?? 'ffmpeg',

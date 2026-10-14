@@ -3,6 +3,13 @@
  * Themes: light (default), dark, high contrast. "system" follows the OS.
  */
 :root {
+  --code-keyword: #8e3fbf;
+  --code-string: #2f7d32;
+  --code-number: #b35900;
+  --code-comment: #7a7870;
+  --code-function: #2a5bd7;
+  --code-type: #a2501f;
+  --code-property: #1f6f8b;
   color-scheme: light;
   --bg: #f7f6f3;
   --surface: #ffffff;
@@ -69,6 +76,13 @@
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme='light']):not([data-theme='high-contrast']) {
+  --code-keyword: #c792ea;
+  --code-string: #a5d6a7;
+  --code-number: #f9b46b;
+  --code-comment: #8d8b84;
+  --code-function: #82aaff;
+  --code-type: #f2a56b;
+  --code-property: #7fd1e8;
     color-scheme: dark;
     --bg: #121316;
     --surface: #1a1b1f;
@@ -104,6 +118,13 @@
 }
 
 :root[data-theme='dark'] {
+  --code-keyword: #c792ea;
+  --code-string: #a5d6a7;
+  --code-number: #f9b46b;
+  --code-comment: #8d8b84;
+  --code-function: #82aaff;
+  --code-type: #f2a56b;
+  --code-property: #7fd1e8;
   color-scheme: dark;
   --bg: #121316;
   --surface: #1a1b1f;
@@ -139,6 +160,13 @@
 
 /* High contrast: pure black and white with a strong yellow accent and thick focus rings. */
 :root[data-theme='high-contrast'] {
+  --code-keyword: #ffd400;
+  --code-string: #7cff7c;
+  --code-number: #ff9f40;
+  --code-comment: #c8c8c8;
+  --code-function: #66d9ff;
+  --code-type: #ff9fd0;
+  --code-property: #9fe8ff;
   color-scheme: dark;
   --bg: #000000;
   --surface: #000000;

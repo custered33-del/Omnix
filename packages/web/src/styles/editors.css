@@ -263,11 +263,8 @@
   place-items: center;
   overflow: hidden;
 }
-.tl-stage canvas {
-  max-width: 100%;
-  max-height: 100%;
+.tl-stage canvas.frame {
   box-shadow: var(--shadow-2);
-  background: #000;
 }
 .tl-stage .overlay {
   position: absolute;
@@ -409,7 +406,7 @@
 .tl-clip.muted-clip {
   opacity: 0.55;
 }
-.tl-clip .label {
+.tl-clip .clip-label {
   position: absolute;
   left: 6px;
   top: 3px;
@@ -903,4 +900,62 @@
   .tl-playhead {
     transition: none;
   }
+}
+
+/* Layers sit on top of the inspector with their own scroll area. */
+.inspector .layers .layer-list {
+  max-height: 38vh;
+  overflow-y: auto;
+}
+
+/* CodeMirror containers */
+.cm-full .cm-editor {
+  height: 100%;
+}
+.cm-compact .cm-editor {
+  max-height: 520px;
+}
+.cm-compact .cm-scroller {
+  overflow: auto;
+}
+.terminal-outputs .cell-output-text {
+  background: transparent;
+  padding: 0;
+  color: inherit;
+  max-height: none;
+}
+.terminal-outputs .chart-box,
+.terminal-outputs .table-wrap {
+  background: var(--surface);
+  color: var(--text);
+}
+.markdown h1,
+.markdown h2,
+.markdown h3 {
+  margin: 0.4em 0 0.3em;
+}
+.markdown p,
+.markdown ul,
+.markdown ol,
+.markdown blockquote,
+.markdown pre {
+  margin: 0.3em 0;
+}
+.markdown blockquote {
+  border-left: 3px solid var(--border-strong);
+  padding-left: 10px;
+  color: var(--text-2);
+}
+.markdown pre {
+  background: var(--surface-2);
+  padding: 8px 10px;
+  border-radius: var(--r-sm);
+  overflow: auto;
+}
+.markdown code {
+  font-family: var(--mono);
+  font-size: 0.92em;
+}
+.kf-on {
+  color: var(--accent);
 }

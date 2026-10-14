@@ -1,5 +1,9 @@
 import express from 'express';
 import fs from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
+import crypto from 'node:crypto';
+import { extractFrame, makeAudioProxy } from '../util/media.js';
 import { z } from 'zod';
 import type { Services } from '../services.js';
 import { h, requireUser } from './middleware.js';
@@ -169,6 +173,66 @@ export function assetRoutes(services: Services): express.Router {
       const a = await requireVisible(services, user.id, String(req.params.id));
       if (a.proxyBlob) await sendBlob(services, req, res, a.proxyBlob, 'video/mp4');
       else await sendBlob(services, req, res, a.id, a.mime);
+    }),
+  );
+
+  /**
+   * A single decoded frame (JPEG). Fallback for browsers that cannot decode the video codec;
+   * frames are cached in memory by time and size.
+   */
+  const frameCache = new Map<string, Buffer>();
+  r.get(
+    '/:id/frame',
+    h(async (req, res) => {
+      const user = requireUser(req);
+      const a = await requireVisible(services, user.id, String(req.params.id));
+      if (a.kind !== 'video') throw new ProjectError('Frames are only available for video assets', 400);
+      const fps = a.fps ?? 30;
+      const t = Math.min(Math.max(0, Number(req.query.t ?? 0) || 0), Math.max(0, (a.duration ?? 0) - 1 / fps));
+      const frame = Math.round(t * fps);
+      const w = Math.min(1920, Math.max(64, Number(req.query.w ?? 960) || 960));
+      const key = `${a.id}:${frame}:${w}`;
+      let buf = frameCache.get(key);
+      if (!buf) {
+        buf = await extractFrame(services.config.ffmpegPath, await services.blobs.localPath(a.proxyBlob ?? a.id), frame / fps, w, 'jpeg');
+        frameCache.set(key, buf);
+        if (frameCache.size > 600) frameCache.delete(frameCache.keys().next().value!);
+      }
+      res.setHeader('content-type', 'image/jpeg');
+      res.setHeader('cache-control', 'private, max-age=86400');
+      res.end(buf);
+    }),
+  );
+
+  /** MP3 audio, transcoded on first request and kept (for browsers without AAC and other codecs). */
+  const audioJobs = new Map<string, Promise<string>>();
+  r.get(
+    '/:id/audio',
+    h(async (req, res) => {
+      const user = requireUser(req);
+      const a = await requireVisible(services, user.id, String(req.params.id));
+      if (a.kind !== 'video' && a.kind !== 'audio') throw new ProjectError('This asset has no audio', 400);
+      let blob = a.audioProxyBlob ?? null;
+      if (!blob) {
+        let job = audioJobs.get(a.id);
+        if (!job) {
+          job = (async () => {
+            const out = path.join(os.tmpdir(), `omnix-audio-${crypto.randomBytes(6).toString('hex')}.mp3`);
+            try {
+              await makeAudioProxy(services.config.ffmpegPath, await services.blobs.localPath(a.id), out);
+              const id = await services.blobs.putFile(out);
+              await services.assets.update(a.id, { audioProxyBlob: id });
+              return id;
+            } finally {
+              await fs.rm(out, { force: true });
+              audioJobs.delete(a.id);
+            }
+          })();
+          audioJobs.set(a.id, job);
+        }
+        blob = await job;
+      }
+      await sendBlob(services, req, res, blob, 'audio/mpeg');
     }),
   );
 

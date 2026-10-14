@@ -1,6 +1,10 @@
-import { GIFEncoder, quantize, applyPalette } from 'gifenc';
+import * as gifencModule from 'gifenc';
 import UPNG from 'upng-js';
 import type { Raster } from '@omnix/imaging';
+
+// gifenc ships CommonJS for Node and ESM for bundlers; Node only exposes it as a default export.
+const gifenc = ((gifencModule as unknown as { default?: typeof gifencModule }).default ?? gifencModule) as typeof gifencModule;
+const { GIFEncoder, quantize, applyPalette } = gifenc;
 
 /**
  * Animated image encoders for the animation maker. Frames are full RGBA rasters of equal size.

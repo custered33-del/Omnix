@@ -24,6 +24,7 @@ import {
   Crop,
   ScanSearch,
   ArrowLeftRight,
+  Highlighter,
 } from 'lucide-react';
 import type { SceneNode, ShapeKind } from '@omnix/core';
 import { useProject, useProjectStore } from '../../state/project.js';
@@ -46,7 +47,7 @@ const TOOL_ICONS: Record<ImageTool, ReactNode> = {
   ellipse: <CircleDashed />,
   lasso: <Lasso />,
   wand: <WandSparkles />,
-  quick: <Brush />,
+  quick: <Highlighter />,
   object: <SquareDashedMousePointer />,
   brush: <Brush />,
   eraser: <Eraser />,
@@ -239,8 +240,8 @@ export function ImageEditor({ canvasId }: { canvasId: string }) {
         </div>
       </div>
       <aside className="inspector" aria-label={t('image.properties')}>
-        <PropertiesPanel ctx={ctx} />
         <LayersPanel ctx={ctx} />
+        <PropertiesPanel ctx={ctx} />
       </aside>
     </div>
   );

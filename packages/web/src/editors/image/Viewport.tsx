@@ -473,6 +473,8 @@ export function Viewport({ canvasId, ed }: { canvasId: string; ed: ImageEditorSt
       }
       case 'text': {
         if (!canEdit) return;
+        // Keep the browser from moving focus to the viewport after the text box opens.
+        e.preventDefault();
         const hit = topLayerAt(p);
         if (hit && (state.nodes[hit] as SceneNode<'layer'>).props.layerType === 'text') {
           st.set({ selectedLayerId: hit, editingTextLayer: hit });
@@ -780,8 +782,12 @@ function TextEditOverlay({ layer, zoom, pan, onDone }: { layer: SceneNode<'layer
   const p = layer.props;
   const ref = useRef<HTMLTextAreaElement>(null);
   useEffect(() => {
-    ref.current?.focus();
-    ref.current?.select();
+    // Focus after the pointer events that opened the editor have finished.
+    const id = requestAnimationFrame(() => {
+      ref.current?.focus();
+      ref.current?.select();
+    });
+    return () => cancelAnimationFrame(id);
   }, []);
   const size = (p.fontSize ?? 48) * zoom * p.scaleY;
   return (

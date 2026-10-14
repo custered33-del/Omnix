@@ -39,6 +39,8 @@ export interface AssetRecord {
   lutSize?: number;
   thumbnailBlob?: string | null;
   proxyBlob?: string | null;
+  /** MP3 of the audio track, made on demand for browsers without the original codec. */
+  audioProxyBlob?: string | null;
   proxyStatus: 'none' | 'pending' | 'ready' | 'failed';
   waveform?: number[];
   source: { kind: 'upload' | 'url' | 'generated' | 'export' | 'code' | 'import'; url?: string; prompt?: string; tool?: string; projectId?: string };

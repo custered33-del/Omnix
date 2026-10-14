@@ -1,6 +1,20 @@
 import type { CanvasLike, Drawable, RenderHost } from '@omnix/render';
 import { parseCubeLut, type Lut3D, type Mask } from '@omnix/imaging';
-import { get, assetUrl, proxyUrl, thumbUrl, type AssetSummary } from '../lib/api.js';
+import { get, assetUrl, audioUrl, frameUrl, proxyUrl, thumbUrl, type AssetSummary } from '../lib/api.js';
+
+/** What this browser can decode (some builds ship without H.264/AAC). Probed once. */
+let codecCache: { h264: boolean; vp9: boolean; aac: boolean } | null = null;
+function codecs() {
+  if (!codecCache) {
+    const v = document.createElement('video');
+    codecCache = {
+      h264: v.canPlayType('video/mp4; codecs="avc1.42E01E"') !== '',
+      vp9: v.canPlayType('video/webm; codecs="vp9"') !== '',
+      aac: v.canPlayType('audio/mp4; codecs="mp4a.40.2"') !== '',
+    };
+  }
+  return codecCache;
+}
 
 type Entry<T> = { state: 'loading' } | { state: 'ready'; value: T } | { state: 'error' };
 
@@ -98,6 +112,66 @@ export class BrowserRenderHost implements RenderHost {
     return null;
   }
 
+  /** Assets whose video the browser cannot decode; frames come from the server instead. */
+  private frameFallback = new Set<string>();
+  private serverFrames = new Map<string, { want: number; loading: number | null; frames: Map<number, ImageBitmap>; last: ImageBitmap | null }>();
+
+  /** Whether this browser can play the asset's video (H.264 support varies by browser build). */
+  canPlayVideo(id: string): boolean {
+    if (this.frameFallback.has(id)) return false;
+    const meta = this.meta.get(id);
+    const mime = meta?.state === 'ready' ? meta.value.mime : 'video/mp4';
+    const ok = mime.includes('webm') ? codecs().vp9 : codecs().h264;
+    if (!ok) this.frameFallback.add(id);
+    return ok;
+  }
+
+  /** URL for playing an asset's audio, falling back to an MP3 transcode when the codec is unsupported. */
+  audioSource(id: string): string {
+    const meta = this.meta.get(id);
+    const m = meta?.state === 'ready' ? meta.value : null;
+    if (m?.kind === 'audio' && document.createElement('audio').canPlayType(m.mime) !== '') return assetUrl(id);
+    if (m?.kind === 'video' && codecs().aac && this.canPlayVideo(id)) return proxyUrl(id);
+    return audioUrl(id);
+  }
+
+  /** Frame from the server at time t (quantized to the source frame rate); shows the nearest loaded frame meanwhile. */
+  private serverFrame(id: string, time: number): Drawable | null {
+    const fps = this.assetMeta(id)?.fps ?? 30;
+    const frame = Math.max(0, Math.round(time * fps));
+    let e = this.serverFrames.get(id);
+    if (!e) {
+      e = { want: frame, loading: null, frames: new Map(), last: null };
+      this.serverFrames.set(id, e);
+    }
+    e.want = frame;
+    const hit = e.frames.get(frame);
+    if (hit) return hit as unknown as Drawable;
+    const pump = () => {
+      const st = this.serverFrames.get(id)!;
+      if (st.loading !== null || st.frames.has(st.want)) return;
+      const f = st.want;
+      st.loading = f;
+      fetch(frameUrl(id, f / fps), { credentials: 'same-origin' })
+        .then((r) => (r.ok ? r.blob() : Promise.reject(new Error(String(r.status)))))
+        .then((b) => createImageBitmap(b))
+        .then((bmp) => {
+          st.frames.set(f, bmp);
+          st.last = bmp;
+          // Keep memory bounded: drop the oldest frames.
+          if (st.frames.size > 240) st.frames.delete(st.frames.keys().next().value!);
+          this.notify();
+        })
+        .catch(() => {})
+        .finally(() => {
+          st.loading = null;
+          if (st.want !== f) pump();
+        });
+    };
+    pump();
+    return (e.last as unknown as Drawable) ?? this.image(id);
+  }
+
   /** A video element on the editing proxy for an asset. */
   videoElement(id: string): HTMLVideoElement {
     let v = this.videos.get(id);
@@ -113,6 +187,10 @@ export class BrowserRenderHost implements RenderHost {
         v!.width = v!.videoWidth;
         v!.height = v!.videoHeight;
       });
+      v.addEventListener('error', () => {
+        this.frameFallback.add(id);
+        this.notify();
+      });
       v.addEventListener('seeked', () => this.notify());
       v.addEventListener('loadeddata', () => this.notify());
       this.videos.set(id, v);
@@ -123,6 +201,7 @@ export class BrowserRenderHost implements RenderHost {
   videoFrame(id: string, time: number): Drawable | null {
     const meta = this.assetMeta(id);
     if (meta && meta.kind !== 'video') return this.image(id);
+    if (meta && !this.canPlayVideo(id)) return this.serverFrame(id, time);
     const v = this.videoElement(id);
     if (v.readyState >= 2) {
       const fps = meta?.fps ?? 30;

@@ -101,18 +101,25 @@ export async function probe(ffprobe: string, file: string): Promise<MediaInfo> {
   };
 }
 
-/** Extract one frame as PNG (optionally scaled to a max width). */
-export async function extractFrame(ffmpeg: string, file: string, time: number, maxWidth?: number): Promise<Buffer> {
+/** Extract one frame as PNG or JPEG (optionally scaled to a max width). */
+export async function extractFrame(ffmpeg: string, file: string, time: number, maxWidth?: number, format: 'png' | 'jpeg' = 'png'): Promise<Buffer> {
   const args = ['-v', 'error', '-ss', Math.max(0, time).toFixed(3), '-i', file, '-frames:v', '1'];
   if (maxWidth) args.push('-vf', `scale='min(${maxWidth},iw)':-2`);
-  args.push('-f', 'image2pipe', '-vcodec', 'png', 'pipe:1');
+  args.push('-f', 'image2pipe', '-vcodec', format === 'png' ? 'png' : 'mjpeg');
+  if (format === 'jpeg') args.push('-q:v', '4');
+  args.push('pipe:1');
   const { stdout } = await run(ffmpeg, args, { timeoutMs: 60_000 });
   if (!stdout.length) {
     // Seeking past the last keyframe can yield nothing; retry slightly earlier.
-    if (time > 0.1) return extractFrame(ffmpeg, file, Math.max(0, time - 0.5), maxWidth);
+    if (time > 0.1) return extractFrame(ffmpeg, file, Math.max(0, time - 0.5), maxWidth, format);
     throw new MediaError('No frame decoded');
   }
   return stdout;
+}
+
+/** MP3 audio track for browsers that cannot decode the original audio codec. */
+export async function makeAudioProxy(ffmpeg: string, file: string, out: string): Promise<void> {
+  await run(ffmpeg, ['-v', 'error', '-y', '-i', file, '-vn', '-ac', '2', '-ar', '44100', '-c:a', 'libmp3lame', '-b:a', '128k', out], { timeoutMs: 30 * 60_000 });
 }
 
 /** Transcode a browser-friendly, low-resolution editing proxy (H.264 + AAC, fast start). */
