@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { childrenOf, makeNode, notesContainer, outlineProject, primaryDocumentNodes, projectTreeText, subtreeIds, TOOL_KINDS, zOperation, type SceneNode } from '@omnix/core';
+import { childrenOf, makeNode, notesContainer, outlineProject, primaryDocumentNodes, projectTreeText, subtreeIds, TOOL_KINDS, zOperation, type ProjectState, type SceneNode, type ToolKind } from '@omnix/core';
 import { describeNode, edit, writeResult, zWriteResult } from './helpers.js';
 import { C } from '../../storage/store.js';
 import { defineTool, outcomeText, zNodeId, zProjectId, ToolError } from '../registry.js';
@@ -164,12 +164,13 @@ export const projectWriteTools = [
     name: 'create_project',
     title: 'Create a project',
     description:
-      'Start a new project for the user in one of the six tools (image, video, animation, code, document, slides). Other documents can be added to it later with add_document. The new project allows AI from the start because the user asked for it through you; it is added to this connection automatically.',
+      'Start a new project for the user in one of the six tools (image, video, animation, code, document, slides), or from a template (templateId from list_presets with kind "template"; the template decides the tool). Other documents can be added to it later with add_document. The new project allows AI from the start because the user asked for it through you; it is added to this connection automatically.',
     category: 'project',
     access: 'write',
     input: {
       name: z.string().min(1).max(200).describe('Project name'),
-      primaryTool: z.enum(TOOL_KINDS).describe('The tool the project opens in'),
+      primaryTool: z.enum(TOOL_KINDS).optional().describe('The tool the project opens in (not needed with a template)'),
+      templateId: z.string().optional().describe('Start from this template'),
       description: z.string().max(2000).optional(),
     },
     output: z.object({ projectId: z.string(), documentId: z.string() }),
@@ -177,7 +178,17 @@ export const projectWriteTools = [
     async handler(args, ctx) {
       const p = ctx.principal;
       if (p.mode === 'view') throw new ToolError('This connection is view-only. Ask the user to allow editing to create projects.');
-      const meta = await ctx.services.projects.create({ name: args.name, primaryTool: args.primaryTool, ownerId: p.user.id, author: p.author, aiConsent: true, description: args.description ?? `Created by ${p.author.name}.` });
+      let primaryTool = args.primaryTool;
+      let state: ProjectState | undefined;
+      if (args.templateId) {
+        const templates = ctx.services.ext.templates as { list(u: string): Promise<{ id: string; tool: ToolKind }[]>; getState(id: string, u: string): Promise<ProjectState | null> };
+        const info = (await templates.list(p.user.id)).find((x) => x.id === args.templateId);
+        state = (await templates.getState(args.templateId, p.user.id)) ?? undefined;
+        if (!info || !state) throw new ToolError(`No template "${args.templateId}". See list_presets with kind "template".`);
+        primaryTool = info.tool;
+      }
+      if (!primaryTool) throw new ToolError('Give primaryTool, or a templateId.');
+      const meta = await ctx.services.projects.create({ name: args.name, primaryTool, ownerId: p.user.id, author: p.author, aiConsent: true, description: args.description ?? `Created by ${p.author.name}.`, ...(state ? { state, templateId: args.templateId! } : {}) });
       // A connection limited to some projects gets the new one too.
       if (p.projectIds !== 'all') {
         p.projectIds = [...p.projectIds, meta.id];
@@ -187,8 +198,8 @@ export const projectWriteTools = [
           if (g && g.projectIds !== 'all') await ctx.services.store.put(C.connections, grantId, { ...g, projectIds: [...g.projectIds, meta.id] });
         }
       }
-      const state = await ctx.services.projects.state(meta.id);
-      const doc = childrenOf(state, state.rootId).find((n) => n.type === DOC_TYPE[args.primaryTool]);
+      const created = await ctx.services.projects.state(meta.id);
+      const doc = childrenOf(created, created.rootId).find((n) => n.type === DOC_TYPE[primaryTool]);
       return { text: `Created project "${meta.name}" (${meta.id}) with ${doc?.type ?? 'no'} ${doc?.id ?? ''}.`, data: { projectId: meta.id, documentId: doc?.id ?? '' } };
     },
   }),

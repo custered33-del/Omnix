@@ -15,6 +15,7 @@ import { EasingEditor } from '../shared/EasingEditor.js';
 import { t } from '../../i18n/index.js';
 import { tryOp, type TimelineCtx } from './timelineOps.js';
 import { activeAnimLayer } from '../animation/useAnimationStage.js';
+import { PresetMenu } from '../../components/PresetMenu.js';
 
 const TRANSITIONS: (TransitionKind | 'none')[] = ['none', 'crossfade', 'dip-to-black', 'wipe-left', 'wipe-right', 'slide-left', 'zoom'];
 const FILTERS: FilterKind[] = ['gaussianBlur', 'sharpen', 'noise', 'pixelate', 'grayscale', 'sepia', 'vignette', 'emboss', 'edgeDetect'];
@@ -395,6 +396,7 @@ function EffectsSection({ ctx, clip }: { ctx: TimelineCtx; clip: SceneNode<'clip
     <section className="inspector-section">
       <h3>
         <span className="grow">{t('video.effects')}</span>
+        <PresetMenu kind="clip-effects" targetId={clip.id} {...(effects.length ? { sourceId: clip.id } : {})} canEdit={ctx.store.getState().canEdit()} className="btn btn-sm btn-ghost" />
         <MenuButton
           className="icon-btn sm"
           label="Add effect"

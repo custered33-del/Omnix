@@ -13,6 +13,7 @@ import { post, del } from '../../lib/api.js';
 import { toast } from '../../ui/toast.js';
 import { animationGroups, slideStepCount } from '@omnix/render';
 import type { SlidesCtx } from './SlideStage.js';
+import { PresetMenu } from '../../components/PresetMenu.js';
 
 const ANIMATIONS: { kind: ElementAnimationKind; label: string }[] = [
   { kind: 'fade-in', label: 'Fade in' },
@@ -362,7 +363,10 @@ function DeckTab({ ctx }: { ctx: SlidesCtx }) {
   return (
     <>
       <section className="inspector-section">
-        <h3>Theme</h3>
+        <h3>
+          <span className="grow">Theme</span>
+          <PresetMenu kind="slide-theme" targetId={ctx.deckId} sourceId={ctx.deckId} canEdit={s.canEdit()} skipBuiltIn className="btn btn-sm btn-ghost" />
+        </h3>
         <div className="theme-grid" role="radiogroup" aria-label="Theme presets">
           {THEME_PRESETS.map((t) => (
             <button key={t.name} role="radio" aria-checked={theme.name === t.name} className="theme-swatch" style={{ background: t.colors.background, color: t.colors.text, fontFamily: t.fonts.heading }} onClick={() => setTheme(t, `Theme ${t.name}`)}>

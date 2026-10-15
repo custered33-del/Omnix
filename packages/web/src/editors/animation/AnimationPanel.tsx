@@ -13,6 +13,7 @@ import { t } from '../../i18n/index.js';
 import type { AnimTool } from '../video/timelineState.js';
 import type { TimelineCtx } from '../video/timelineOps.js';
 import { activeAnimLayer } from './useAnimationStage.js';
+import { PresetMenu } from '../../components/PresetMenu.js';
 
 const TOOLS: { tool: AnimTool; icon: typeof Brush; label: string }[] = [
   { tool: 'select', icon: MousePointer2, label: 'Move layer' },
@@ -188,7 +189,10 @@ export function AnimationPanel({ ctx }: { ctx: TimelineCtx }) {
           </section>
 
           <section className="inspector-section">
-            <h3>{t('anim.rig')}</h3>
+            <h3>
+              <span className="grow">{t('anim.rig')}</span>
+              <PresetMenu kind="rig" targetId={layer.id} {...(p.rig?.bones.length ? { sourceId: layer.id } : {})} canEdit={canEdit} className="btn btn-sm btn-ghost" />
+            </h3>
             <Switch checked={showBones} onChange={(v) => ed.getState().set({ showBones: v })} label="Show bones" />
             {p.rig && p.rig.bones.length > 0 ? (
               <>

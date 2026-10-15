@@ -11,6 +11,7 @@ import { t } from '../../i18n/index.js';
 import * as A from './actions.js';
 import { FontSelect } from '../shared/FontSelect.js';
 import { textEdit } from './Viewport.js';
+import { PresetMenu } from '../../components/PresetMenu.js';
 
 const FILTERS: FilterKind[] = ['gaussianBlur', 'sharpen', 'noise', 'pixelate', 'grayscale', 'sepia', 'vignette', 'emboss', 'edgeDetect'];
 
@@ -569,6 +570,7 @@ function FiltersSection({ ctx, layer }: { ctx: A.ImageCtx; layer: SceneNode<'lay
     <section className="inspector-section">
       <h3>
         <span className="grow">{t('image.filters')}</span>
+        <PresetMenu kind="layer-effects" targetId={layer.id} {...(filters.length ? { sourceId: layer.id } : {})} canEdit={ctx.store.getState().canEdit()} className="btn btn-sm btn-ghost" />
         <MenuButton className="icon-btn sm" label={t('image.addFilter')} items={FILTERS.map((f) => ({ label: t(`filters.${f}`), onSelect: () => add(f) }))}>
           <Plus />
         </MenuButton>

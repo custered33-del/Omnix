@@ -529,7 +529,7 @@
     "title": "Create a project",
     "category": "project",
     "access": "write",
-    "description": "Start a new project for the user in one of the six tools (image, video, animation, code, document, slides). Other documents can be added to it later with add_document. The new project allows AI from the start because the user asked for it through you; it is added to this connection automatically.",
+    "description": "Start a new project for the user in one of the six tools (image, video, animation, code, document, slides), or from a template (templateId from list_presets with kind \"template\"; the template decides the tool). Other documents can be added to it later with add_document. The new project allows AI from the start because the user asked for it through you; it is added to this connection automatically.",
     "inputSchema": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "type": "object",
@@ -541,6 +541,7 @@
           "description": "Project name"
         },
         "primaryTool": {
+          "description": "The tool the project opens in (not needed with a template)",
           "type": "string",
           "enum": [
             "image",
@@ -549,8 +550,11 @@
             "code",
             "document",
             "slides"
-          ],
-          "description": "The tool the project opens in"
+          ]
+        },
+        "templateId": {
+          "description": "Start from this template",
+          "type": "string"
         },
         "description": {
           "type": "string",
@@ -558,8 +562,7 @@
         }
       },
       "required": [
-        "name",
-        "primaryTool"
+        "name"
       ]
     },
     "outputSchema": {
@@ -10250,6 +10253,229 @@
             }
           }
         ]
+      }
+    }
+  },
+  {
+    "name": "list_presets",
+    "title": "List presets and templates",
+    "category": "project",
+    "access": "read",
+    "description": "Reusable presets: layer-effects (filter stacks for canvas layers), clip-effects (looks for video clips), rig (animation rigs with their motion), doc-styles (a document's text styles), slide-theme (slideshow colors and fonts). Built-in ones plus the person's own and shared ones. With kind \"template\", lists project templates for create_project.",
+    "inputSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "kind": {
+          "anyOf": [
+            {
+              "type": "string",
+              "enum": [
+                "layer-effects",
+                "clip-effects",
+                "rig",
+                "doc-styles",
+                "slide-theme"
+              ]
+            },
+            {
+              "type": "string",
+              "const": "template"
+            }
+          ]
+        }
+      }
+    },
+    "outputSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "presets": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "kind": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "kind",
+              "name"
+            ],
+            "additionalProperties": {}
+          }
+        }
+      },
+      "required": [
+        "presets"
+      ],
+      "additionalProperties": false
+    },
+    "example": {
+      "input": {
+        "kind": "clip-effects"
+      },
+      "output": {
+        "presets": [
+          {
+            "id": "builtin-clip-warm-film",
+            "kind": "clip-effects",
+            "name": "Warm film",
+            "appliesTo": [
+              "clip",
+              "track",
+              "sequence"
+            ]
+          }
+        ]
+      }
+    }
+  },
+  {
+    "name": "save_preset",
+    "title": "Save something as a preset",
+    "category": "project",
+    "access": "write",
+    "description": "Save a reusable piece of a project as a preset: a layer's filters, a clip's effects, an animation layer's rig and motion, a document's text styles, or a slideshow's theme. Pass the node; the kind follows from it.",
+    "inputSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Project id (from list_projects)."
+        },
+        "nodeId": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "description": {
+          "type": "string",
+          "maxLength": 300
+        },
+        "shared": {
+          "description": "Let everyone on this Omnix server use it",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "projectId",
+        "nodeId",
+        "name"
+      ]
+    },
+    "outputSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "presetId": {
+          "type": "string"
+        },
+        "kind": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "presetId",
+        "kind"
+      ],
+      "additionalProperties": false
+    },
+    "example": {
+      "input": {
+        "projectId": "prj_8Kq2...",
+        "nodeId": "clp_4",
+        "name": "Teal and orange"
+      },
+      "output": {
+        "presetId": "pre_7b...",
+        "kind": "clip-effects"
+      }
+    }
+  },
+  {
+    "name": "apply_preset",
+    "title": "Apply a preset",
+    "category": "project",
+    "access": "write",
+    "description": "Apply a preset (id or name from list_presets) to a target: layer-effects to a layer or a whole canvas (its pictures), clip-effects to a clip, a track or a whole sequence (picture clips), rig to an animation layer, doc-styles to a document, slide-theme to a slideshow. Looks are added on top of existing ones; rigs, styles and themes replace the target's own.",
+    "inputSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Project id (from list_projects)."
+        },
+        "preset": {
+          "type": "string",
+          "description": "Preset id or exact name"
+        },
+        "targetId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "projectId",
+        "preset",
+        "targetId"
+      ]
+    },
+    "outputSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "status": {
+          "type": "string",
+          "enum": [
+            "committed",
+            "proposed"
+          ]
+        },
+        "commitId": {
+          "type": "string"
+        },
+        "proposalId": {
+          "type": "string"
+        },
+        "changes": {
+          "description": "How many changes the proposal now holds",
+          "type": "number"
+        },
+        "changed": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "status",
+        "changed"
+      ],
+      "additionalProperties": false
+    },
+    "example": {
+      "input": {
+        "projectId": "prj_8Kq2...",
+        "preset": "Warm film",
+        "targetId": "seq_main"
+      },
+      "output": {
+        "status": "proposed",
+        "proposalId": "prop_9...",
+        "changed": 4
       }
     }
   }

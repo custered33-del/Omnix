@@ -27,6 +27,7 @@ export function useGlobalCommands(): void {
     [
       { id: 'go-home', label: t('nav.home'), section: t('palette.goTo'), run: () => navigate('/') },
       { id: 'go-assets', label: t('nav.assets'), section: t('palette.goTo'), run: () => navigate('/assets') },
+      { id: 'go-presets', label: t('nav.presets'), section: t('palette.goTo'), keywords: 'look effects theme styles rig template', run: () => navigate('/presets') },
       { id: 'go-activity', label: t('nav.activity'), section: t('palette.goTo'), run: () => navigate('/activity') },
       { id: 'go-settings', label: t('nav.settings'), section: t('palette.goTo'), run: () => navigate('/settings') },
       { id: 'go-setup', label: t('nav.setupGuide'), section: t('palette.goTo'), run: () => navigate('/setup') },
@@ -116,6 +117,7 @@ export function Shell() {
             {t('nav.home')}
           </NavLink>
           <NavLink to="/assets">{t('nav.assets')}</NavLink>
+          <NavLink to="/presets">{t('nav.presets')}</NavLink>
           <NavLink to="/activity">{t('nav.activity')}</NavLink>
         </nav>
         <div className="spacer" />

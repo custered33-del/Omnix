@@ -20,6 +20,7 @@ import { insertAfter, mySuggestion, suggestDelete, TEXT_BLOCKS, turnInto, type D
 import { domToInline, selectionRange, setCaret } from './inline.js';
 import '../../styles/editors.css';
 import '../../styles/documents.css';
+import { PresetMenu } from '../../components/PresetMenu.js';
 
 const PAGE_WIDTH = { a4: 794, letter: 816 } as const;
 
@@ -683,7 +684,10 @@ function StylesPanel({ doc, canEdit }: { doc: SceneNode<'document'>; canEdit: bo
   const set = (patch: Partial<TextStyle>) => store.getState().commit({ kind: 'update', id: doc.id, set: { styles: { ...styles, [selected]: { ...s, ...patch } } } }, `Edit style ${STYLE_LABELS[selected] ?? selected}`);
   return (
     <aside className="doc-styles" aria-label="Styles">
-      <h3>Styles</h3>
+      <h3 className="row">
+        <span className="grow">Styles</span>
+        <PresetMenu kind="doc-styles" targetId={doc.id} sourceId={doc.id} canEdit={canEdit} className="btn btn-sm btn-ghost" />
+      </h3>
       <fieldset className="props-fieldset col" style={{ gap: 10 }} disabled={!canEdit}>
         <Select label="Style" value={selected} options={Object.keys(styles).map((k) => ({ value: k, label: STYLE_LABELS[k] ?? k }))} onChange={setSelected} />
         <div className="field">

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { render, screen, within } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { commentsContainer, createProjectState, makeNode, nodesOfType, primaryDocumentNodes, type CommentAnchor, type ProjectState, type SceneNode } from '@omnix/core';
 import { createProjectStore, ProjectContext, type ProjectStore } from '../src/state/project.js';
@@ -278,5 +278,44 @@ describe('batch dialog', () => {
     expect(screen.getByText('1 done · 1 failed')).toBeInTheDocument();
     expect(onFinished).toHaveBeenCalled();
     expect(screen.getByRole('link', { name: 'Show the new files' })).toHaveAttribute('href', '/assets?q=tag%3Aweb');
+  });
+});
+
+describe('presets menu', () => {
+  it('applies a preset to the target and saves the current look as a new one', async () => {
+    const { MemoryRouter } = await import('react-router-dom');
+    const { PresetMenu, invalidatePresets } = await import('../src/components/PresetMenu.js');
+    invalidatePresets();
+    const p = project();
+    const store = await storeFor(p.state);
+    const calls: { url: string; body: unknown }[] = [];
+    const base = globalThis.fetch;
+    globalThis.fetch = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
+      const u = String(url);
+      calls.push({ url: u, body: init?.body ? JSON.parse(String(init.body)) : undefined });
+      if (u === '/api/presets?kind=clip-effects') return new Response(JSON.stringify({ presets: [{ id: 'builtin-clip-warm-film', kind: 'clip-effects', name: 'Warm film', description: '', builtIn: true, appliesTo: ['clip'], data: {} }, { id: 'pre_1', kind: 'clip-effects', name: 'Teal', description: '', builtIn: false, appliesTo: ['clip'], by: 'Ana', shared: true, mine: false, data: {} }] }), { status: 200 });
+      if (u === '/api/projects/p1/presets/apply') return new Response(JSON.stringify({ commitId: 'c9', changed: 3 }), { status: 200 });
+      if (u === '/api/presets') return new Response(JSON.stringify({ preset: { id: 'pre_2' } }), { status: 201 });
+      return base(url, init);
+    }) as typeof fetch;
+    render(
+      <MemoryRouter>
+        <ProjectContext.Provider value={store}>
+          <PresetMenu kind="clip-effects" targetId={p.sequence.id} sourceId="clp_1" canEdit />
+        </ProjectContext.Provider>
+      </MemoryRouter>,
+    );
+    await userEvent.click(screen.getByRole('button', { name: 'Clip looks' }));
+    expect(await screen.findByRole('menuitem', { name: /Teal · Ana/ })).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('menuitem', { name: /Warm film/ }));
+    expect(calls.find((c) => c.url.endsWith('/presets/apply'))!.body).toEqual({ presetId: 'builtin-clip-warm-film', targetId: p.sequence.id });
+    const { useToasts } = await import('../src/ui/toast.js');
+    await waitFor(() => expect(useToasts.getState().items.map((x) => x.message)).toContain('Applied "Warm film" (3 changes)'));
+
+    await userEvent.click(screen.getByRole('button', { name: 'Clip looks' }));
+    await userEvent.click(screen.getByRole('menuitem', { name: /Save current/ }));
+    await userEvent.type(screen.getByRole('textbox', { name: 'Name' }), 'Dusk');
+    await userEvent.click(screen.getByRole('button', { name: /Save/ }));
+    expect(calls.find((c) => c.url === '/api/presets')!.body).toEqual({ name: 'Dusk', description: '', shared: false, from: { projectId: 'p1', nodeId: 'clp_1' } });
   });
 });

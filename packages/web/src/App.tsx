@@ -12,6 +12,7 @@ import { t } from './i18n/index.js';
 
 const ProjectPage = lazy(() => import('./pages/ProjectPage.js').then((m) => ({ default: m.ProjectPage })));
 const AssetsPage = lazy(() => import('./pages/AssetsPage.js').then((m) => ({ default: m.AssetsPage })));
+const PresetsPage = lazy(() => import('./pages/PresetsPage.js').then((m) => ({ default: m.PresetsPage })));
 const SettingsPage = lazy(() => import('./pages/SettingsPage.js').then((m) => ({ default: m.SettingsPage })));
 const ActivityPage = lazy(() => import('./pages/ActivityPage.js').then((m) => ({ default: m.ActivityPage })));
 const SetupGuide = lazy(() => import('./pages/SetupGuide.js').then((m) => ({ default: m.SetupGuide })));
@@ -42,6 +43,7 @@ function Authed() {
           <Route element={<Shell />}>
             <Route index element={<Dashboard />} />
             <Route path="assets" element={<AssetsPage />} />
+            <Route path="presets" element={<PresetsPage />} />
             <Route path="activity" element={<ActivityPage />} />
             <Route path="settings/*" element={<SettingsPage />} />
             <Route path="setup" element={<SetupGuide />} />

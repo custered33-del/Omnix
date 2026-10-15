@@ -374,3 +374,61 @@ describe('batch results and look-alikes', () => {
     expect(groups.some((g) => g.some((a) => a.id === out))).toBe(false);
   });
 });
+
+describe('presets and templates (55)', () => {
+  it('saves a look from a clip, shares it, and applies it to a whole video', async () => {
+    const p = await call(auto, 'create_project', { name: 'Look book', primaryTool: 'video' });
+    let s = await state(p.projectId);
+    const seq = Object.values(s.nodes).find((n) => n.type === 'sequence')!;
+    await call(auto, 'video_add_title', { projectId: p.projectId, sequenceId: seq.id, text: 'One', start: 0, duration: 2 });
+    await call(auto, 'video_add_title', { projectId: p.projectId, sequenceId: seq.id, text: 'Two', start: 2, duration: 2 });
+    s = await state(p.projectId);
+    const clips = Object.values(s.nodes).filter((n) => n.type === 'clip');
+    expect(clips).toHaveLength(2);
+    // Give the first clip a grade, then save it as a preset.
+    await call(auto, 'video_add_effect', { projectId: p.projectId, clipId: clips[0]!.id, effect: 'colorGrade', params: { temperature: 40 } });
+    const saved = await json(await ts.api('/api/presets', { method: 'POST', json: { name: 'Golden hour', from: { projectId: p.projectId, nodeId: clips[0]!.id }, shared: true } }));
+    expect(saved.preset).toMatchObject({ kind: 'clip-effects', name: 'Golden hour', shared: true, mine: true });
+    const list = (await json(await ts.api('/api/presets?kind=clip-effects'))).presets as { id: string; name: string; builtIn: boolean }[];
+    expect(list.map((x) => x.name)).toEqual(expect.arrayContaining(['Warm film', 'Golden hour']));
+
+    const r = await json(await ts.api(`/api/projects/${p.projectId}/presets/apply`, { method: 'POST', json: { presetId: saved.preset.id, targetId: seq.id } }));
+    expect(r.changed).toBe(2);
+    s = await state(p.projectId);
+    const effects = Object.values(s.nodes)
+      .filter((n) => n.type === 'clip')
+      .map((c) => (c as SceneNode<'clip'>).props.effects.filter((e) => e.effect === 'colorGrade').length);
+    expect(effects.sort()).toEqual([1, 2]);
+    // Wrong targets are refused with a reason.
+    const bad = await ts.api(`/api/projects/${p.projectId}/presets/apply`, { method: 'POST', json: { presetId: 'builtin-doc-classic', targetId: seq.id } });
+    expect(bad.status).toBe(400);
+    expect((await json(bad)).error).toMatch(/does not apply to a sequence/);
+  });
+
+  it('lets Claude list, save and apply presets, and start projects from templates', async () => {
+    const tpl = await call(auto, 'list_presets', { kind: 'template' });
+    expect(tpl.presets.map((x: { id: string }) => x.id)).toContain('builtin-pitch-deck');
+    const created = await call(auto, 'create_project', { name: 'Seed round', templateId: 'builtin-pitch-deck' });
+    let s = await state(created.projectId);
+    const deck = Object.values(s.nodes).find((n) => n.type === 'deck')!;
+    expect(deckSlides(s, deck.id).length).toBeGreaterThan(3);
+
+    const themes = await call(auto, 'list_presets', { kind: 'slide-theme' });
+    expect(themes.presets.length).toBeGreaterThan(2);
+    const applied = await call(approve, 'apply_preset', { projectId: created.projectId, preset: 'Midnight', targetId: deck.id });
+    expect(applied.status).toBe('proposed');
+    const direct = await call(auto, 'apply_preset', { projectId: created.projectId, preset: 'Midnight', targetId: deck.id });
+    expect(direct.status).toBe('committed');
+    s = await state(created.projectId);
+    expect((s.nodes[deck.id] as SceneNode<'deck'>).props.theme.name).toBe('Midnight');
+    const mine = await call(auto, 'save_preset', { projectId: created.projectId, nodeId: deck.id, name: 'Our deck look' });
+    expect(mine.kind).toBe('slide-theme');
+
+    // A preset across many documents, as a batch.
+    const doc2 = await call(auto, 'add_document', { projectId: created.projectId, tool: 'slides', name: 'Appendix' });
+    const job = await call(auto, 'run_batch', { operation: 'document.preset', params: { presetId: 'Our deck look' }, targets: [{ projectId: created.projectId, documentId: doc2.documentId }] });
+    expect(job.items[0].result.status).toBe('done');
+    s = await state(created.projectId);
+    expect((s.nodes[doc2.documentId] as SceneNode<'deck'>).props.theme.name).toBe('Midnight');
+  });
+});
