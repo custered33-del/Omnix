@@ -55,7 +55,7 @@ export const timelineTools = [
     name: 'video_add_clip',
     title: 'Put media on the timeline',
     description:
-      'Place a video, audio or image asset on a track. Without trackId the first track of the right kind is used (one is created if needed). Without start the clip goes after the last clip on that track. in/out pick the part of the source to use (seconds). The sequence grows to fit.',
+      'Place a video, audio or image asset on a track. Without trackId the first track of the right kind is used (one is created if needed). Without start the clip goes after the last clip on that track. in/out pick the part of the source to use (seconds); for a still image, out is how long it shows (default 5 s). The sequence grows to fit.',
     category: 'video',
     access: 'write',
     input: {

@@ -436,6 +436,31 @@ export class AgentService {
     this.wake(job.id);
   }
 
+  /** What a paused call will do, in words the person approving it recognises: document and file names, not ids. */
+  private async describeCall(name: string, input: unknown): Promise<string> {
+    const a = (input ?? {}) as Record<string, unknown>;
+    const docName = async (projectId: unknown, id: unknown): Promise<string> => {
+      try {
+        const node = (await this.services.projects.state(String(projectId))).nodes[String(id)];
+        return String((node?.props as { name?: string } | undefined)?.name ?? id);
+      } catch {
+        return String(id);
+      }
+    };
+    if (name === 'export_file') return `Export ${await docName(a.projectId, a.nodeId)} as ${String(a.format ?? 'a file').toUpperCase()}.`;
+    if (name === 'run_batch' && Array.isArray(a.targets)) {
+      const targets = a.targets as { projectId?: string; documentId?: string; assetId?: string }[];
+      const names = await Promise.all(
+        targets.slice(0, 10).map(async (t) => (t.documentId ? docName(t.projectId, t.documentId) : t.assetId ? ((await this.services.assets.get(t.assetId).catch(() => null))?.name ?? t.assetId) : '?')),
+      );
+      const list = `${names.join(', ')}${targets.length > names.length ? ` and ${targets.length - names.length} more` : ''}`;
+      const params = (a.params ?? {}) as Record<string, unknown>;
+      if (a.operation === 'document.export') return `Export ${targets.length} ${targets.length === 1 ? 'document' : 'documents'} as ${String(params.format ?? 'files').toUpperCase()}: ${list}.`;
+      return `${String(a.operation)} on ${targets.length} item(s): ${list}. Settings: ${JSON.stringify(params).slice(0, 300)}`;
+    }
+    return describeCall(name, input);
+  }
+
   /** Gate check for tool calls by an external driver: returns a refusal message or null. */
   async gateExternalCall(principal: Principal, projectIds: string[] | null, tool: ToolDef, args: unknown): Promise<string | null> {
     // The run tools manage runs themselves (waiting, checkpoints, finishing), paused or not.
@@ -454,7 +479,7 @@ export class AgentService {
       return null;
     }
     run.data.gatedCall = key;
-    await this.pause(run, kind, gateTitle(kind, tool.name), describeCall(tool.name, args), { name: tool.name, input: args });
+    await this.pause(run, kind, gateTitle(kind, tool.name), await this.describeCall(tool.name, args), { name: tool.name, input: args });
     return `Paused for the user's approval (${gateTitle(kind, tool.name)}). Call agent_wait with runId ${run.id}; once approved, call ${tool.name} again with the same arguments.`;
   }
 
@@ -583,7 +608,7 @@ export class AgentService {
         if (gate) {
           tr.pending = { before: results, toolUseId: u.id, skipped: skipRest() };
           await this.saveTranscript(job.id, tr);
-          await this.pause(job, gate, gateTitle(gate, u.name), describeCall(u.name, u.input), { name: u.name, input: u.input });
+          await this.pause(job, gate, gateTitle(gate, u.name), await this.describeCall(u.name, u.input), { name: u.name, input: u.input });
           return null;
         }
         const r = await runTool(tool, u.input, tctx);
@@ -684,7 +709,6 @@ function advanceStage(data: AgentRunData): PlanStage | null {
 function describeCall(name: string, input: unknown): string {
   const a = (input ?? {}) as Record<string, unknown>;
   if (name === 'export_file') return `Export ${String(a.nodeId ?? 'a document')} as ${String(a.format ?? 'a file')}.`;
-  if (name === 'run_batch') return `${String(a.operation)} on ${Array.isArray(a.targets) ? a.targets.length : 0} item(s) ${JSON.stringify(a.params ?? {}).slice(0, 300)}.`;
   if (name === 'merge_assets') return `Merge ${Array.isArray(a.drop) ? a.drop.length : 0} cop(ies) into ${String(a.keep)} and remove the copies from the library.`;
   if (name === 'delete_node') return `Delete ${String(a.nodeId ?? 'a node')}.`;
   return `${name} ${JSON.stringify(input).slice(0, 400)}`;

@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import {
   acceptSuggestionOp,
+  childrenOf,
   applyLayoutOps,
   applyThemeOp,
   commentsContainer,
@@ -26,6 +27,7 @@ import {
   type SceneNode,
   type SlideElementProps,
 } from '@omnix/core';
+import { layerBounds, type RenderHost } from '@omnix/render';
 import { defineTool, ToolError, zProjectId } from '../registry.js';
 import { edit, need, writeResult, zWriteResult } from './helpers.js';
 
@@ -42,7 +44,7 @@ export const documentTools = [
     name: 'doc_insert_markdown',
     title: 'Write into a document',
     description:
-      'Insert Markdown into a document as editable blocks: headings, paragraphs, lists, to-dos ([ ] / [x]), quotes, code fences, tables, dividers, images (![alt](asset:<assetId>)) and live links (!embed[chart](<cellId>), !embed[canvas](<id>), !embed[slide](<id>), !embed[sequence-frame](<id>@<seconds>), !embed[asset](<assetId>)). Inserts after afterBlockId, at the start with afterBlockId null, or at the end by default.',
+      'Insert Markdown into a document as editable blocks: headings, paragraphs, lists, to-dos ([ ] / [x]), quotes, code fences, tables, dividers, images (![alt](asset:<assetId>)) and live links (!embed[chart](<cellId>), !embed[canvas](<id>), !embed[slide](<id>), !embed[sequence-frame](<id>@<seconds>), !embed[asset](<assetId>)). Inserts after afterBlockId, at the start with afterBlockId null, or at the end by default (filling an empty last paragraph). A new document already starts with its name as a level-1 heading, so do not repeat it.',
     category: 'document',
     access: 'write',
     input: { projectId: zProjectId, documentId: z.string(), markdown: z.string().min(1).max(200_000), afterBlockId: z.string().nullable().optional() },
@@ -53,11 +55,15 @@ export const documentTools = [
       const blocks = markdownToBlocks(args.markdown);
       if (!blocks.length) throw new ToolError('The markdown has no content.');
       const out = await edit(ctx, args.projectId, `Write ${blocks.length} ${blocks.length === 1 ? 'block' : 'blocks'}`, (state) => {
-        need(state, args.documentId, 'document', 'document');
+        const doc = need(state, args.documentId, 'document', 'document');
         if (args.afterBlockId) need(state, args.afterBlockId, 'block', 'block');
-        const r = insertBlocksOps(state, args.documentId, args.afterBlockId, blocks);
+        // Writing at the end fills the empty line a document ends with (a new one starts with one), as typing would.
+        const lastId = doc.children[doc.children.length - 1];
+        const last = lastId ? state.nodes[lastId] : undefined;
+        const blank = args.afterBlockId === undefined && last?.type === 'block' && (last as SceneNode<'block'>).props.blockType === 'paragraph' && !(last as SceneNode<'block'>).props.text.trim() && !commentsOn(state, last.id);
+        const r = insertBlocksOps(state, args.documentId, blank ? (doc.children[doc.children.length - 2] ?? null) : args.afterBlockId, blocks);
         ids = r.ids;
-        return r.ops;
+        return blank ? [...r.ops, { kind: 'delete', id: last!.id }] : r.ops;
       });
       return writeResult(out, { blockIds: ids });
     },
@@ -228,6 +234,9 @@ export const documentTools = [
             where = `slide ${idx}${a.x !== undefined ? ` at (${Math.round(a.x)}, ${Math.round(a.y ?? 0)})` : ''}`;
           } else if (a.time !== undefined) where = `${where} at ${a.time.toFixed(2)}s${a.x !== undefined ? `, frame position (${Math.round(a.x)}, ${Math.round(a.y ?? 0)})` : ''}`;
           else if (a.x !== undefined) where = `${where} at (${Math.round(a.x)}, ${Math.round(a.y ?? 0)})`;
+          // On a canvas, name the layer under the pin, so the comment can be acted on without guessing.
+          const under = target?.type === 'canvas' && a.x !== undefined ? layerAt(state, target.id, a.x, a.y ?? 0) : null;
+          if (under) where = `${where}, over the layer "${under.props.name}"`;
           return {
             id: c.id,
             text: c.props.text,
@@ -238,6 +247,7 @@ export const documentTools = [
             where,
             ...(context !== undefined ? { context } : {}),
             anchor: a,
+            ...(under ? { layerId: under.id } : {}),
             ...(doc ? { documentId: doc.id, documentType: doc.type } : {}),
             replies: c.props.replies.map((r) => ({ author: r.author.name, text: r.text, createdAt: r.createdAt })),
           };
@@ -521,3 +531,32 @@ export const documentTools = [
     },
   }),
 ];
+
+/** Layer bounds need no pixels except a raster's natural size, which layers placed by tools always set. */
+const NO_PIXELS = { image: () => null, createCanvas: () => { throw new Error('not drawing'); } } as unknown as RenderHost;
+
+/** The topmost visible layer with content at a canvas point (groups searched inside), or null. */
+export function layerAt(state: import('@omnix/core').ProjectState, canvasId: string, x: number, y: number): SceneNode<'layer'> | null {
+  const search = (parentId: string): SceneNode<'layer'> | null => {
+    const layers = childrenOf(state, parentId).filter((n): n is SceneNode<'layer'> => n.type === 'layer' && (n as SceneNode<'layer'>).props.visible);
+    for (const l of [...layers].reverse()) {
+      if (l.props.layerType === 'group') {
+        const inner = search(l.id);
+        if (inner) return inner;
+        continue;
+      }
+      // Fills and adjustments cover the whole canvas; they are never what a pin points at.
+      if (!['raster', 'vector', 'text'].includes(l.props.layerType)) continue;
+      const b = layerBounds(NO_PIXELS, state, l.id);
+      if (b.width > 0 && b.height > 0 && x >= b.x && x <= b.x + b.width && y >= b.y && y <= b.y + b.height) return l;
+    }
+    return null;
+  };
+  return search(canvasId);
+}
+
+/** Whether any comment is pinned to this node. */
+function commentsOn(state: import('@omnix/core').ProjectState, nodeId: string): boolean {
+  const box = commentsContainer(state);
+  return !!box && box.children.some((id) => (state.nodes[id] as SceneNode<'comment'> | undefined)?.props.anchor.nodeId === nodeId);
+}

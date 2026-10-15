@@ -128,6 +128,9 @@ export function slidesFromDocumentOps(state: ProjectState, documentId: string, d
   const useful = sections.filter((x, i) => !(i === 0 && !x.points.length && x.title.toLowerCase() === doc.props.name.toLowerCase()));
   sections.splice(0, sections.length, ...useful);
   if (!sections.length) throw new Error('The document has no headings or text to turn into slides.');
+  // A one-line introduction under the document's own title becomes the title slide's subtitle.
+  let intro: string | null = null;
+  if (!deckId && sections.length > 1 && sections[0]!.title.toLowerCase() === doc.props.name.toLowerCase() && sections[0]!.points.length === 1) intro = sections.shift()!.points[0]!;
   const ops: Operation[] = [];
   let working = state;
   let targetDeck = deckId;
@@ -140,7 +143,7 @@ export function slidesFromDocumentOps(state: ProjectState, documentId: string, d
     const titleEl = nodes.find((n) => n.type === 'slideElement' && (n as SceneNode<'slideElement'>).props.role === 'title');
     if (titleEl) (titleEl as SceneNode<'slideElement'>).props.text = doc.props.name;
     const sub = nodes.find((n) => n.type === 'slideElement' && (n as SceneNode<'slideElement'>).props.role === 'subtitle');
-    if (sub) (sub as SceneNode<'slideElement'>).props.text = sections[0]?.title === doc.props.name ? '' : `${sections.length} sections`;
+    if (sub) (sub as SceneNode<'slideElement'>).props.text = intro ?? (sections[0]?.title === doc.props.name ? '' : `${sections.length} sections`);
     working = applyOp(working, ops[0]!).state;
   } else if (!state.nodes[targetDeck] || state.nodes[targetDeck]!.type !== 'deck') throw new Error('Choose a slideshow.');
   let index = deckSlides(working, targetDeck).length;
@@ -150,7 +153,8 @@ export function slidesFromDocumentOps(state: ProjectState, documentId: string, d
     index++;
     working = applyOp(working, r.op).state;
   }
-  return { ops, deckId: targetDeck, slides: Math.min(sections.length, maxSlides) };
+  // Every slide added, counting the title slide a new deck starts with.
+  return { ops, deckId: targetDeck, slides: Math.min(sections.length, maxSlides) + (deckId ? 0 : 1) };
 }
 
 /** Change a video's frame size, filling around each shot with a blurred, darker copy of it. */

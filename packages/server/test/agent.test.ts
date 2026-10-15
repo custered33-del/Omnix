@@ -395,7 +395,7 @@ describe('agent runs driven by Claude over MCP', () => {
       const ex = await call('run_batch', { operation: 'document.export', params: { format: 'md' }, targets: [{ projectId: p.id, documentId: p.doc }] });
       expect(ex.error).toMatch(/Paused for the user's approval \(Before exporting \(run_batch\)\)/);
       let run = (await json(await ts.api(`/api/agent/runs/${runId}`))).run;
-      expect(run.pendingGate).toMatchObject({ kind: 'export', summary: expect.stringMatching(/document.export on 1 item/) });
+      expect(run.pendingGate).toMatchObject({ kind: 'export', summary: 'Export 1 document as MD: Launch note.' });
       await decide(runId, 'approve');
       await call('agent_wait', { runId, timeoutSeconds: 5 });
       const ex2 = await call('run_batch', { operation: 'document.export', params: { format: 'md' }, targets: [{ projectId: p.id, documentId: p.doc }] });

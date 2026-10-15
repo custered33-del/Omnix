@@ -5309,7 +5309,7 @@ Example result (structured content):
 
 **Put media on the timeline** · write
 
-Place a video, audio or image asset on a track. Without trackId the first track of the right kind is used (one is created if needed). Without start the clip goes after the last clip on that track. in/out pick the part of the source to use (seconds). The sequence grows to fit.
+Place a video, audio or image asset on a track. Without trackId the first track of the right kind is used (one is created if needed). Without start the clip goes after the last clip on that track. in/out pick the part of the source to use (seconds); for a still image, out is how long it shows (default 5 s). The sequence grows to fit.
 
 <details><summary>Input schema</summary>
 
@@ -7814,7 +7814,7 @@ Example result (structured content):
 
 **Write into a document** · write
 
-Insert Markdown into a document as editable blocks: headings, paragraphs, lists, to-dos ([ ] / [x]), quotes, code fences, tables, dividers, images (![alt](asset:<assetId>)) and live links (!embed[chart](<cellId>), !embed[canvas](<id>), !embed[slide](<id>), !embed[sequence-frame](<id>@<seconds>), !embed[asset](<assetId>)). Inserts after afterBlockId, at the start with afterBlockId null, or at the end by default.
+Insert Markdown into a document as editable blocks: headings, paragraphs, lists, to-dos ([ ] / [x]), quotes, code fences, tables, dividers, images (![alt](asset:<assetId>)) and live links (!embed[chart](<cellId>), !embed[canvas](<id>), !embed[slide](<id>), !embed[sequence-frame](<id>@<seconds>), !embed[asset](<assetId>)). Inserts after afterBlockId, at the start with afterBlockId null, or at the end by default (filling an empty last paragraph). A new document already starts with its name as a level-1 heading, so do not repeat it.
 
 <details><summary>Input schema</summary>
 
@@ -11107,7 +11107,7 @@ Example result (structured content):
 
 **Checkpoint a finished stage** · write
 
-Mark the current stage done: saves a named version of the project (the user can roll back to it) with your summary, then moves to the next stage. Pauses when the user reviews each stage.
+Mark the current stage done: saves a named version of the project (the user can roll back to it) with your summary, then moves to the next stage. When the user reviews each stage, the run pauses first: if they approve, the next stage starts; if they ask for changes, the same stage continues, so make the changes and checkpoint it again.
 
 <details><summary>Input schema</summary>
 
@@ -11233,7 +11233,7 @@ Example result (structured content):
 {
   "runId": "job_7f...",
   "status": "awaiting_approval",
-  "stage": "Add titles and music",
+  "stage": "Pick and trim the best shots",
   "pendingGate": {
     "id": "gate_3",
     "title": "Stage finished: Pick and trim the best shots",

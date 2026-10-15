@@ -404,10 +404,11 @@ describe('cross-tool context and session memory', () => {
     const hits = (found.structuredContent as { hits: { nodeId: string; tool: string }[] }).hits;
     expect(hits[0]).toMatchObject({ nodeId: blocks[1]!.id, tool: 'document' });
     const r = await json(await ts.api(`/api/projects/${p.id}/slides-from-document`, { method: 'POST', json: { documentId: p.doc } }));
-    expect(r.slides).toBe(2);
     const s = await state(p.id);
     const slides = deckSlides(s, r.deckId);
+    // The count includes the title slide a new deck starts with.
     expect(slides).toHaveLength(3);
+    expect(r.slides).toBe(3);
     const body = slideElements(s, slides[2]!.id).find((e) => e.props.role === 'body')!;
     expect(body.props.text).toBe('- The studio\n- The connector');
     expect(slideElements(s, slides[1]!.id).find((e) => e.props.role === 'body')!.props.text).toBe('- The launch date is 14 March. Everything else follows from it.');

@@ -104,6 +104,29 @@ describe('documents', () => {
     expect(comment.props.replies).toHaveLength(1);
     expect((s.nodes[doc] as SceneNode<'document'>).props.styles.h2!.color).toBe('#1d3557');
   });
+
+  it('writes into a new document without leaving its empty first line, and makes a deck from it', async () => {
+    const p = await call(auto, 'create_project', { name: 'Launch', primaryTool: 'image' });
+    const brief = await call(auto, 'add_document', { projectId: p.projectId, tool: 'document', name: 'Launch brief' });
+    let blocks = documentBlocks(await state(p.projectId), brief.documentId);
+    expect(blocks.map((b) => [b.props.blockType, b.props.text])).toEqual([['heading', 'Launch brief'], ['paragraph', '']]);
+    await call(auto, 'doc_insert_markdown', { projectId: p.projectId, documentId: brief.documentId, markdown: 'Aurora is a lamp that follows daylight.\n\n## Who it is for\n\n- Home workers\n\n## Plan\n\n- Teaser on 1 March' });
+    blocks = documentBlocks(await state(p.projectId), brief.documentId);
+    expect(blocks.map((b) => b.props.text)).toEqual(['Launch brief', 'Aurora is a lamp that follows daylight.', 'Who it is for', 'Home workers', 'Plan', 'Teaser on 1 March']);
+    // Writing at the end again appends normally: the last line is not empty any more.
+    await call(auto, 'doc_insert_markdown', { projectId: p.projectId, documentId: brief.documentId, markdown: '- Press on 7 March' });
+    expect(documentBlocks(await state(p.projectId), brief.documentId)).toHaveLength(7);
+
+    // The intro under the title becomes the title slide's subtitle; the count includes the title slide.
+    const deck = await call(auto, 'slides_from_document', { projectId: p.projectId, documentId: brief.documentId });
+    const s = await state(p.projectId);
+    const slides = deckSlides(s, deck.deckId);
+    expect(deck.slides).toBe(slides.length);
+    expect(slides).toHaveLength(3);
+    const texts = (i: number) => slideElements(s, slides[i]!.id).map((e) => e.props.text);
+    expect(texts(0)).toEqual(expect.arrayContaining(['Launch brief', 'Aurora is a lamp that follows daylight.']));
+    expect(texts(1)).toContain('Who it is for');
+  });
 });
 
 describe('image', () => {
