@@ -1,0 +1,10 @@
+services:
+  - type: web
+    name: omnix
+    runtime: docker
+    plan: starter
+    healthCheckPath: /api/health
+    disk:
+      name: omnix-data
+      mountPath: /data
+      sizeGB: 10
