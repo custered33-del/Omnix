@@ -11,7 +11,15 @@ export class PostgresStore implements DocStore {
   private ready: Promise<void>;
 
   constructor(connectionString: string) {
-    this.pool = new pg.Pool({ connectionString, max: 10 });
+    // Hosted databases (Supabase, Neon and the like) need TLS; a local server usually does not.
+    let remote = false;
+    try {
+      const u = new URL(connectionString);
+      remote = !!u.hostname && !['localhost', '127.0.0.1', '::1', '[::1]'].includes(u.hostname) && !u.searchParams.get('host')?.startsWith('/') && !/sslmode=disable/.test(connectionString);
+    } catch {
+      remote = false;
+    }
+    this.pool = new pg.Pool({ connectionString, max: 10, ...(remote ? { ssl: { rejectUnauthorized: false } } : {}) });
     this.ready = this.migrate();
   }
 

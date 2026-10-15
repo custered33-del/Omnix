@@ -53,8 +53,8 @@ export interface OmnixConfig {
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): OmnixConfig {
   const port = Number(env.OMNIX_PORT ?? env.PORT ?? 4317);
   const host = env.OMNIX_HOST ?? '0.0.0.0';
-  // Hosts such as Render tell the app its public address.
-  const publicUrl = (env.OMNIX_PUBLIC_URL ?? env.RENDER_EXTERNAL_URL ?? `http://localhost:${port}`).replace(/\/$/, '');
+  // Hosts such as Render and Hugging Face Spaces tell the app its public address.
+  const publicUrl = (env.OMNIX_PUBLIC_URL ?? env.RENDER_EXTERNAL_URL ?? (env.SPACE_HOST ? `https://${env.SPACE_HOST}` : undefined) ?? `http://localhost:${port}`).replace(/\/$/, '');
   const s3 =
     env.OMNIX_S3_BUCKET && env.OMNIX_S3_ACCESS_KEY_ID && env.OMNIX_S3_SECRET_ACCESS_KEY
       ? {
