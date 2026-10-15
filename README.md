@@ -65,6 +65,8 @@ Useful scripts:
 
 ## Connect Omnix to Claude
 
+**[`docs/CONNECT.md`](docs/CONNECT.md)** covers every Claude app step by step: claude.ai, the phone apps, Claude Desktop and Claude Code, plus what Claude can do once connected.
+
 The quickest way is the built-in guide: **Help → Claude setup guide** (`/setup`). It walks through seven steps, saves your progress, and ends with a connection test that reads your project list and writes a blank test note exactly as Claude would, with a fix for anything that fails. **Help → Troubleshooting** covers connection errors, expired sign-ins, permission problems and disconnecting.
 
 Omnix speaks MCP at `http://localhost:4317/mcp` (Streamable HTTP) and `/sse` (legacy). Claude.ai and the Claude apps reach connectors over the internet, so a server on your own computer needs an HTTPS address (for example a tunnel such as `cloudflared tunnel --url http://localhost:4317`) set as `OMNIX_PUBLIC_URL`. Claude Code and Claude Desktop with a local config work with `localhost` directly.
@@ -137,6 +139,7 @@ Each change Claude makes is attributed to Claude in the project history, appears
 
 Documentation:
 
+- [`docs/CONNECT.md`](docs/CONNECT.md): connecting Claude on the web, phone, Desktop and Claude Code
 - [`docs/WALKTHROUGH.md`](docs/WALKTHROUGH.md): Claude completing a whole goal, step by step
 - [`docs/MCP_TOOLS.md`](docs/MCP_TOOLS.md): MCP tool catalog (generated)
 - [`docs/PLUGINS.md`](docs/PLUGINS.md): writing a plugin
