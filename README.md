@@ -28,6 +28,7 @@ Useful scripts:
 | Command | What it does |
 | --- | --- |
 | `pnpm start` | Run Omnix (serves the built web app) |
+| `pnpm share` | Run Omnix with a public address for claude.ai, Claude Desktop and the phone app (needs cloudflared) |
 | `pnpm build` | Build the web app |
 | `pnpm dev` | Server and web app with live reload |
 | `pnpm dev:server` | Run the server with auto-reload |
@@ -65,11 +66,11 @@ Useful scripts:
 
 ## Connect Omnix to Claude
 
-**[`docs/CONNECT.md`](docs/CONNECT.md)** covers every Claude app step by step: claude.ai, the phone apps, Claude Desktop and Claude Code, plus what Claude can do once connected.
+**The short version is [`docs/CONNECT.md`](docs/CONNECT.md).** For Claude Code, run `pnpm start` and `claude mcp add --transport http omnix http://localhost:4317/mcp`. For claude.ai, Claude Desktop and the phone app, run `pnpm share` and paste the address it prints into https://claude.ai/settings/connectors.
 
 The quickest way is the built-in guide: **Help → Claude setup guide** (`/setup`). It walks through seven steps, saves your progress, and ends with a connection test that reads your project list and writes a blank test note exactly as Claude would, with a fix for anything that fails. **Help → Troubleshooting** covers connection errors, expired sign-ins, permission problems and disconnecting.
 
-Omnix speaks MCP at `http://localhost:4317/mcp` (Streamable HTTP) and `/sse` (legacy). Claude.ai and the Claude apps reach connectors over the internet, so a server on your own computer needs an HTTPS address (for example a tunnel such as `cloudflared tunnel --url http://localhost:4317`) set as `OMNIX_PUBLIC_URL`. Claude Code and Claude Desktop with a local config work with `localhost` directly.
+Omnix speaks MCP at `http://localhost:4317/mcp` (Streamable HTTP) and `/sse` (legacy). Claude.ai and the Claude apps reach connectors over the internet, so a server on your own computer needs an HTTPS address. `pnpm share` opens a Cloudflare tunnel and sets `OMNIX_PUBLIC_URL` for you; on your own server, set `OMNIX_PUBLIC_URL` to its address. Claude Code and Claude Desktop with a local config work with `localhost` directly.
 
 **claude.ai and the Claude apps.** In Claude, open **Settings → Connectors → Add custom connector**, name it Omnix and enter your MCP URL (`https://your-omnix-address/mcp`). Leave the OAuth fields empty: Omnix registers Claude itself. Click **Connect**; your Omnix server opens an approval screen that says what Claude is asking for, lets you pick the permission (view only, edit with approval, or autonomous) and which projects it may reach, and sends you back to Claude. You can change the permission or disconnect at any time from the dashboard's Claude card or **Settings → Claude**.
 
@@ -139,7 +140,7 @@ Each change Claude makes is attributed to Claude in the project history, appears
 
 Documentation:
 
-- [`docs/CONNECT.md`](docs/CONNECT.md): connecting Claude on the web, phone, Desktop and Claude Code
+- [`docs/CONNECT.md`](docs/CONNECT.md): connecting Claude, the short version
 - [`docs/WALKTHROUGH.md`](docs/WALKTHROUGH.md): Claude completing a whole goal, step by step
 - [`docs/MCP_TOOLS.md`](docs/MCP_TOOLS.md): MCP tool catalog (generated)
 - [`docs/PLUGINS.md`](docs/PLUGINS.md): writing a plugin

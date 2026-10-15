@@ -6,9 +6,22 @@ import './modules.js';
 const omnix = await createOmnix();
 const port = await omnix.listen();
 const c = omnix.config;
-console.log(`\n  Omnix is running at ${c.publicUrl}${c.publicUrl.includes(String(port)) ? '' : ` (listening on ${port})`}`);
-console.log(`  Storage: ${omnix.services.store.kind} (${c.databaseUrl ? 'postgres' : c.dataDir})`);
-console.log(`  MCP endpoint for Claude: ${c.publicUrl}/mcp\n`);
+const local = `http://localhost:${port}`;
+const reachable = /^https:\/\//.test(c.publicUrl) && !/localhost|127\.0\.0\.1/.test(c.publicUrl);
+console.log(`
+  Omnix is running. Open it in your browser: ${local}
+  Storage: ${omnix.services.store.kind} (${c.databaseUrl ? 'postgres' : c.dataDir})
+
+  Connect Claude
+    Claude Code (this computer):  claude mcp add --transport http omnix ${local}/mcp
+${
+  reachable
+    ? `    claude.ai, Claude Desktop and the phone app:
+      Settings → Connectors → Add custom connector → paste  ${c.publicUrl}/mcp`
+    : `    claude.ai, Claude Desktop and the phone app need a public address:
+      stop Omnix and run  pnpm share  instead of pnpm start`
+}
+`);
 
 let closing = false;
 const shutdown = async (signal: string) => {

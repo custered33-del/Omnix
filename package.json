@@ -14,6 +14,7 @@
     "dev:web": "pnpm --filter @omnix/web dev",
     "build": "pnpm --filter @omnix/web build",
     "start": "tsx packages/server/src/main.ts",
+    "share": "node scripts/share.mjs",
     "mcp:stdio": "tsx packages/server/src/mcp/stdio.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
