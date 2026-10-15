@@ -528,12 +528,13 @@
   grid-column: 1 / -1;
   display: flex;
   align-items: center;
-  gap: var(--sp-3);
+  /* When a side panel leaves too little room, buttons wrap to a second row rather than scroll out of sight. */
+  flex-wrap: wrap;
+  gap: 4px var(--sp-3);
   min-height: 44px;
-  padding: 0 var(--sp-3);
+  padding: 4px var(--sp-3);
   border-bottom: 1px solid var(--border);
   background: var(--surface);
-  overflow-x: auto;
 }
 .tool-rail {
   display: flex;
