@@ -1,4 +1,4 @@
-import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { McpServer, type RegisteredTool } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { z } from 'zod';
 import type { Services } from '../services.js';
@@ -16,6 +16,8 @@ How to work in Omnix:
 2. Edit with the tool-specific tools (image_*, video_*, anim_*, code_*, doc_*, slides_*). Every change is recorded in the project history, attributed to you, and can be undone.
 3. Check your work visually with render_preview before handing back.
 4. Record important decisions with add_note so collaborators (human or AI) can pick up later.
+
+Plugins: tools named <plugin>__<tool> come from plugins installed in this Omnix; they follow the same permission modes as built-in tools.
 
 Shortcuts: run_command turns plain-language edits into operations ("make the sky warmer and move the title to the lower third"); find_in_project searches every tool at once; slides_from_document and code_place_output carry work across tools; image_generative_fill, image_generative_extend and video_generative_fill fill or extend areas from a prompt; style_match applies the look of a reference. For a long goal in an autonomous connection, call agent_start_run with a plan, agent_checkpoint after each stage and agent_finish at the end; when the run pauses for the user's approval, call agent_wait and follow their answer.
 
@@ -72,16 +74,39 @@ export function mcpContextOf(server: McpServer): ToolContext | undefined {
   return contexts.get(server);
 }
 
-/** Build an MCP server bound to one principal (one connection). */
-export function createMcpServer(services: Services, principal: Principal): McpServer {
-  const server = new McpServer(
-    { name: 'omnix', title: 'Omnix', version: OMNIX_VERSION },
-    { instructions: OMNIX_INSTRUCTIONS, capabilities: { tools: {}, resources: {}, logging: {} } },
-  );
-  const ctx = makeToolContext(services, principal, 'mcp');
-  contexts.set(server, ctx);
-  for (const tool of allTools(services)) {
-    server.registerTool(
+interface LiveServer {
+  server: WeakRef<McpServer>;
+  ctx: ToolContext;
+  tools: Map<string, RegisteredTool>;
+}
+/** Open MCP sessions, so tools that come and go (plugins) reach them without reconnecting. */
+const liveServers = new Set<LiveServer>();
+
+/**
+ * Bring every open MCP session's tool list up to date (plugins connected or went away). The SDK
+ * tells each client that the list changed.
+ */
+export function syncMcpTools(services: Services): void {
+  const current = allTools(services);
+  const names = new Set(current.map((t) => t.name));
+  for (const live of liveServers) {
+    const server = live.server.deref();
+    if (!server) {
+      liveServers.delete(live);
+      continue;
+    }
+    for (const [name, reg] of live.tools) {
+      if (!names.has(name)) {
+        reg.remove();
+        live.tools.delete(name);
+      }
+    }
+    for (const tool of current) if (!live.tools.has(tool.name)) live.tools.set(tool.name, registerOne(services, server, live.ctx, tool));
+  }
+}
+
+function registerOne(services: Services, server: McpServer, ctx: ToolContext, tool: ToolDef): RegisteredTool {
+  return server.registerTool(
       tool.name,
       {
         title: tool.title,
@@ -102,7 +127,19 @@ export function createMcpServer(services: Services, principal: Principal): McpSe
         return toContent(r.result!);
       },
     );
-  }
+}
+
+/** Build an MCP server bound to one principal (one connection). */
+export function createMcpServer(services: Services, principal: Principal): McpServer {
+  const server = new McpServer(
+    { name: 'omnix', title: 'Omnix', version: OMNIX_VERSION },
+    { instructions: OMNIX_INSTRUCTIONS, capabilities: { tools: { listChanged: true }, resources: {}, logging: {} } },
+  );
+  const ctx = makeToolContext(services, principal, 'mcp');
+  contexts.set(server, ctx);
+  const tools = new Map<string, RegisteredTool>();
+  for (const tool of allTools(services)) tools.set(tool.name, registerOne(services, server, ctx, tool));
+  liveServers.add({ server: new WeakRef(server), ctx, tools });
   registerResources(server, ctx);
   return server;
 }

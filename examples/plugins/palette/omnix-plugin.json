@@ -1,0 +1,7 @@
+{
+  "name": "Palette",
+  "description": "Color palettes: suggest harmonious colors, add them to a canvas as swatches, or make a swatch image.",
+  "type": "mcp-stdio",
+  "command": "node",
+  "args": ["server.mjs"]
+}

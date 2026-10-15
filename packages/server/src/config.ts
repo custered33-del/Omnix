@@ -39,6 +39,13 @@ export interface OmnixConfig {
   maxUploadBytes: number;
   /** Allow anyone to sign up (otherwise only the first account, plus invites). */
   openSignup: boolean;
+  /**
+   * Folder of plugins installed on this machine (each a subfolder with omnix-plugin.json).
+   * Plugins that run code (stdio MCP servers, local modules) can only be added here, by someone
+   * with access to the server; HTTP MCP plugins can also be added in Settings by the owner.
+   * Default: <dataDir>/plugins.
+   */
+  pluginsDir: string | null;
 }
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): OmnixConfig {
@@ -76,5 +83,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): OmnixConfig {
     sofficePath: env.OMNIX_SOFFICE ?? 'soffice',
     maxUploadBytes: Number(env.OMNIX_MAX_UPLOAD_MB ?? 4096) * 1024 * 1024,
     openSignup: env.OMNIX_OPEN_SIGNUP === 'true',
+    pluginsDir: env.OMNIX_PLUGINS_DIR ? path.resolve(env.OMNIX_PLUGINS_DIR) : null,
   };
 }

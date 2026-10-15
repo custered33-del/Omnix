@@ -71,8 +71,14 @@ export function registerBatchOperation(services: Services, op: BatchOperation): 
   services.ext.batchOperations = list;
 }
 
+/** Operations that come and go (plugin tools): asked for whenever the list is needed. */
+export function registerBatchProvider(services: Services, provider: () => BatchOperation[]): void {
+  services.ext.batchProviders = [...((services.ext.batchProviders as (() => BatchOperation[])[] | undefined) ?? []), provider];
+}
+
 export function batchOperations(services: Services): BatchOperation[] {
-  return (services.ext.batchOperations as BatchOperation[] | undefined) ?? [];
+  const dynamic = ((services.ext.batchProviders as (() => BatchOperation[])[] | undefined) ?? []).flatMap((p) => p());
+  return [...((services.ext.batchOperations as BatchOperation[] | undefined) ?? []), ...dynamic];
 }
 
 /* ------------------------------------------------------------------ */

@@ -986,3 +986,53 @@ kbd,
   font-size: 10px;
   padding: 0 6px;
 }
+
+/* Plugins */
+.plugin-tool {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: var(--fs-sm);
+  text-align: left;
+  cursor: pointer;
+}
+.plugin-tool:hover:not(:disabled) {
+  border-color: var(--accent);
+}
+.plugin-tool:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+.plugin-result {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  border-radius: var(--r-md);
+  background: var(--surface-2);
+  font-size: var(--fs-sm);
+}
+.plugin-result img {
+  max-width: 100%;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+}
+.plugin-card {
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+}
+.plugin-status.connected {
+  color: var(--success);
+}
+.plugin-status.error {
+  color: var(--danger);
+}

@@ -14,9 +14,9 @@ export interface TestServer {
   close(): Promise<void>;
 }
 
-export async function startTestServer(options: { memory?: boolean; signup?: boolean; openSignup?: boolean } = {}): Promise<TestServer> {
+export async function startTestServer(options: { memory?: boolean; signup?: boolean; openSignup?: boolean; pluginsDir?: string } = {}): Promise<TestServer> {
   const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), 'omnix-test-'));
-  const omnix = await createOmnix({ dataDir, memory: options.memory ?? false, port: 0, host: '127.0.0.1', webDist: null, openSignup: options.openSignup ?? true, dev: true });
+  const omnix = await createOmnix({ dataDir, memory: options.memory ?? false, port: 0, host: '127.0.0.1', webDist: null, openSignup: options.openSignup ?? true, dev: true, ...(options.pluginsDir ? { pluginsDir: options.pluginsDir } : {}) });
   const port = await omnix.listen(0);
   const url = `http://127.0.0.1:${port}`;
   omnix.config.publicUrl = url;

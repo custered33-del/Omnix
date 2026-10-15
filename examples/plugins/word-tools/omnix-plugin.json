@@ -1,0 +1,6 @@
+{
+  "name": "Word tools",
+  "description": "Small helpers for documents: title-case headings, list headings.",
+  "type": "local",
+  "entry": "index.mjs"
+}

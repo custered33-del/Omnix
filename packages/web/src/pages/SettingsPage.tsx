@@ -8,6 +8,7 @@ import { toast } from '../ui/toast.js';
 import { useCommandStore } from '../state/commands.js';
 import { formatRelative, t } from '../i18n/index.js';
 import { ClaudeConnections } from '../components/ClaudeConnections.js';
+import { PluginSettings } from '../components/Plugins.js';
 
 function Section(props: { title: string; children: React.ReactNode; description?: string }) {
   return (
@@ -249,6 +250,7 @@ export function SettingsPage() {
     ['', t('settings.account')],
     ['appearance', t('settings.appearance')],
     ['claude', t('settings.claude')],
+    ['plugins', t('plugins.title')],
   ] as const;
   return (
     <div className="page" style={{ maxWidth: 960 }}>
@@ -265,6 +267,7 @@ export function SettingsPage() {
       <Routes>
         <Route index element={<AccountSettings />} />
         <Route path="appearance" element={<AppearanceSettings />} />
+        <Route path="plugins" element={<PluginSettings />} />
         <Route
           path="claude"
           element={

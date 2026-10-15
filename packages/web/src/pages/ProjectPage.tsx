@@ -24,6 +24,7 @@ import { FindDialog } from '../components/FindDialog.js';
 import { CommentsPanel } from '../components/CommentsPanel.js';
 import { CompareVersions } from '../components/CompareVersions.js';
 import { DocumentBatchDialog } from '../components/BatchDialog.js';
+import { PluginsPanel } from '../components/Plugins.js';
 import { allComments } from '../components/CommentPins.js';
 import { GenerativeDialog } from '../components/GenerativeDialog.js';
 import '../styles/ai.css';
@@ -37,7 +38,7 @@ const CodeEditor = lazy(() => import('../editors/code/CodeEditor.js').then((m) =
 const DocumentEditor = lazy(() => import('../editors/document/DocumentEditor.js').then((m) => ({ default: m.DocumentEditor })));
 const SlidesEditor = lazy(() => import('../editors/slides/SlidesEditor.js').then((m) => ({ default: m.SlidesEditor })));
 
-type Panel = 'proposals' | 'history' | 'notes' | 'activity' | 'runs' | 'comments' | null;
+type Panel = 'proposals' | 'history' | 'notes' | 'activity' | 'runs' | 'comments' | 'plugins' | null;
 
 export function toolOfDoc(n: SceneNode): ToolKind | null {
   switch (n.type) {
@@ -162,6 +163,7 @@ function ProjectView({ store }: { store: ProjectStore }) {
       { id: 'agent', label: `${t('agent.start')}…`, section: t('palette.ai'), keywords: 'autonomous goal claude', run: () => dialogs.openAgent() },
       { id: 'runs', label: t('agent.runs'), section: t('palette.ai'), run: () => setPanel('runs') },
       { id: 'style', label: `${t('style.title')}…`, section: t('palette.ai'), keywords: 'reference look grade theme', run: () => dialogs.openStyle(null) },
+      { id: 'plugins', label: t('plugins.title'), section: t('palette.actions'), keywords: 'plugin extension third-party tools mcp', run: () => setPanel('plugins') },
       { id: 'batch', label: t('batch.open'), section: t('palette.actions'), keywords: 'batch many all documents bulk export command', run: () => setBatchOpen(true) },
       { id: 'compare', label: t('versions.open'), section: t('palette.actions'), keywords: 'diff versions snapshot history before after', run: () => dialogs.openCompare({ documentId: store.getState().activeDocId }) },
       { id: 'find', label: t('find.title'), section: t('palette.actions'), shortcut: 'mod+shift+f', keywords: 'search', run: () => dialogs.openFind(true) },
@@ -353,7 +355,7 @@ function ProjectView({ store }: { store: ProjectStore }) {
           <aside className="drawer" aria-label={panel}>
             <div className="panel-header">
               <span className="grow">
-                {panel === 'proposals' ? t('proposals.title') : panel === 'history' ? t('history.title') : panel === 'notes' ? t('notes.title') : panel === 'runs' ? t('agent.runs') : panel === 'comments' ? t('comments.title') : t('activity.title')}
+                {panel === 'proposals' ? t('proposals.title') : panel === 'history' ? t('history.title') : panel === 'notes' ? t('notes.title') : panel === 'runs' ? t('agent.runs') : panel === 'comments' ? t('comments.title') : panel === 'plugins' ? t('plugins.title') : t('activity.title')}
               </span>
               <IconButton
                 small
@@ -374,6 +376,7 @@ function ProjectView({ store }: { store: ProjectStore }) {
               {panel === 'history' && <HistoryPanel focusCommit={params.get('commit')} />}
               {panel === 'notes' && <NotesPanel />}
               {panel === 'comments' && <CommentsPanel focusId={params.get('comment')} />}
+              {panel === 'plugins' && <PluginsPanel />}
               {panel === 'activity' && <ActivityFeed projectId={meta.id} showProject={false} filter limit={100} />}
               {panel === 'runs' && <AgentRunsPanel projectId={meta.id} projectName={meta.name} focusId={params.get('run')} onStart={() => dialogs.openAgent()} />}
             </div>

@@ -1,29 +1,14 @@
-import { useEffect, useId, useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { defaultsOf, Field, ParamField, type JsonSchema } from './SchemaForm.js';
 import { Link } from 'react-router-dom';
 import { CheckCircle2, CircleSlash, Play, Sparkles, Square, XCircle } from 'lucide-react';
-import { get, post, thumbUrl, type AssetSummary } from '../lib/api.js';
+import { get, post, thumbUrl } from '../lib/api.js';
 import { Dialog, Spinner } from '../ui/primitives.js';
 import { toast } from '../ui/toast.js';
 import { t } from '../i18n/index.js';
 
 /** A batch target: a library file or a document in a project. */
 export type BatchTarget = { assetId: string } | { projectId: string; documentId: string };
-
-interface JsonSchema {
-  type?: string;
-  properties?: Record<string, JsonSchema>;
-  required?: string[];
-  enum?: (string | number)[];
-  anyOf?: { const?: string | number; type?: string }[];
-  const?: string | number;
-  default?: unknown;
-  minimum?: number;
-  maximum?: number;
-  description?: string;
-  maxLength?: number;
-  pattern?: string;
-  items?: JsonSchema;
-}
 
 export interface BatchOperationInfo {
   id: string;
@@ -50,28 +35,6 @@ interface BatchJobView {
   message: string;
   error: string | null;
   items: BatchItemView[];
-}
-
-/** Human labels for settings; anything else is shown as its name split into words. */
-const PARAM_LABELS: Record<string, string> = {
-  lutAssetId: 'LUT',
-  referenceAssetId: 'Reference picture',
-  maxHeight: 'Largest height',
-  keyColor: 'Screen color',
-  lufs: 'Loudness target (LUFS)',
-  apply: 'Apply right away instead of leaving each change to review',
-  enlarge: 'Enlarge smaller pictures',
-  text: 'Text',
-};
-
-function words(name: string): string {
-  return PARAM_LABELS[name] ?? name.replace(/([A-Z])/g, ' $1').replace(/^./, (c) => c.toUpperCase());
-}
-
-function defaultsOf(schema: JsonSchema): Record<string, unknown> {
-  const out: Record<string, unknown> = {};
-  for (const [k, p] of Object.entries(schema.properties ?? {})) if (p.default !== undefined) out[k] = p.default;
-  return out;
 }
 
 /**
@@ -215,100 +178,6 @@ export function BatchDialog({ targets, kinds, documentTypes, onClose, onFinished
       )}
       {job && <BatchProgress job={job} />}
     </Dialog>
-  );
-}
-
-/** A labelled form field whose hint is announced as a description, not as part of the name. */
-function Field({ label, hint, children }: { label: string; hint?: string | undefined; children: (a: { id: string; 'aria-describedby'?: string }) => ReactNode }) {
-  const id = useId();
-  const hintId = `${id}-hint`;
-  return (
-    <div className="field">
-      <label className="label" htmlFor={id}>
-        {label}
-      </label>
-      {children({ id, ...(hint ? { 'aria-describedby': hintId } : {}) })}
-      {hint && (
-        <span id={hintId} className="muted" style={{ fontSize: 'var(--fs-xs)' }}>
-          {hint}
-        </span>
-      )}
-    </div>
-  );
-}
-
-function ParamField({ name, schema, required, value, onChange }: { name: string; schema: JsonSchema; required: boolean; value: unknown; onChange: (v: unknown) => void }) {
-  const label = `${words(name)}${required ? '' : ` (${t('batch.optional')})`}`;
-  const hint = schema.description && !PARAM_LABELS[name] ? schema.description : undefined;
-  const options = schema.enum ?? schema.anyOf?.map((a) => a.const).filter((c): c is string | number => c !== undefined);
-  if (name.endsWith('AssetId')) return <AssetField label={label} kind={name === 'lutAssetId' ? 'lut' : 'image'} value={value as string | undefined} onChange={onChange} />;
-  if (options?.length) {
-    return (
-      <Field label={label} hint={hint}>
-        {(a) => (
-          <select {...a} className="select" value={value === undefined ? '' : String(value)} onChange={(e) => onChange(e.target.value === '' ? undefined : typeof options[0] === 'number' ? Number(e.target.value) : e.target.value)}>
-            {!required && <option value="">{t('batch.same')}</option>}
-            {options.map((o) => (
-              <option key={String(o)} value={String(o)}>
-                {String(o)}
-              </option>
-            ))}
-          </select>
-        )}
-      </Field>
-    );
-  }
-  if (schema.type === 'boolean') {
-    return (
-      <label className="row" style={{ gap: 8, fontSize: 'var(--fs-sm)' }}>
-        <input type="checkbox" checked={!!value} onChange={(e) => onChange(e.target.checked)} />
-        {words(name)}
-      </label>
-    );
-  }
-  if (schema.type === 'number' || schema.type === 'integer') {
-    return (
-      <Field label={label} hint={hint}>
-        {(a) => (
-          <input
-            {...a}
-            className="input"
-            type="number"
-            min={schema.minimum}
-            max={schema.maximum}
-            step={schema.type === 'integer' ? 1 : (schema.maximum ?? 100) - (schema.minimum ?? 0) <= 4 ? 0.05 : 1}
-            value={value === undefined ? '' : String(value)}
-            onChange={(e) => onChange(e.target.value === '' ? undefined : Number(e.target.value))}
-          />
-        )}
-      </Field>
-    );
-  }
-  if (schema.type === 'string' && schema.pattern?.startsWith('^#')) {
-    return <Field label={label}>{(a) => <input {...a} type="color" value={(value as string) ?? '#ffffff'} onChange={(e) => onChange(e.target.value)} />}</Field>;
-  }
-  return <Field label={label} hint={hint}>{(a) => (name === 'text' ? <textarea {...a} className="input" rows={2} value={(value as string) ?? ''} onChange={(e) => onChange(e.target.value)} /> : <input {...a} className="input" value={(value as string) ?? ''} onChange={(e) => onChange(e.target.value || undefined)} />)}</Field>;
-}
-
-/** Pick a library file (a LUT or a reference picture) for a setting. */
-function AssetField({ label, kind, value, onChange }: { label: string; kind: string; value: string | undefined; onChange: (v: string | undefined) => void }) {
-  const [list, setList] = useState<AssetSummary[] | null>(null);
-  useEffect(() => {
-    get<{ assets: AssetSummary[] }>(`/api/assets?kind=${kind}&limit=200`).then((r) => setList(r.assets), () => setList([]));
-  }, [kind]);
-  return (
-    <Field label={label}>
-      {(f) => (
-        <select {...f} className="select" value={value ?? ''} onChange={(e) => onChange(e.target.value || undefined)}>
-          <option value="">{list === null ? '…' : list.length ? t('batch.chooseFile') : t('batch.noFiles', { kind })}</option>
-          {list?.map((a) => (
-            <option key={a.id} value={a.id}>
-              {a.name}
-            </option>
-          ))}
-        </select>
-      )}
-    </Field>
   );
 }
 

@@ -319,3 +319,60 @@ describe('presets menu', () => {
     expect(calls.find((c) => c.url === '/api/presets')!.body).toEqual({ name: 'Dusk', description: '', shared: false, from: { projectId: 'p1', nodeId: 'clp_1' } });
   });
 });
+
+describe('plugins panel', () => {
+  it('builds a form from a plugin tool schema, offers project documents and runs it', async () => {
+    const { MemoryRouter } = await import('react-router-dom');
+    const { PluginsPanel } = await import('../src/components/Plugins.js');
+    const p = project();
+    const store = await storeFor(p.state);
+    const calls: { url: string; body: unknown }[] = [];
+    const base = globalThis.fetch;
+    globalThis.fetch = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
+      const u = String(url);
+      calls.push({ url: u, body: init?.body ? JSON.parse(String(init.body)) : undefined });
+      if (u === '/api/plugins')
+        return new Response(
+          JSON.stringify({
+            plugins: [
+              {
+                id: 'folder:palette',
+                name: 'Palette',
+                description: 'Colors',
+                type: 'mcp-stdio',
+                source: 'folder',
+                slug: 'palette',
+                enabled: true,
+                status: 'connected',
+                error: null,
+                serverInfo: null,
+                checkedAt: null,
+                tools: [{ name: 'add_swatches', omnixName: 'palette__add_swatches', title: 'Add swatches', description: 'Swatches on a canvas', readOnly: false, inputSchema: { type: 'object', properties: { projectId: { type: 'string' }, canvasId: { type: 'string' }, colors: { type: 'array', items: { type: 'string', pattern: '^#[0-9a-fA-F]{6}$' } }, size: { type: 'integer', minimum: 16, maximum: 1000, default: 120 } }, required: ['projectId', 'canvasId', 'colors'] } }],
+              },
+            ],
+          }),
+          { status: 200 },
+        );
+      if (u === '/api/plugins/run') return new Response(JSON.stringify({ text: 'Done: Add 1 palette swatches', data: { outcome: { status: 'committed' } }, images: [] }), { status: 200 });
+      return base(url, init);
+    }) as typeof fetch;
+    store.getState().setActiveDoc(p.canvas.id);
+    render(
+      <MemoryRouter>
+        <ProjectContext.Provider value={store}>
+          <PluginsPanel />
+        </ProjectContext.Provider>
+      </MemoryRouter>,
+    );
+    await userEvent.click(await screen.findByRole('button', { name: /Add swatches/ }));
+    // The open canvas is chosen already; documents of other kinds are not offered.
+    const canvas = screen.getByRole('combobox', { name: 'Canvas' });
+    expect(canvas).toHaveValue(p.canvas.id);
+    expect(within(canvas).queryByRole('option', { name: 'Teaser' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Run' })).toBeDisabled();
+    await userEvent.click(screen.getByRole('button', { name: /Color/ }));
+    await userEvent.click(screen.getByRole('button', { name: 'Run' }));
+    expect(calls.find((c) => c.url === '/api/plugins/run')!.body).toEqual({ tool: 'palette__add_swatches', args: { size: 120, canvasId: p.canvas.id, colors: ['#888888'], projectId: 'p1' } });
+    expect(await screen.findByText('Done: Add 1 palette swatches')).toBeInTheDocument();
+  });
+});

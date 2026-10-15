@@ -52,7 +52,7 @@ export interface ApplyOutcome {
 export interface ToolContext {
   services: Services;
   principal: Principal;
-  via: 'mcp' | 'agent';
+  via: 'mcp' | 'agent' | 'ui';
   jobId?: string;
   /** Access check that also enforces the connection's project allow-list. */
   requireProject(projectId: string, need: 'read' | 'write'): Promise<ProjectMeta>;
@@ -80,7 +80,7 @@ export interface ToolResult {
   images?: { data: Buffer; mimeType: string }[];
 }
 
-export type ToolCategory = 'project' | 'assets' | 'image' | 'video' | 'animation' | 'code' | 'document' | 'slides' | 'ai' | 'agent' | 'collaboration' | 'export';
+export type ToolCategory = 'project' | 'assets' | 'image' | 'video' | 'animation' | 'code' | 'document' | 'slides' | 'ai' | 'agent' | 'collaboration' | 'export' | 'plugin';
 
 export interface ToolDef<S extends z.ZodRawShape = z.ZodRawShape> {
   name: string;
@@ -108,7 +108,7 @@ export class ToolError extends Error {
 }
 
 /** Build the per-call context. */
-export function makeToolContext(services: Services, principal: Principal, via: 'mcp' | 'agent', jobId?: string): ToolContext {
+export function makeToolContext(services: Services, principal: Principal, via: 'mcp' | 'agent' | 'ui', jobId?: string): ToolContext {
   const ctx: ToolContext = {
     services,
     principal,

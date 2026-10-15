@@ -516,6 +516,13 @@
   min-height: 0;
   outline: none;
 }
+/* Editor surfaces are positioned and sized exactly; the global max-width rule would squeeze them when zoomed in. */
+.viewport canvas,
+.tl-stage canvas,
+.slide-stage canvas,
+.compare-frame img {
+  max-width: none;
+}
 .viewport canvas.doc {
   position: absolute;
   box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.08), var(--shadow-2);
