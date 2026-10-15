@@ -64,7 +64,7 @@ export class CodeService {
         const a = await services.assets.ingestBuffer(data, { name, ownerId: owner.userId, projectId: owner.projectId, mimeHint: mime, tags: ['code-output'], source: { kind: 'code', projectId: owner.projectId } });
         return a.id;
       },
-    });
+    }, undefined, { requireFileIsolation: services.config.sandboxIsolation !== 'best-effort' });
     // Mirror code changes into git.
     services.projects.on('event', (e: ProjectEvent) => {
       if (e.type !== 'commit') return;

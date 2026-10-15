@@ -92,6 +92,10 @@ export interface SandboxStatus {
   javascript: boolean;
   networkIsolation: 'namespace' | 'js-only';
   permissionModel: boolean;
+  /** False when code is refused because the server cannot keep it away from Omnix's own files. */
+  canRun: boolean;
+  /** What this server cannot guarantee, in words for the people running code. */
+  warnings: string[];
   kernels: { key: string; language: string; busy: boolean; idleSeconds: number }[];
 }
 
@@ -115,16 +119,25 @@ export class SandboxManager {
   private readonly pyodideVersion: string | null = this.pyodideDir ? (JSON.parse(fs.readFileSync(path.join(this.pyodideDir, 'package.json'), 'utf8')) as { version: string }).version : null;
   private readonly netns: boolean;
   private readonly permission: boolean;
+  /**
+   * The in-process layer (a locked-down vm context) is defence in depth, not a boundary. The
+   * boundaries are the operating system's: Node's permission model keeps code away from the
+   * server's files, a network namespace away from the network. Without the permission model, code
+   * could read Omnix's own data (projects, keys, tokens), so it does not run unless the owner
+   * explicitly accepts that (OMNIX_SANDBOX_ISOLATION=best-effort).
+   */
+  private readonly requireFileIsolation: boolean;
   private sweep: NodeJS.Timeout;
   private runCounter = 0;
 
   constructor(
     private readonly host: SandboxHost,
     readonly limits: SandboxLimits = DEFAULT_LIMITS,
-    options: { forceNoNamespace?: boolean } = {},
+    options: { forceNoNamespace?: boolean; forceNoPermission?: boolean; requireFileIsolation?: boolean } = {},
   ) {
+    this.requireFileIsolation = options.requireFileIsolation ?? true;
     this.netns = !options.forceNoNamespace && process.platform === 'linux' && spawnSync('unshare', ['-rn', 'true']).status === 0;
-    this.permission = spawnSync(process.execPath, ['--permission', '-e', '0']).status === 0;
+    this.permission = !options.forceNoPermission && spawnSync(process.execPath, ['--permission', '-e', '0']).status === 0;
     this.sweep = setInterval(() => this.reapIdle(), 30_000);
     this.sweep.unref();
   }
@@ -135,6 +148,11 @@ export class SandboxManager {
       javascript: true,
       networkIsolation: this.netns ? 'namespace' : 'js-only',
       permissionModel: this.permission,
+      canRun: this.permission || !this.requireFileIsolation,
+      warnings: [
+        ...(this.permission ? [] : [this.requireFileIsolation ? "Running code is turned off: this server's Node.js has no permission model (Node 22.13 or newer has one), so code could read Omnix's own files. Upgrade Node.js, or set OMNIX_SANDBOX_ISOLATION=best-effort to run code anyway." : "Code can read this server's files: its Node.js has no permission model (Node 22.13 or newer has one). Only people you trust should run code here."]),
+        ...(this.netns ? [] : ['Code can reach the network even when network access is off: this server cannot create network namespaces (common in containers). Run Omnix where user namespaces are allowed to enforce it.']),
+      ],
       kernels: [...this.kernels.values()].map((k) => ({ key: k.key, language: k.language, busy: k.busy, idleSeconds: Math.round((Date.now() - k.lastUsed) / 1000) })),
     };
   }
@@ -287,6 +305,9 @@ export class SandboxManager {
   }
 
   async run(req: RunRequest): Promise<RunResult> {
+    if (!this.permission && this.requireFileIsolation) {
+      return { ok: false, ms: 0, outputs: [{ kind: 'error', name: 'SandboxUnavailable', message: this.status().warnings[0]! }] };
+    }
     if (req.language === 'python' && !this.pyodideDir) {
       return { ok: false, ms: 0, outputs: [{ kind: 'error', name: 'RuntimeUnavailable', message: 'Python is not installed in this Omnix server (the pyodide package is missing).' }] };
     }

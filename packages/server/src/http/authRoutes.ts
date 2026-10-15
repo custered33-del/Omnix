@@ -2,10 +2,48 @@ import express from 'express';
 import { z } from 'zod';
 import type { Services } from '../services.js';
 import { h, requireUser, SESSION_COOKIE } from './middleware.js';
-import { publicUser, SETUP_STEPS } from '../auth/users.js';
+import { AuthError, publicUser, SETUP_STEPS } from '../auth/users.js';
 import { ALL_SCOPES } from '../mcp/registry.js';
 
+
+/**
+ * Failed sign-ins: 10 for one account from one address, or 50 from one address, within 15
+ * minutes, and further attempts wait until the oldest failure is 15 minutes old. Kept in memory.
+ */
+class SignInAttempts {
+  private failures = new Map<string, number[]>();
+  constructor(
+    private readonly windowMs = 15 * 60_000,
+    private readonly limits: Record<string, number> = { ip: 50, acct: 10 },
+  ) {}
+  private recent(key: string, now = Date.now()): number[] {
+    const list = (this.failures.get(key) ?? []).filter((t) => now - t < this.windowMs);
+    if (list.length) this.failures.set(key, list);
+    else this.failures.delete(key);
+    return list;
+  }
+  /** Milliseconds to wait, or 0. */
+  blocked(keys: string[]): number {
+    const now = Date.now();
+    let wait = 0;
+    for (const key of keys) {
+      const list = this.recent(key, now);
+      const limit = this.limits[key.split(':')[0]!] ?? 10;
+      if (list.length >= limit) wait = Math.max(wait, list[list.length - limit]! + this.windowMs - now);
+    }
+    return wait;
+  }
+  fail(keys: string[]): void {
+    for (const key of keys) this.failures.set(key, [...this.recent(key), Date.now()]);
+    if (this.failures.size > 10_000) this.failures.delete(this.failures.keys().next().value!);
+  }
+  clear(key: string): void {
+    this.failures.delete(key);
+  }
+}
+
 export function authRoutes(services: Services): express.Router {
+  const attempts = new SignInAttempts();
   const r = express.Router();
   const cookieOptions = () => ({
     httpOnly: true,
@@ -37,7 +75,17 @@ export function authRoutes(services: Services): express.Router {
     '/login',
     h(async (req, res) => {
       const body = z.object({ email: z.string(), password: z.string() }).parse(req.body);
-      const user = await services.users.login(body.email, body.password);
+      const keys = [`ip:${req.ip}`, `acct:${req.ip}|${body.email.trim().toLowerCase()}`];
+      const wait = attempts.blocked(keys);
+      if (wait) throw new AuthError(`Too many sign-in attempts. Try again in ${Math.ceil(wait / 60_000)} minutes.`, 429);
+      let user: Awaited<ReturnType<typeof services.users.login>>;
+      try {
+        user = await services.users.login(body.email, body.password);
+      } catch (e) {
+        if (e instanceof AuthError) attempts.fail(keys);
+        throw e;
+      }
+      attempts.clear(keys[1]!);
       const token = await services.users.createSession(user.id);
       res.cookie(SESSION_COOKIE, token, cookieOptions());
       res.json({ user: publicUser(user) });

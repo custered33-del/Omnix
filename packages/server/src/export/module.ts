@@ -261,8 +261,7 @@ useModule(({ services, router }) => {
       if (!(await verifyFileSignature(services, id, String(req.query.exp ?? ''), String(req.query.sig ?? '')))) throw new ProjectError('This download link is invalid or has expired.', 403);
       const a = await services.assets.get(id);
       if (!a) throw new ProjectError('File not found', 404);
-      res.set('Content-Disposition', `attachment; filename="${a.name.replace(/["\\]/g, '_')}"`);
-      await sendBlob(services, req, res, a.id, a.mime);
+      await sendBlob(services, req, res, a.id, a.mime, a.name, true);
     }),
   );
 

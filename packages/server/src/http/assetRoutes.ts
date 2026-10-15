@@ -8,6 +8,7 @@ import { z } from 'zod';
 import type { Services } from '../services.js';
 import { h, requireUser } from './middleware.js';
 import { streamToTemp } from '../storage/blobs.js';
+import { BlockedUrlError, safeFetch, type SafeResponse } from '../util/safeFetch.js';
 import { ProjectError } from '../projects/service.js';
 import { assetSummary, requireAsset, visibleAssets } from '../mcp/tools/assets.js';
 import type { AssetRecord } from '../assets/pipeline.js';
@@ -23,11 +24,26 @@ async function requireVisible(services: Services, userId: string, id: string): P
   }
 }
 
-/** Send a blob with HTTP range support so video can stream and scrub in the browser. */
-export async function sendBlob(services: Services, req: express.Request, res: express.Response, blobId: string, mime: string, filename?: string): Promise<void> {
+/** Kinds of file a browser can show without running anything inside them. */
+const SHOWN_INLINE = /^(image\/(png|jpeg|gif|webp|avif|bmp|x-icon)|video\/[\w.+-]+|audio\/[\w.+-]+|application\/pdf|text\/plain|font\/[\w.+-]+)$/i;
+
+/** A Content-Disposition value that survives any file name. */
+export function attachmentHeader(filename: string): string {
+  const ascii = filename.replace(/[^\x20-\x7e]/g, '_').replace(/["\\]/g, '_');
+  return `attachment; filename="${ascii}"; filename*=UTF-8''${encodeURIComponent(filename)}`;
+}
+
+/**
+ * Send a blob with HTTP range support so video can stream and scrub in the browser.
+ * Uploaded files are other people's content on Omnix's own address: an SVG or HTML file opened
+ * directly could run scripts as whoever opens it. So every file is sandboxed, and anything but
+ * plain pictures, media, PDFs and text downloads instead of opening. Pictures in pages still load.
+ */
+export async function sendBlob(services: Services, req: express.Request, res: express.Response, blobId: string, mime: string, filename?: string, download = false): Promise<void> {
   res.set('Content-Type', mime);
   res.set('Cache-Control', 'private, max-age=31536000, immutable');
-  if (filename && req.query.download === '1') res.set('Content-Disposition', `attachment; filename="${filename.replace(/["\\]/g, '_')}"`);
+  res.set('Content-Security-Policy', "default-src 'none'; img-src 'self' data:; media-src 'self'; style-src 'unsafe-inline'; sandbox");
+  if (download || (filename && req.query.download === '1') || !SHOWN_INLINE.test(mime)) res.set('Content-Disposition', attachmentHeader(filename ?? 'file'));
   if (services.blobs.kind === 'local') {
     const p = await services.blobs.localPath(blobId);
     await new Promise<void>((resolve, reject) => res.sendFile(p, { headers: { 'Content-Type': mime }, acceptRanges: true, lastModified: false, etag: true }, (err) => (err ? reject(err) : resolve())));
@@ -325,14 +341,26 @@ export async function importFromUrl(services: Services, url: string, options: { 
     return services.assets.ingestBuffer(data, { name: options.name ?? 'pasted', ownerId: options.ownerId, ...(options.projectId ? { projectId: options.projectId } : {}), tags: options.tags ?? [], mimeHint: m[1] ?? '', source: options.source ?? { kind: 'url' } });
   }
   if (isPrivateHost(u.hostname)) throw new ProjectError('Importing from private network addresses is not allowed', 400);
-  const resp = await fetch(u, { redirect: 'follow', signal: AbortSignal.timeout(60_000) });
-  if (!resp.ok || !resp.body) throw new ProjectError(`Download failed: HTTP ${resp.status}`, 400);
-  const len = Number(resp.headers.get('content-length') ?? 0);
-  if (len > services.config.maxUploadBytes) throw new ProjectError('File is too large to import', 413);
-  const { Readable } = await import('node:stream');
-  const tmp = await streamToTemp(Readable.fromWeb(resp.body as import('node:stream/web').ReadableStream), services.config.maxUploadBytes);
-  const name = options.name ?? decodeURIComponent(u.pathname.split('/').pop() || 'download');
-  return services.assets.ingestFile(tmp.path, { name, ownerId: options.ownerId, ...(options.projectId ? { projectId: options.projectId } : {}), tags: options.tags ?? [], mimeHint: resp.headers.get('content-type') ?? '', source: options.source ?? { kind: 'url', url } }, tmp.sha256);
+  // The address is checked again where the connection is made, and after every redirect.
+  let resp: SafeResponse;
+  try {
+    resp = await safeFetch(u.toString(), { timeoutMs: 60_000 });
+  } catch (e) {
+    if (e instanceof BlockedUrlError) throw new ProjectError(e.message, 400);
+    throw new ProjectError(`Download failed: ${e instanceof Error ? e.message : String(e)}`, 400);
+  }
+  if (resp.status < 200 || resp.status >= 300) {
+    resp.body.resume();
+    throw new ProjectError(`Download failed: HTTP ${resp.status}`, 400);
+  }
+  const len = Number(resp.headers['content-length'] ?? 0);
+  if (len > services.config.maxUploadBytes) {
+    resp.body.destroy();
+    throw new ProjectError('File is too large to import', 413);
+  }
+  const tmp = await streamToTemp(resp.body, services.config.maxUploadBytes);
+  const name = options.name ?? decodeURIComponent(new URL(resp.url).pathname.split('/').pop() || 'download');
+  return services.assets.ingestFile(tmp.path, { name, ownerId: options.ownerId, ...(options.projectId ? { projectId: options.projectId } : {}), tags: options.tags ?? [], mimeHint: String(resp.headers['content-type'] ?? ''), source: options.source ?? { kind: 'url', url } }, tmp.sha256);
 }
 
 function isPrivateHost(host: string): boolean {

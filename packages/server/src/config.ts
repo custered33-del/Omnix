@@ -37,6 +37,8 @@ export interface OmnixConfig {
   sofficePath: string;
   /** Maximum upload size in bytes. */
   maxUploadBytes: number;
+  /** 'required': code runs only with the operating system's file isolation; 'best-effort' runs it anyway. */
+  sandboxIsolation: 'required' | 'best-effort';
   /** Allow anyone to sign up (otherwise only the first account, plus invites). */
   openSignup: boolean;
   /**
@@ -82,6 +84,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): OmnixConfig {
     pdftoppmPath: env.OMNIX_PDFTOPPM ?? 'pdftoppm',
     sofficePath: env.OMNIX_SOFFICE ?? 'soffice',
     maxUploadBytes: Number(env.OMNIX_MAX_UPLOAD_MB ?? 4096) * 1024 * 1024,
+    sandboxIsolation: env.OMNIX_SANDBOX_ISOLATION === 'best-effort' ? 'best-effort' : 'required',
     openSignup: env.OMNIX_OPEN_SIGNUP === 'true',
     pluginsDir: env.OMNIX_PLUGINS_DIR ? path.resolve(env.OMNIX_PLUGINS_DIR) : null,
   };

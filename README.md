@@ -57,6 +57,7 @@ Useful scripts:
 | `OMNIX_IMAGE_GEN_URL`, `OMNIX_IMAGE_GEN_API_KEY`, `OMNIX_IMAGE_GEN_MODEL` | unset | Optional image model for generative fill and extend: any server speaking the OpenAI images edit API (`…/images/edits`). Without one, Omnix fills areas from their surroundings |
 | `OMNIX_STT_URL` | unset | OpenAI-compatible speech-to-text endpoint for automatic captions (otherwise speech detection leaves timed caption slots) |
 | `OMNIX_PLUGINS_DIR` | `<data folder>/plugins` | Folder of installed plugins (see [`docs/PLUGINS.md`](docs/PLUGINS.md)) |
+| `OMNIX_SANDBOX_ISOLATION` | `required` | Code Grounds runs code only where Node's permission model keeps it away from the server's files (Node 22.13 or newer). `best-effort` runs code anyway, for servers where only trusted people run code |
 
 ## Connect Omnix to Claude
 

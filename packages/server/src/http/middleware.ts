@@ -30,6 +30,11 @@ export function attachUser(services: Services): RequestHandler {
         if (h?.startsWith('Bearer omx_')) {
           const r = await services.users.resolveAccessToken(h.slice(7).trim());
           if (r) {
+            // A token's permission holds here too: only one allowed to change things on its own
+            // (autonomous) may write through the REST API; the others propose changes over MCP.
+            const safe = ['GET', 'HEAD', 'OPTIONS'].includes(req.method);
+            if (safe ? !r.token.scopes.includes('omnix:read') : !(r.token.scopes.includes('omnix:edit') && r.token.scopes.includes('omnix:autonomous')))
+              throw new AuthError(safe ? 'This access token cannot read.' : 'This access token may not change things directly. Use one with the Autonomous permission, or make the change over MCP so it arrives as a proposal.', 403);
             user = r.user;
             req.viaToken = true;
           }

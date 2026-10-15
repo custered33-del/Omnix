@@ -769,6 +769,14 @@ kbd,
   background: var(--surface);
   font-size: var(--fs-sm);
 }
+.notice.warning {
+  border-color: var(--warning);
+  border-left-width: 4px;
+}
+.notice.danger {
+  border-color: var(--danger);
+  border-left-width: 4px;
+}
 .plain-list {
   list-style: none;
   margin: 0;

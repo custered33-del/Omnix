@@ -229,7 +229,7 @@ export function GitHistory({ ctx }: { ctx: CodeCtx }) {
 /* ---------------- sandbox settings ---------------- */
 
 interface SandboxStatus {
-  sandbox: { kernels: { key: string; language: string; busy: boolean; rssMb?: number }[] } | unknown;
+  sandbox: { kernels: { key: string; language: string; busy: boolean; rssMb?: number }[]; canRun: boolean; permissionModel: boolean; warnings: string[] };
   limits: { timeoutMs: number; maxRssMb: number; packageAllowlist: string[]; maxPackages: number };
 }
 
@@ -244,6 +244,11 @@ export function SandboxSettings({ ctx }: { ctx: CodeCtx }) {
   const p = ws.props;
   return (
     <div className="col" style={{ padding: 12, gap: 14, overflow: 'auto' }}>
+      {status?.sandbox.warnings.map((w) => (
+        <p key={w} className={`notice ${status.sandbox.canRun ? 'warning' : 'danger'}`} role="note" style={{ margin: 0, fontSize: 'var(--fs-sm)' }}>
+          {w}
+        </p>
+      ))}
       <Switch checked={p.allowNetwork} disabled={!canEdit} onChange={(v) => s.commit({ kind: 'update', id: ws.id, set: { allowNetwork: v } }, v ? 'Allow network access' : 'Block network access')} label={t('code.network')} hint={t('code.networkHint')} />
       <div className="col" style={{ gap: 6 }}>
         <span className="label">{t('code.packages')}</span>
@@ -270,7 +275,7 @@ export function SandboxSettings({ ctx }: { ctx: CodeCtx }) {
               })}
             </div>
             <p className="muted" style={{ fontSize: 'var(--fs-xs)' }}>
-              Each run is limited to {Math.round(status.limits.timeoutMs / 1000)} s and {status.limits.maxRssMb} MB of memory. Code cannot see your files or other projects; it can only read assets used in this project.
+              Each run is limited to {Math.round(status.limits.timeoutMs / 1000)} s and {status.limits.maxRssMb} MB of memory.{status.sandbox.permissionModel ? ' Code cannot see your files or other projects; it can only read assets used in this project.' : ''}
             </p>
           </>
         ) : (

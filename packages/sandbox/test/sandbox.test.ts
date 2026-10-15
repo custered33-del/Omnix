@@ -112,6 +112,26 @@ describe('JavaScript and TypeScript', () => {
     if (sb.status().networkIsolation === 'namespace') expect(text).toMatch(/ENETUNREACH|EACCES/);
   }, 60_000);
 
+  it('refuses to run code when it could read the server\'s files, unless the owner accepts that', async () => {
+    const strict = new SandboxManager(host, DEFAULT_LIMITS, { forceNoPermission: true, forceNoNamespace: true });
+    const relaxed = new SandboxManager(host, DEFAULT_LIMITS, { forceNoPermission: true, forceNoNamespace: true, requireFileIsolation: false });
+    try {
+      expect(strict.status()).toMatchObject({ canRun: false, permissionModel: false, networkIsolation: 'js-only' });
+      expect(strict.status().warnings).toHaveLength(2);
+      const refused = await strict.run({ kernelKey: 'p9:a', language: 'javascript', code: '1 + 1' });
+      expect(refused.ok).toBe(false);
+      expect(refused.outputs[0]).toMatchObject({ kind: 'error', name: 'SandboxUnavailable', message: expect.stringMatching(/OMNIX_SANDBOX_ISOLATION=best-effort/) });
+      expect(relaxed.status()).toMatchObject({ canRun: true });
+      expect(relaxed.status().warnings[0]).toMatch(/can read this server's files/);
+      expect((await relaxed.run({ kernelKey: 'p9:b', language: 'javascript', code: '1 + 1' })).outputs).toEqual([{ kind: 'result', text: '2' }]);
+    } finally {
+      strict.shutdown();
+      relaxed.shutdown();
+    }
+    // This server has both layers, so nothing to warn about.
+    if (sb.status().permissionModel && sb.status().networkIsolation === 'namespace') expect(sb.status()).toMatchObject({ canRun: true, warnings: [] });
+  }, 60_000);
+
   it('kills runaway code at the time limit and recovers', async () => {
     const quick = new SandboxManager(host, { ...DEFAULT_LIMITS, timeoutMs: 1500 });
     try {

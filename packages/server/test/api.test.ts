@@ -53,6 +53,13 @@ describe('auth', () => {
     expect(created.token).toMatch(/^omx_/);
     const viaToken = await fetch(ts.url + '/api/projects', { headers: { authorization: `Bearer ${created.token}` } });
     expect(viaToken.status).toBe(200);
+    // A read-only token cannot change anything through the REST API either.
+    const write = (token: string) => fetch(ts.url + '/api/projects', { method: 'POST', headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' }, body: JSON.stringify({ name: 'Via token', primaryTool: 'document' }) });
+    expect((await write(created.token)).status).toBe(403);
+    const proposeOnly = await json(await ts.api('/api/auth/tokens', { method: 'POST', json: { name: 'Review', scopes: ['omnix:read', 'omnix:edit'] } }));
+    expect((await write(proposeOnly.token)).status).toBe(403);
+    const full = await json(await ts.api('/api/auth/tokens', { method: 'POST', json: { name: 'Script', scopes: ['omnix:read', 'omnix:edit', 'omnix:autonomous'] } }));
+    expect((await write(full.token)).status).toBe(201);
     await ts.api(`/api/auth/tokens/${created.record.id}`, { method: 'DELETE' });
     const revoked = await fetch(ts.url + '/api/projects', { headers: { authorization: `Bearer ${created.token}` } });
     expect(revoked.status).toBe(401);
