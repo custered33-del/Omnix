@@ -51,6 +51,12 @@ a {
 a:hover {
   text-decoration: underline;
 }
+/* Links inside running text are underlined, so they don't rely on color alone. */
+p a:not(.btn),
+.feed-item .when a {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
 code,
 kbd,
 pre {

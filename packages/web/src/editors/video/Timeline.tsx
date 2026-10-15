@@ -381,11 +381,11 @@ export function Timeline({ ctx }: { ctx: TimelineCtx }) {
           const Icon = TRACK_ICON[tp.trackType];
           const upd = (set: Record<string, unknown>, label: string) => store.getState().commit({ kind: 'update', id: track.id, set }, label);
           return (
-            <div key={track.id} className="tl-head" style={{ height: TRACK_HEIGHT[tp.trackType] }} aria-selected={selectedTrack === track.id} onClick={() => ed.getState().set({ selectedTrack: track.id, inspectorTab: 'track' })}>
+            <div key={track.id} className="tl-head" style={{ height: TRACK_HEIGHT[tp.trackType] }} aria-current={selectedTrack === track.id ? 'true' : undefined} onClick={() => ed.getState().set({ selectedTrack: track.id, inspectorTab: 'track' })}>
               <Icon size={14} style={{ color: TRACK_COLORS[tp.trackType], flex: 'none' }} aria-hidden="true" />
-              <span className="name truncate" title={tp.name}>
+              <button className="name truncate" title={tp.name} aria-pressed={selectedTrack === track.id}>
                 {tp.name}
-              </span>
+              </button>
               {(tp.trackType === 'audio' || tp.trackType === 'video') && (
                 <>
                   <button className="icon-btn xs" aria-pressed={tp.muted} aria-label={`${tp.muted ? 'Unmute' : t('video.mute')} ${tp.name}`} title={t('video.mute')} disabled={!canEdit} onClick={(e) => (e.stopPropagation(), upd({ muted: !tp.muted }, tp.muted ? 'Unmute track' : 'Mute track'))}>
@@ -540,7 +540,7 @@ function ClipView({ clip, track, pps, selected, host, onDown, onMenu, onSelect }
       className={`tl-clip${track.props.muted ? ' muted-clip' : ''}`}
       role="button"
       tabIndex={0}
-      aria-selected={selected}
+      aria-pressed={selected}
       aria-label={`${label}, ${p.start.toFixed(2)} to ${(p.start + dur).toFixed(2)} seconds${p.speed !== 1 ? `, ${p.speed}x speed` : ''}`}
       style={{ left: p.start * pps, width: w, background: color, color: darkText ? '#1d1f24' : '#fff' }}
       onPointerDown={(e) => onDown(e, clip, 'body')}
@@ -600,7 +600,7 @@ function LayerBar({ layer, pps, selected, onDown }: { layer: SceneNode<'animLaye
       className="tl-clip"
       role="button"
       tabIndex={0}
-      aria-selected={selected}
+      aria-pressed={selected}
       aria-label={`${p.name}, ${p.frames.length} frames, ${p.start.toFixed(2)} to ${(p.start + p.duration).toFixed(2)} seconds`}
       style={{ left: p.start * pps, width: Math.max(4, p.duration * pps), background: TRACK_COLORS.animation, opacity: p.visible ? 1 : 0.5 }}
       onPointerDown={(e) => onDown(e, layer, 'body')}

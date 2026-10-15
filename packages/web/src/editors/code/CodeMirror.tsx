@@ -1,4 +1,5 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useId, useRef } from 'react';
+import { t } from '../../i18n/index.js';
 import { Annotation, EditorState, Compartment, RangeSet, StateEffect, StateField, type Extension, type Range } from '@codemirror/state';
 import { EditorView, keymap, lineNumbers, highlightActiveLine, highlightActiveLineGutter, drawSelection, dropCursor, placeholder as cmPlaceholder, gutter, GutterMarker, Decoration, WidgetType, type DecorationSet } from '@codemirror/view';
 import { defaultKeymap, history, historyKeymap, indentWithTab } from '@codemirror/commands';
@@ -195,6 +196,7 @@ export interface CodeMirrorProps {
  */
 export function CodeMirror(props: CodeMirrorProps) {
   const host = useRef<HTMLDivElement>(null);
+  const hintId = useId();
   const view = useRef<EditorView | null>(null);
   const cb = useRef(props);
   cb.current = props;
@@ -252,7 +254,8 @@ export function CodeMirror(props: CodeMirrorProps) {
         langComp.current.of(languageExtension(props.language)),
         roComp.current.of(EditorState.readOnly.of(!!props.readOnly)),
         ...(props.placeholder ? [cmPlaceholder(props.placeholder)] : []),
-        EditorView.contentAttributes.of({ 'aria-label': props.label }),
+        // Tab indents, so say how to leave: CodeMirror moves focus on Tab right after Escape.
+        EditorView.contentAttributes.of({ 'aria-label': props.label, 'aria-describedby': hintId }),
         EditorView.updateListener.of((u) => {
           if (u.docChanged && u.transactions.some((tr) => !tr.annotation(External))) cb.current.onChange?.(u.state.doc.toString());
           if (u.focusChanged && u.view.hasFocus) cb.current.onFocus?.();
@@ -327,5 +330,12 @@ export function CodeMirror(props: CodeMirrorProps) {
     v.dispatch({ changes: { from: start, to: endA, insert: props.value.slice(start, endB) }, annotations: External.of(true) });
   }, [props.value]);
 
-  return <div ref={host} className={props.compact ? 'cm-compact' : 'cm-full'} style={props.compact ? undefined : { height: '100%' }} />;
+  return (
+    <>
+      <div ref={host} className={props.compact ? 'cm-compact' : 'cm-full'} style={props.compact ? undefined : { height: '100%' }} />
+      <span id={hintId} className="sr-only">
+        {t('code.tabHint')}
+      </span>
+    </>
+  );
 }

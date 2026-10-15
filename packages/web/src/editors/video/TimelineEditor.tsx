@@ -315,10 +315,10 @@ function TimelineToolbar({ ctx, onCaptions }: { ctx: TimelineCtx; onCaptions: ()
         </button>
       )}
       <div className="segmented" role="tablist" aria-label="Bottom panel">
-        <button role="tab" aria-selected={bottom === 'timeline'} aria-pressed={bottom === 'timeline'} onClick={() => ed.getState().set({ bottom: 'timeline' })}>
+        <button role="tab" aria-selected={bottom === 'timeline'} onClick={() => ed.getState().set({ bottom: 'timeline' })}>
           <GanttChart size={15} /> Timeline
         </button>
-        <button role="tab" aria-selected={bottom === 'mixer'} aria-pressed={bottom === 'mixer'} onClick={() => ed.getState().set({ bottom: 'mixer' })}>
+        <button role="tab" aria-selected={bottom === 'mixer'} onClick={() => ed.getState().set({ bottom: 'mixer' })}>
           <SlidersVertical size={15} /> {t('video.mixer')}
         </button>
       </div>

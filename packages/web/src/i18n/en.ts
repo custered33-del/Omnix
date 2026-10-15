@@ -126,6 +126,7 @@ export const en = {
     aiAllowed: 'Allow AI on this project',
     aiAllowedHint: 'Claude can read and edit this project only while this is on. Every AI change is logged and can be undone.',
     aiOff: 'AI is off for this project',
+    aiOffShort: 'AI off',
     permission: 'Permission for {name}',
     allProjects: 'All projects',
     someProjects_one: '{count} project',
@@ -346,7 +347,10 @@ export const en = {
     split: 'Split clip at playhead',
     frameNext: 'Next frame',
     framePrev: 'Previous frame',
-    run: 'Run cell or file',
+    run: 'Run the cell and move to the next',
+    runFile: 'Run the file or cell',
+    leaveCode: 'Move focus out of the code editor',
+    escThenTab: 'Esc, then Tab',
     nudge: 'Nudge by 1 pixel (Shift: 10)',
   },
   palette: {
@@ -902,6 +906,7 @@ export const en = {
     },
   },
   code: {
+    tabHint: 'Tab indents. To move focus out of the editor, press Escape and then Tab.',
     files: 'Files',
     newFile: 'New file',
     notebook: 'Notebook',

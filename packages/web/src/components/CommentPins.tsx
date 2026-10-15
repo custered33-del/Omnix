@@ -66,7 +66,7 @@ export function PinLayer({ pins, composer, onCompose, onCancelCompose, label }: 
   }, [focus?.seq]);
   const numbered = pins.map((p, i) => ({ ...p, n: i + 1 }));
   return (
-    <div className="pin-layer" aria-label={label}>
+    <div className="pin-layer" role="group" aria-label={label}>
       {numbered.map((p) => (
         <div key={p.comment.id} className="pin-wrap" style={{ left: p.x, top: p.y }}>
           <button

@@ -206,10 +206,10 @@ export function SlidesEditor({ deckId }: { deckId: string }) {
           <SlideStage ctx={ctx} />
           <div className="slides-bottom">
             <div className="segmented" role="tablist" aria-label="Bottom panel" style={{ margin: '6px 10px' }}>
-              <button role="tab" aria-selected={bottom === 'notes'} aria-pressed={bottom === 'notes'} onClick={() => setBottom('notes')}>
+              <button role="tab" aria-selected={bottom === 'notes'} onClick={() => setBottom('notes')}>
                 Speaker notes
               </button>
-              <button role="tab" aria-selected={bottom === 'build'} aria-pressed={bottom === 'build'} onClick={() => setBottom('build')}>
+              <button role="tab" aria-selected={bottom === 'build'} onClick={() => setBottom('build')}>
                 Animations
               </button>
             </div>

@@ -47,7 +47,7 @@
 .btn-ai {
   background: var(--ai);
   border-color: var(--ai);
-  color: #fff;
+  color: var(--ai-fg);
 }
 .btn-ai:hover:not(:disabled) {
   filter: brightness(1.08);
@@ -265,7 +265,8 @@
   font-size: var(--fs-sm);
   font-weight: 550;
 }
-.segmented button[aria-pressed='true'] {
+.segmented button[aria-pressed='true'],
+.segmented button[aria-selected='true'] {
   background: var(--surface);
   color: var(--text);
   box-shadow: var(--shadow-1);
@@ -417,6 +418,7 @@
 }
 .avatar.ai {
   background: var(--ai);
+  color: var(--ai-fg);
 }
 
 kbd,

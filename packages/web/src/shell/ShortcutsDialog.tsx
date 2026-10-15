@@ -52,7 +52,14 @@ const GROUPS: { title: MessageKey; items: [string, MessageKey][] }[] = [
       ['←', 'shortcuts.framePrev'],
     ],
   },
-  { title: 'shortcuts.code', items: [['shift+enter', 'shortcuts.run']] },
+  {
+    title: 'shortcuts.code',
+    items: [
+      ['mod+enter', 'shortcuts.runFile'],
+      ['shift+enter', 'shortcuts.run'],
+      ['esc-tab', 'shortcuts.leaveCode'],
+    ],
+  },
 ];
 
 export function ShortcutsDialog() {
@@ -72,7 +79,7 @@ export function ShortcutsDialog() {
                 <div key={k} style={{ display: 'contents' }}>
                   <dt style={{ color: 'var(--text)' }}>{t(label)}</dt>
                   <dd>
-                    <kbd>{k === 'arrows' ? '← ↑ → ↓' : formatShortcut(k)}</kbd>
+                    <kbd>{k === 'arrows' ? '← ↑ → ↓' : k === 'esc-tab' ? t('shortcuts.escThenTab') : formatShortcut(k)}</kbd>
                   </dd>
                 </div>
               ))}

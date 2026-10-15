@@ -1,7 +1,7 @@
 import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { useStore } from 'zustand';
-import { ArrowLeft, Undo2, Redo2, History, Sparkles, NotebookPen, Download, Settings2, Plus, Activity as ActivityIcon, Eye, X, Bookmark, Wand2, Bot, MessageSquare, MessageSquarePlus } from 'lucide-react';
+import { ArrowLeft, Check, LoaderCircle, Undo2, Redo2, History, Sparkles, NotebookPen, Download, Settings2, Plus, Activity as ActivityIcon, Eye, X, Bookmark, Wand2, Bot, MessageSquare, MessageSquarePlus } from 'lucide-react';
 import { primaryDocumentNodes, childrenOf, type SceneNode, type ToolKind } from '@omnix/core';
 import { createProjectStore, ProjectContext, useProject, type ProjectStore } from '../state/project.js';
 import { BrowserRenderHost } from '../render/browserHost.js';
@@ -227,17 +227,20 @@ function ProjectView({ store }: { store: ProjectStore }) {
         <IconButton label={t('nav.home')} onClick={() => (window.location.href = '/')}>
           <ArrowLeft />
         </IconButton>
+        <h1 className="sr-only">{meta.name}</h1>
         <ProjectTitle name={meta.name} editable={meta.role !== 'viewer'} onRename={(name) => void api.updateMeta({ name })} />
-        <nav className="doc-tabs" role="tablist" aria-label={t('project.documents')}>
+        <nav className="doc-tabs" aria-label={t('project.documents')}>
+          <div className="doc-tabs-list" role="tablist" aria-label={t('project.documents')}>
           {docs.map((d) => {
             const k = toolOfDoc(d)!;
             return (
-              <button key={d.id} role="tab" className="doc-tab" aria-selected={d.id === activeDocId} onClick={() => api.setActiveDoc(d.id)}>
-                <ToolIcon tool={k} style={{ color: TOOL_COLORS[k] }} />
-                {docName(d)}
+              <button key={d.id} role="tab" className="doc-tab" aria-selected={d.id === activeDocId} onClick={() => api.setActiveDoc(d.id)} title={docName(d)}>
+                <ToolIcon tool={k} style={{ color: TOOL_COLORS[k], flex: 'none' }} />
+                <span className="truncate">{docName(d)}</span>
               </button>
             );
           })}
+          </div>
           {meta.role !== 'viewer' && (
             <MenuButton
               label={t('project.addDocument')}
@@ -252,8 +255,9 @@ function ProjectView({ store }: { store: ProjectStore }) {
         </nav>
         <div className="spacer" />
         {conn !== 'open' && <span className="conn-dot">{t('app.offline')}</span>}
-        <span className="muted" style={{ fontSize: 'var(--fs-sm)', whiteSpace: 'nowrap' }} role="status" aria-live="polite">
-          {meta.role === 'viewer' ? t('project.readOnly') : pending ? t('project.saving') : t('project.saved')}
+        <span className="save-status muted" role="status" aria-live="polite" title={meta.role === 'viewer' ? t('project.readOnly') : pending ? t('project.saving') : t('project.saved')}>
+          {meta.role === 'viewer' ? <Eye aria-hidden="true" /> : pending ? <LoaderCircle className="spin" aria-hidden="true" /> : <Check aria-hidden="true" />}
+          <span className="label-wide">{meta.role === 'viewer' ? t('project.readOnly') : pending ? t('project.saving') : t('project.saved')}</span>
         </span>
         {others.length > 0 && (
           <div className="presence" aria-label="People here">
@@ -263,8 +267,8 @@ function ProjectView({ store }: { store: ProjectStore }) {
           </div>
         )}
         {!meta.aiConsent && (
-          <button className="badge" onClick={() => setSettingsOpen(true)} style={{ border: 'none', cursor: 'pointer' }}>
-            {t('claude.aiOff')}
+          <button className="badge" onClick={() => setSettingsOpen(true)} style={{ border: 'none', cursor: 'pointer', whiteSpace: 'nowrap' }} title={t('claude.aiOff')}>
+            {t('claude.aiOffShort')}
           </button>
         )}
         <IconButton label={t('project.undo')} shortcut={formatShortcut('mod+z')} onClick={() => void api.undo()} disabled={meta.role === 'viewer'}>
@@ -330,6 +334,7 @@ function ProjectView({ store }: { store: ProjectStore }) {
             </div>
           )}
           <main id="main" style={{ flex: 1, minHeight: 0, position: 'relative' }}>
+            {active && <h2 className="sr-only">{docName(active)}</h2>}
             <Suspense fallback={<div style={{ display: 'grid', placeItems: 'center', height: '100%' }}><Spinner /></div>}>
               {active && tool === 'image' && <ImageEditor key={active.id} canvasId={active.id} />}
               {active && (tool === 'video' || tool === 'animation') && <TimelineEditor key={active.id} sequenceId={active.id} />}
@@ -416,6 +421,7 @@ function ProjectTitle({ name, editable, onRename }: { name: string; editable: bo
     <input
       className="title-input"
       value={value}
+      size={Math.max(6, Math.min(32, value.length + 1))}
       aria-label={t('project.rename')}
       onChange={(e) => setValue(e.target.value)}
       onBlur={() => value.trim() && value !== name && onRename(value.trim())}

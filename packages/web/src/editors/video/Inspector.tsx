@@ -50,7 +50,7 @@ export function Inspector({ ctx }: { ctx: TimelineCtx }) {
     <aside className="tl-inspector" aria-label={t('video.inspector')}>
       <div className="segmented" role="tablist" style={{ margin: 12 }} aria-label={t('video.inspector')}>
         {(['clip', 'track', 'sequence'] as const).map((k) => (
-          <button key={k} role="tab" aria-selected={tab === k} aria-pressed={tab === k} onClick={() => ctx.ed.getState().set({ inspectorTab: k })}>
+          <button key={k} role="tab" aria-selected={tab === k} onClick={() => ctx.ed.getState().set({ inspectorTab: k })}>
             {k === 'clip' ? 'Clip' : k === 'track' ? 'Track' : 'Sequence'}
           </button>
         ))}

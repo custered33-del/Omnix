@@ -394,6 +394,29 @@
   border-radius: var(--r-sm);
   max-width: 260px;
 }
+.save-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: var(--fs-sm);
+  white-space: nowrap;
+}
+.save-status svg {
+  width: 14px;
+  height: 14px;
+}
+/* Below this width the save status is just its icon; the words stay for screen readers and as a tooltip. */
+@media (max-width: 1500px) {
+  .label-wide {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+  }
+}
 .workbar .title-input:hover {
   border-color: var(--border);
 }
@@ -408,6 +431,22 @@
   overflow-x: auto;
   min-width: 0;
   margin-left: var(--sp-2);
+}
+.doc-tabs-list {
+  display: flex;
+  gap: 2px;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+.doc-tabs > :not(.doc-tabs-list) {
+  flex: none;
+}
+/* Many documents share the bar: tabs shrink to their icon and a few letters before the list scrolls. */
+.doc-tabs-list .doc-tab {
+  flex: 0 1 auto;
+  min-width: 64px;
+  max-width: 200px;
 }
 .doc-tab {
   display: inline-flex;
@@ -427,7 +466,8 @@
 .doc-tab:hover {
   background: var(--surface-2);
 }
-.doc-tab[aria-selected='true'] {
+.doc-tab[aria-selected='true'],
+.doc-tab[aria-current='true'] {
   background: var(--surface-2);
   color: var(--text);
 }
@@ -615,7 +655,8 @@
 .layer-row:hover {
   background: var(--surface-2);
 }
-.layer-row[aria-selected='true'] {
+.layer-row[aria-selected='true'],
+.layer-row[aria-current='true'] {
   background: var(--accent-soft);
 }
 .layer-row.drop-before {

@@ -94,9 +94,11 @@ export function AnimationPanel({ ctx }: { ctx: TimelineCtx }) {
       </div>
       <ul className="layer-list" style={{ padding: '4px 8px' }} aria-label={t('anim.layers')}>
         {layers.map((l) => (
-          <li key={l.id} className="layer-row" aria-selected={l.id === layer?.id} onClick={() => ed.getState().set({ selectedClips: [l.id], inspectorTab: 'clip' })} style={{ minHeight: 32 }}>
-            <Layers size={14} aria-hidden="true" />
-            <span className="name truncate">{l.props.name}</span>
+          <li key={l.id} className="layer-row" aria-current={l.id === layer?.id ? 'true' : undefined} style={{ minHeight: 32 }}>
+            <button className="row-name" aria-pressed={l.id === layer?.id} onClick={() => ed.getState().set({ selectedClips: [l.id], inspectorTab: 'clip' })}>
+              <Layers size={14} aria-hidden="true" />
+              <span className="name truncate">{l.props.name}</span>
+            </button>
             <button className="icon-btn xs" aria-label={`${l.props.visible ? 'Hide' : 'Show'} ${l.props.name}`} disabled={!canEdit} onClick={(e) => (e.stopPropagation(), s.commit({ kind: 'update', id: l.id, set: { visible: !l.props.visible } }, 'Toggle layer'))}>
               {l.props.visible ? <Eye /> : <EyeOff />}
             </button>

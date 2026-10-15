@@ -217,7 +217,7 @@ export function CodeEditor({ workspaceId }: { workspaceId: string }) {
                     }}
                   />
                 ) : (
-                  <button className="file-row" aria-selected={active === n.id} onClick={() => open(n.id)} title={label}>
+                  <button className="file-row" aria-current={active === n.id ? 'true' : undefined} onClick={() => open(n.id)} title={label}>
                     {n.type === 'codeFile' ? <FileCode /> : <BookOpen />}
                     <span className="truncate grow">{label}</span>
                     {n.type === 'codeFile' && ws.props.entry === label && <span className="badge" style={{ fontSize: 10 }}>entry</span>}
@@ -263,14 +263,14 @@ export function CodeEditor({ workspaceId }: { workspaceId: string }) {
       </aside>
 
       <div className="code-main">
-        <div className="code-tabs" role="tablist" aria-label="Open files">
+        <div className="code-tabs" role="group" aria-label="Open files">
           {tabs.map((id) => {
             const n = state.nodes[id];
             if (!n) return null;
             const label = n.type === 'codeFile' ? (n as SceneNode<'codeFile'>).props.path : (n as SceneNode<'notebook'>).props.name;
             return (
               <div key={id} className="row" style={{ gap: 0 }}>
-                <button role="tab" className="doc-tab" aria-selected={active === id} onClick={() => setActive(id)}>
+                <button className="doc-tab" aria-current={active === id ? 'true' : undefined} onClick={() => setActive(id)}>
                   {n.type === 'codeFile' ? <FileCode /> : <BookOpen />}
                   {label}
                 </button>
@@ -287,7 +287,7 @@ export function CodeEditor({ workspaceId }: { workspaceId: string }) {
             </button>
           )}
         </div>
-        <div className={`code-pane${commentMode ? ' commenting' : ''}`} role="tabpanel" ref={paneRef} style={{ position: 'relative' }}>
+        <div className={`code-pane${commentMode ? ' commenting' : ''}`} ref={paneRef} style={{ position: 'relative' }}>
           {activeNode?.type === 'codeFile' && (
             <CodeMirror
               key={activeNode.id}
@@ -344,13 +344,13 @@ export function CodeEditor({ workspaceId }: { workspaceId: string }) {
 
       <aside className="code-side" aria-label="Terminal and history">
         <div className="segmented" role="tablist" style={{ margin: 8 }}>
-          <button role="tab" aria-selected={side === 'terminal'} aria-pressed={side === 'terminal'} onClick={() => setSide('terminal')}>
+          <button role="tab" aria-selected={side === 'terminal'} onClick={() => setSide('terminal')}>
             <TerminalIcon size={14} /> {t('code.terminal')}
           </button>
-          <button role="tab" aria-selected={side === 'history'} aria-pressed={side === 'history'} onClick={() => setSide('history')}>
+          <button role="tab" aria-selected={side === 'history'} onClick={() => setSide('history')}>
             <GitCommitHorizontal size={14} /> History
           </button>
-          <button role="tab" aria-selected={side === 'sandbox'} aria-pressed={side === 'sandbox'} onClick={() => setSide('sandbox')}>
+          <button role="tab" aria-selected={side === 'sandbox'} onClick={() => setSide('sandbox')}>
             <Shield size={14} /> {t('code.sandbox')}
           </button>
         </div>

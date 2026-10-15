@@ -349,7 +349,25 @@
   min-width: 0;
   font-weight: 550;
 }
-.tl-head[aria-selected='true'] {
+.tl-head .name,
+.layer-row .row-name {
+  border: none;
+  background: none;
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.layer-row .row-name {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+  min-width: 0;
+  align-self: stretch;
+}
+.tl-head[aria-current='true'] {
   background: var(--accent-soft);
 }
 .tl-lanes {
@@ -399,7 +417,7 @@
 .tl-clip:focus-visible {
   box-shadow: var(--focus-ring);
 }
-.tl-clip[aria-selected='true'] {
+.tl-clip[aria-pressed='true'] {
   box-shadow: inset 0 0 0 2px #fff, 0 0 0 2px var(--accent);
   z-index: 2;
 }
@@ -408,14 +426,17 @@
 }
 .tl-clip .clip-label {
   position: absolute;
-  left: 6px;
-  top: 3px;
-  right: 6px;
+  left: 4px;
+  top: 2px;
+  max-width: calc(100% - 8px);
+  padding: 0 4px;
+  border-radius: 3px;
+  /* A dark backing keeps white names readable on every clip color. */
+  background: rgba(0, 0, 0, 0.4);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
   font-weight: 600;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.45);
   pointer-events: none;
   z-index: 2;
 }
@@ -639,7 +660,7 @@
 .file-row:hover {
   background: var(--surface-2);
 }
-.file-row[aria-selected='true'] {
+.file-row[aria-current='true'] {
   background: var(--accent-soft);
   color: var(--text);
 }
@@ -694,6 +715,9 @@
   line-height: 1.5;
   white-space: pre-wrap;
   word-break: break-word;
+}
+.terminal .muted {
+  color: #a3a7b0;
 }
 .terminal .err {
   color: #ff8a80;

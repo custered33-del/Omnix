@@ -6,7 +6,7 @@
   --code-keyword: #8e3fbf;
   --code-string: #2f7d32;
   --code-number: #b35900;
-  --code-comment: #7a7870;
+  --code-comment: #5f5d56;
   --code-function: #2a5bd7;
   --code-type: #a2501f;
   --code-property: #1f6f8b;
@@ -25,10 +25,11 @@
   --accent-fg: #ffffff;
   --accent-soft: #e8edfc;
   --ai: #6a48d7;
+  --ai-fg: #ffffff;
   --ai-soft: #efeafd;
   --success: #2b8a3e;
   --success-soft: #e6f4ea;
-  --warning: #b35c00;
+  --warning: #9a4f00;
   --warning-soft: #fff1dc;
   --danger: #c92a2a;
   --danger-soft: #fdecec;
@@ -98,6 +99,7 @@
     --accent-fg: #0f1220;
     --accent-soft: #232a45;
     --ai: #a58cff;
+    --ai-fg: #14101f;
     --ai-soft: #2a2442;
     --success: #5fcf7a;
     --success-soft: #1c2f22;
@@ -140,6 +142,7 @@
   --accent-fg: #0f1220;
   --accent-soft: #232a45;
   --ai: #a58cff;
+  --ai-fg: #14101f;
   --ai-soft: #2a2442;
   --success: #5fcf7a;
   --success-soft: #1c2f22;
@@ -182,6 +185,7 @@
   --accent-fg: #000000;
   --accent-soft: #332b00;
   --ai: #ffd400;
+  --ai-fg: #000000;
   --ai-soft: #332b00;
   --success: #7dff9b;
   --success-soft: #002b0d;

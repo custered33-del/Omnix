@@ -169,7 +169,7 @@ test('setup guide: seven steps, saved progress, the connection test and the samp
   await page.getByRole('button', { name: /Open the sample/ }).click();
   await page.waitForSelector('.slides-editor');
   await expect(page.locator('.sorter-item')).toHaveCount(3);
-  await expect(page.getByText('AI is off for this project')).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'AI off', exact: true })).toHaveCount(0);
 
   // The dashboard tour.
   await page.goto('/?tour=1');

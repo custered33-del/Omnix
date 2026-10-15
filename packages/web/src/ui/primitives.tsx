@@ -253,7 +253,8 @@ export function Tooltip(props: { label: string; shortcut?: string; children: (ha
       {props.children({ onMouseEnter: (e) => show(e.currentTarget), onMouseLeave: hide, onFocus: (e) => show(e.currentTarget), onBlur: hide })}
       {anchor &&
         createPortal(
-          <div className="tooltip" role="tooltip" style={{ left: Math.min(window.innerWidth - 200, Math.max(8, anchor.left + anchor.width / 2 - 40)), top: anchor.bottom + 6 }}>
+          // Visual only: it repeats the control's own accessible name. Shortcuts are listed in the shortcuts dialog.
+          <div className="tooltip" aria-hidden="true" style={{ left: Math.min(window.innerWidth - 200, Math.max(8, anchor.left + anchor.width / 2 - 40)), top: anchor.bottom + 6 }}>
             {props.label}
             {props.shortcut && <span style={{ opacity: 0.7, marginLeft: 8 }}>{props.shortcut}</span>}
           </div>,

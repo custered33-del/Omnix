@@ -38,7 +38,7 @@ export function SlideInspector({ ctx }: { ctx: SlidesCtx }) {
     <aside className="inspector slide-inspector" aria-label="Inspector">
       <div className="segmented" role="tablist" style={{ margin: 12 }} aria-label="Inspector">
         {(['element', 'slide', 'deck'] as const).map((k) => (
-          <button key={k} role="tab" aria-selected={tab === k} aria-pressed={tab === k} onClick={() => ctx.ed.getState().set({ inspectorTab: k })}>
+          <button key={k} role="tab" aria-selected={tab === k} onClick={() => ctx.ed.getState().set({ inspectorTab: k })}>
             {k === 'element' ? 'Element' : k === 'slide' ? 'Slide' : 'Theme'}
           </button>
         ))}
