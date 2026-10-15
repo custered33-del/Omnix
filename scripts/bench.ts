@@ -8,7 +8,7 @@ import path from 'node:path';
 import fs from 'node:fs/promises';
 import { performance } from 'node:perf_hooks';
 import { applyOp, assetRefs, compareVersions, createProjectState, diffLines, diffStates, insertBlocksOps, layerProps, makeNode, newSlideOps, nodesOfType, outlineProject, ProjectSession, type Operation, type ProjectState } from '../packages/core/src/index.js';
-import { createRaster, pixelDiff } from '../packages/imaging/src/index.js';
+import { createRaster, gaussianBlur, pixelDiff } from '../packages/imaging/src/index.js';
 import { createOmnix } from '../packages/server/src/app.js';
 import '../packages/server/src/modules.js';
 import { renderNodeCanvas } from '../packages/server/src/render/renderNode.js';
@@ -70,6 +70,9 @@ async function main() {
   const r2 = createRaster(1920, 1080, [40, 80, 160, 255]);
   for (let i = 0; i < r2.data.length; i += 4 * 7) r2.data[i] = 200;
   await time('pixel diff of two 1920x1080 pictures', () => pixelDiff(r1, r2).changed);
+  const square = createRaster(1080, 1080, [245, 159, 0, 255]);
+  await time('blur a 1080x1080 picture, radius 6', () => gaussianBlur(square, 6).width);
+  await time('blur a 1080x1080 picture, radius 130', () => gaussianBlur(square, 130).width);
 
   // Server: rendering and the library.
   const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), 'omnix-bench-'));

@@ -17,16 +17,21 @@ function gaussianKernel(sigma: number): Float32Array {
 
 /**
  * Separable Gaussian blur on premultiplied alpha (no dark fringes around transparent edges).
- * `radius` is in pixels (sigma = radius / 2).
+ * `radius` is in pixels (sigma = radius / 2). Small radii use the exact kernel; large ones three
+ * box blurs, which match a Gaussian closely and cost the same at any radius.
  */
 export function gaussianBlur(r: Raster, radius: number): Raster {
   if (radius <= 0.25) return cloneRaster(r);
   const sigma = Math.max(0.3, radius / 2);
-  const k = gaussianKernel(sigma);
-  const kr = (k.length - 1) / 2;
-  const { width: w, height: h } = r;
-  const n = w * h;
-  // premultiply into float buffer
+  const src = premultiply(r);
+  return radius > EXACT_BLUR_MAX_RADIUS ? unpremultiply(boxBlurGauss(src, r.width, r.height, sigma), r.width, r.height) : exactBlur(src, r.width, r.height, sigma);
+}
+
+/** Up to this radius the exact kernel is cheap enough and keeps fine detail exact. */
+export const EXACT_BLUR_MAX_RADIUS = 3;
+
+function premultiply(r: Raster): Float32Array {
+  const n = r.width * r.height;
   const src = new Float32Array(n * 4);
   for (let i = 0; i < n * 4; i += 4) {
     const a = r.data[i + 3]! / 255;
@@ -35,51 +40,147 @@ export function gaussianBlur(r: Raster, radius: number): Raster {
     src[i + 2] = r.data[i + 2]! * a;
     src[i + 3] = r.data[i + 3]!;
   }
-  const tmp = new Float32Array(n * 4);
+  return src;
+}
+
+function unpremultiply(buf: Float32Array, w: number, h: number): Raster {
+  const out = createRaster(w, h);
+  for (let o = 0; o < w * h * 4; o += 4) {
+    const a3 = buf[o + 3]!;
+    const alpha = a3 / 255;
+    out.data[o] = alpha > 0 ? buf[o]! / alpha : 0;
+    out.data[o + 1] = alpha > 0 ? buf[o + 1]! / alpha : 0;
+    out.data[o + 2] = alpha > 0 ? buf[o + 2]! / alpha : 0;
+    out.data[o + 3] = a3;
+  }
+  return out;
+}
+
+/** Box widths whose three passes approximate a Gaussian of this sigma. */
+function boxSizes(sigma: number, passes = 3): number[] {
+  const ideal = Math.sqrt((12 * sigma * sigma) / passes + 1);
+  let lower = Math.floor(ideal);
+  if (lower % 2 === 0) lower--;
+  const upper = lower + 2;
+  const m = Math.round((12 * sigma * sigma - passes * lower * lower - 4 * passes * lower - 3 * passes) / (-4 * lower - 4));
+  return Array.from({ length: passes }, (_, i) => (i < m ? lower : upper));
+}
+
+/** One horizontal box pass of radius r over RGBA rows, edges clamped like the exact kernel. */
+function boxPassH(src: Float32Array, dst: Float32Array, w: number, h: number, r: number): void {
+  const scale = 1 / (2 * r + 1);
   for (let y = 0; y < h; y++) {
+    const row = y * w * 4;
+    const end = row + (w - 1) * 4;
+    let a0 = src[row]! * (r + 1);
+    let a1 = src[row + 1]! * (r + 1);
+    let a2 = src[row + 2]! * (r + 1);
+    let a3 = src[row + 3]! * (r + 1);
+    for (let j = 1; j <= r; j++) {
+      const i = row + Math.min(w - 1, j) * 4;
+      a0 += src[i]!;
+      a1 += src[i + 1]!;
+      a2 += src[i + 2]!;
+      a3 += src[i + 3]!;
+    }
+    for (let x = 0; x < w; x++) {
+      const o = row + x * 4;
+      dst[o] = a0 * scale;
+      dst[o + 1] = a1 * scale;
+      dst[o + 2] = a2 * scale;
+      dst[o + 3] = a3 * scale;
+      const add = x + r + 1 < w ? row + (x + r + 1) * 4 : end;
+      const sub = x - r > 0 ? row + (x - r) * 4 : row;
+      a0 += src[add]! - src[sub]!;
+      a1 += src[add + 1]! - src[sub + 1]!;
+      a2 += src[add + 2]! - src[sub + 2]!;
+      a3 += src[add + 3]! - src[sub + 3]!;
+    }
+  }
+}
+
+/** One vertical box pass, a row at a time with a running sum per column (reads stay sequential). */
+function boxPassV(src: Float32Array, dst: Float32Array, w: number, h: number, r: number, acc: Float64Array): void {
+  const scale = 1 / (2 * r + 1);
+  const stride = w * 4;
+  for (let i = 0; i < stride; i++) acc[i] = src[i]! * (r + 1);
+  for (let j = 1; j <= r; j++) {
+    const row = Math.min(h - 1, j) * stride;
+    for (let i = 0; i < stride; i++) acc[i]! += src[row + i]!;
+  }
+  for (let y = 0; y < h; y++) {
+    const row = y * stride;
+    const add = Math.min(h - 1, y + r + 1) * stride;
+    const sub = Math.max(0, y - r) * stride;
+    for (let i = 0; i < stride; i++) {
+      dst[row + i] = acc[i]! * scale;
+      acc[i]! += src[add + i]! - src[sub + i]!;
+    }
+  }
+}
+
+function boxBlurGauss(src: Float32Array, w: number, h: number, sigma: number): Float32Array {
+  let a: Float32Array = src;
+  let b: Float32Array = new Float32Array(src.length);
+  const acc = new Float64Array(w * 4);
+  for (const size of boxSizes(sigma)) {
+    const r = (size - 1) / 2;
+    boxPassH(a, b, w, h, r);
+    [a, b] = [b, a];
+    boxPassV(a, b, w, h, r, acc);
+    [a, b] = [b, a];
+  }
+  return a;
+}
+
+/** The exact separable Gaussian on a premultiplied buffer. */
+export function exactBlur(src: Float32Array, w: number, h: number, sigma: number): Raster {
+  const k = gaussianKernel(sigma);
+  const kr = (k.length - 1) / 2;
+  const stride = w * 4;
+  const tmp = new Float32Array(w * h * 4);
+  // Rows: taps need clamping only near the left and right edges.
+  for (let y = 0; y < h; y++) {
+    const row = y * stride;
     for (let x = 0; x < w; x++) {
       let a0 = 0;
       let a1 = 0;
       let a2 = 0;
       let a3 = 0;
+      const inside = x >= kr && x < w - kr;
       for (let j = -kr; j <= kr; j++) {
-        const xx = Math.min(w - 1, Math.max(0, x + j));
-        const i = (y * w + xx) * 4;
+        const i = row + (inside ? x + j : Math.min(w - 1, Math.max(0, x + j))) * 4;
         const kv = k[j + kr]!;
         a0 += src[i]! * kv;
         a1 += src[i + 1]! * kv;
         a2 += src[i + 2]! * kv;
         a3 += src[i + 3]! * kv;
       }
-      const o = (y * w + x) * 4;
+      const o = row + x * 4;
       tmp[o] = a0;
       tmp[o + 1] = a1;
       tmp[o + 2] = a2;
       tmp[o + 3] = a3;
     }
   }
+  // Columns, a whole row at a time so reads stay sequential.
   const out = createRaster(w, h);
+  const acc = new Float32Array(stride);
   for (let y = 0; y < h; y++) {
-    for (let x = 0; x < w; x++) {
-      let a0 = 0;
-      let a1 = 0;
-      let a2 = 0;
-      let a3 = 0;
-      for (let j = -kr; j <= kr; j++) {
-        const yy = Math.min(h - 1, Math.max(0, y + j));
-        const i = (yy * w + x) * 4;
-        const kv = k[j + kr]!;
-        a0 += tmp[i]! * kv;
-        a1 += tmp[i + 1]! * kv;
-        a2 += tmp[i + 2]! * kv;
-        a3 += tmp[i + 3]! * kv;
-      }
-      const o = (y * w + x) * 4;
+    acc.fill(0);
+    for (let j = -kr; j <= kr; j++) {
+      const base = Math.min(h - 1, Math.max(0, y + j)) * stride;
+      const kv = k[j + kr]!;
+      for (let i = 0; i < stride; i++) acc[i]! += tmp[base + i]! * kv;
+    }
+    const row = y * stride;
+    for (let i = 0; i < stride; i += 4) {
+      const a3 = acc[i + 3]!;
       const alpha = a3 / 255;
-      out.data[o] = alpha > 0 ? a0 / alpha : 0;
-      out.data[o + 1] = alpha > 0 ? a1 / alpha : 0;
-      out.data[o + 2] = alpha > 0 ? a2 / alpha : 0;
-      out.data[o + 3] = a3;
+      out.data[row + i] = alpha > 0 ? acc[i]! / alpha : 0;
+      out.data[row + i + 1] = alpha > 0 ? acc[i + 1]! / alpha : 0;
+      out.data[row + i + 2] = alpha > 0 ? acc[i + 2]! / alpha : 0;
+      out.data[row + i + 3] = a3;
     }
   }
   return out;

@@ -11,6 +11,8 @@ import {
   lutFromFunction,
   applyLut3D,
   gaussianBlur,
+  exactBlur,
+  EXACT_BLUR_MAX_RADIUS,
   applyFilter,
   FILTER_DEFAULTS,
   blendPixel,
@@ -126,6 +128,42 @@ describe('filters', () => {
     const edge = getPixel(hb, 4, 4);
     expect(edge[0]).toBeGreaterThan(240);
     expect(edge[3]).toBeLessThan(255);
+  });
+
+  it('blurs with large radii quickly and close to an exact Gaussian', () => {
+    // A soft-edged disc on transparent pixels, like a glow layer.
+    const w = 160;
+    const r = createRaster(w, w);
+    for (let y = 0; y < w; y++) for (let x = 0; x < w; x++) if ((x - 80) ** 2 + (y - 80) ** 2 < 40 ** 2) setPixel(r, x, y, [245, 159, 0, 255]);
+    for (const radius of [EXACT_BLUR_MAX_RADIUS + 1, 24, 40]) {
+      const fast = gaussianBlur(r, radius);
+      const pre = new Float32Array(w * w * 4);
+      for (let i = 0; i < pre.length; i += 4) {
+        const a = r.data[i + 3]! / 255;
+        pre.set([r.data[i]! * a, r.data[i + 1]! * a, r.data[i + 2]! * a, r.data[i + 3]!], i);
+      }
+      const exact = exactBlur(pre, w, w, radius / 2);
+      let worstAlpha = 0;
+      let total = 0;
+      for (let i = 3; i < fast.data.length; i += 4) {
+        const d = Math.abs(fast.data[i]! - exact.data[i]!);
+        worstAlpha = Math.max(worstAlpha, d);
+        total += d;
+      }
+      expect(worstAlpha, `radius ${radius}`).toBeLessThanOrEqual(8);
+      expect(total / (w * w), `radius ${radius}`).toBeLessThan(1.5);
+      // Color stays the glow's color where it fades out: no dark fringe.
+      const faint = getPixel(fast, 80, 80 - 40 - Math.round(radius * 0.6));
+      if (faint[3] > 8) expect(faint[0]).toBeGreaterThan(230);
+    }
+    // The cost does not grow with the radius.
+    const big = createRaster(600, 600, [245, 159, 0, 255]);
+    const t0 = performance.now();
+    gaussianBlur(big, 20);
+    const small = performance.now() - t0;
+    const t1 = performance.now();
+    gaussianBlur(big, 200);
+    expect(performance.now() - t1).toBeLessThan(Math.max(50, small * 3));
   });
 
   it('runs every filter with defaults', () => {
