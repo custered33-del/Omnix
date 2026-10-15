@@ -4,6 +4,6 @@ RUN corepack enable
 WORKDIR /app
 COPY . .
 RUN pnpm install --frozen-lockfile && pnpm build
-ENV OMNIX_DATA_DIR=/data OMNIX_HOST=0.0.0.0 NODE_ENV=production
+ENV OMNIX_DATA_DIR=/tmp/omnix OMNIX_HOST=0.0.0.0 NODE_ENV=production NODE_OPTIONS=--max-old-space-size=400
 EXPOSE 4317
 CMD ["pnpm", "start"]

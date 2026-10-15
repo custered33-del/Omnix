@@ -2,9 +2,18 @@ services:
   - type: web
     name: omnix
     runtime: docker
-    plan: starter
+    plan: free
     healthCheckPath: /api/health
-    disk:
-      name: omnix-data
-      mountPath: /data
-      sizeGB: 10
+    envVars:
+      - key: OMNIX_DATABASE_URL
+        sync: false
+      - key: OMNIX_S3_BUCKET
+        value: omnix
+      - key: OMNIX_S3_ENDPOINT
+        sync: false
+      - key: OMNIX_S3_REGION
+        sync: false
+      - key: OMNIX_S3_ACCESS_KEY_ID
+        sync: false
+      - key: OMNIX_S3_SECRET_ACCESS_KEY
+        sync: false
