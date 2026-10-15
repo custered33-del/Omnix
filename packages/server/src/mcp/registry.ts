@@ -89,6 +89,8 @@ export interface ToolDef<S extends z.ZodRawShape = z.ZodRawShape> {
   category: ToolCategory;
   /** read tools never change anything; write tools go through the permission mode. */
   access: 'read' | 'write';
+  /** May remove content (nodes, clips, slides, library files), not only add or change it. Told to MCP clients as destructiveHint. */
+  destructive?: boolean;
   input: S;
   /** Description of the structured result, for the catalog. */
   output: z.ZodType;

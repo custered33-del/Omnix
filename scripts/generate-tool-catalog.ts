@@ -44,7 +44,7 @@ const omnix = await createOmnix({ memory: true, dataDir, webDist: null });
 const tools = allTools(omnix.services);
 const root = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
 
-const json = tools.map((t) => ({ name: t.name, title: t.title, category: t.category, access: t.access, description: t.description, inputSchema: schemaOf(t), outputSchema: outputSchemaOf(t), example: t.example }));
+const json = tools.map((t) => ({ name: t.name, title: t.title, category: t.category, access: t.access, ...(t.destructive ? { destructive: true } : {}), description: t.description, inputSchema: schemaOf(t), outputSchema: outputSchemaOf(t), example: t.example }));
 await fs.writeFile(path.join(root, 'docs/mcp-tools.json'), JSON.stringify(json, null, 2) + '\n');
 
 const lines: string[] = [];
@@ -62,7 +62,7 @@ for (const [cat, list] of byCat) {
   lines.push(`## ${CATEGORY_TITLES[cat] ?? cat}`, '');
   for (const t of list) {
     lines.push(`### \`${t.name}\``, '');
-    lines.push(`**${t.title}** · ${t.access === 'read' ? 'read-only' : 'write'}`, '');
+    lines.push(`**${t.title}** · ${t.access === 'read' ? 'read-only' : t.destructive ? 'write, may remove content' : 'write'}`, '');
     lines.push(t.description, '');
     lines.push('<details><summary>Input schema</summary>', '', '```json', JSON.stringify(schemaOf(t), null, 2), '```', '', '</details>', '');
     lines.push('<details><summary>Output schema</summary>', '', '```json', JSON.stringify(outputSchemaOf(t), null, 2), '```', '', '</details>', '');

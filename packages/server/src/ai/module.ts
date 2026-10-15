@@ -193,6 +193,7 @@ function aiTools(services: Services): ToolDef[] {
       description: `Turn a plain-language edit into operations with Omnix's command parser, for example "make the sky warmer and move the title to the lower third". The steps follow the connection's permission mode like any change. Phrases the parser does not understand are returned so you can do them with the specific tools. Examples: ${Object.values(COMMAND_EXAMPLES).flat().slice(0, 8).join('; ')}.`,
       category: 'ai',
       access: 'write',
+      destructive: true,
       input: { projectId: zProjectId, text: z.string().min(1).max(2000), documentId: z.string().optional().describe('The image, sequence, deck or document to edit (default: the first one).'), slideId: z.string().optional(), selection: z.array(z.string()).max(50).optional() },
       output: zWriteResult.extend({ steps: z.array(z.string()), unmatched: z.array(z.object({ clause: z.string(), reason: z.string() })) }),
       example: { input: { projectId: 'prj_8Kq2...', documentId: 'cnv_1', text: 'Make the sky warmer and move the title to the lower third' }, output: { status: 'proposed', proposalId: 'prop_1c...', steps: ['Warmer: the sky', 'Move the title to the lower third'], unmatched: [] } },

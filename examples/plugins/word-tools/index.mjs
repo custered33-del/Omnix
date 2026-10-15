@@ -25,7 +25,7 @@ export default {
       title: 'Title-case headings',
       description: 'Rewrite every heading in a document in title case ("the plan for q3" becomes "The Plan for Q3").',
       inputSchema: { type: 'object', properties: { projectId: { type: 'string' }, documentId: { type: 'string' } }, required: ['projectId', 'documentId'] },
-      annotations: { readOnlyHint: false },
+      annotations: { readOnlyHint: false, destructiveHint: false },
       handler(args, context) {
         const doc = docOutline(context, args.documentId);
         const changes = doc.outline.filter((h) => titleCase(h.text) !== h.text);

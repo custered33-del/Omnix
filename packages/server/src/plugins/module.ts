@@ -145,6 +145,8 @@ function pluginToolDefs(services: Services): ToolDef[] {
         description: `${tool.description ?? ''}\n\n(From the "${plugin.name}" plugin.)`.trim(),
         category: 'plugin',
         access: readOnly ? 'read' : 'write',
+        // MCP's default for a tool that writes: it may remove things unless it says otherwise.
+        destructive: !readOnly && tool.annotations?.destructiveHint !== false,
         input: shape,
         output: z.unknown(),
         example: { input: {} as never },

@@ -127,27 +127,37 @@ export class AgentError extends Error {
   }
 }
 
-/** Tool calls that need the "before exporting" gate. */
-export function isExportCall(name: string): boolean {
-  return name === 'export_file';
+/** Tool calls that need the "before exporting" gate: one export, or the same export over many documents. */
+export function isExportCall(name: string, input?: unknown): boolean {
+  if (name === 'export_file') return true;
+  return name === 'run_batch' && (input as { operation?: unknown } | undefined)?.operation === 'document.export';
 }
 
+/** Words in a plain-language command that ask to take something away. */
+const REMOVING = /\b(delete|remove|erase|clear|drop|discard|get rid of|cut out|trash)\b/i;
+
 /** Tool calls that remove content, for the "before deleting" gate. */
-export function isDeleteCall(name: string, input: unknown): boolean {
+export function isDeleteCall(name: string, input: unknown, tool?: Pick<ToolDef, 'category' | 'destructive'>): boolean {
   const a = (input ?? {}) as Record<string, unknown>;
   if (name === 'delete_node') return true;
+  // Merging switches every use to one file and removes the other copies from the library.
+  if (name === 'merge_assets') return true;
   if (name === 'video_edit_clip' && a.action === 'delete') return true;
   if (name === 'slides_edit_slide' && a.delete === true) return true;
   if (name === 'apply_operations' && Array.isArray(a.operations)) {
     const has = (ops: unknown[]): boolean => ops.some((o) => (o as { kind?: string }).kind === 'delete' || ((o as { kind?: string }).kind === 'batch' && has(((o as { ops?: unknown[] }).ops ?? []) as unknown[])));
     return has(a.operations);
   }
+  if (name === 'run_command') return typeof a.text === 'string' && REMOVING.test(a.text);
+  if (name === 'run_batch' && a.operation === 'document.command') return typeof (a.params as { text?: unknown } | undefined)?.text === 'string' && REMOVING.test((a.params as { text: string }).text);
+  // Plugin tools say whether they may remove content; MCP's default for a tool that writes is that it may.
+  if (tool?.category === 'plugin') return tool.destructive !== false;
   return false;
 }
 
-function gateFor(gates: GateSpec[], name: string, input: unknown): GateKind | null {
-  if (gates.some((g) => g.kind === 'export') && isExportCall(name)) return 'export';
-  if (gates.some((g) => g.kind === 'delete') && isDeleteCall(name, input)) return 'delete';
+function gateFor(gates: GateSpec[], name: string, input: unknown, tool?: Pick<ToolDef, 'category' | 'destructive'>): GateKind | null {
+  if (gates.some((g) => g.kind === 'export') && isExportCall(name, input)) return 'export';
+  if (gates.some((g) => g.kind === 'delete') && isDeleteCall(name, input, tool)) return 'delete';
   return null;
 }
 
@@ -248,10 +258,11 @@ export class AgentService {
   }
 
   /** The run (if any) that an external connection is driving on a project. */
-  activeExternalRun(connectionId: string, projectId: string): (JobRecord<AgentInput> & { data: AgentRunData }) | null {
+  /** The run this connection is driving in one of these projects, or in any project when the call names none (library tools). */
+  activeExternalRun(connectionId: string, projectIds: string[] | null): (JobRecord<AgentInput> & { data: AgentRunData }) | null {
     for (const j of this.services.jobs.snapshot({ kind: 'agent', status: ['running', 'awaiting_approval'] })) {
       const d = j.data as AgentRunData;
-      if (d.driver === 'external' && d.connectionId === connectionId && j.projectId === projectId) return j as JobRecord<AgentInput> & { data: AgentRunData };
+      if (d.driver === 'external' && d.connectionId === connectionId && (!projectIds || (j.projectId && projectIds.includes(j.projectId)))) return j as JobRecord<AgentInput> & { data: AgentRunData };
     }
     return null;
   }
@@ -424,12 +435,14 @@ export class AgentService {
   }
 
   /** Gate check for tool calls by an external driver: returns a refusal message or null. */
-  async gateExternalCall(principal: Principal, projectId: string, tool: ToolDef, args: unknown): Promise<string | null> {
-    if (tool.access !== 'write' && !isExportCall(tool.name)) return null;
-    const run = this.activeExternalRun(principal.connectionId, projectId);
+  async gateExternalCall(principal: Principal, projectIds: string[] | null, tool: ToolDef, args: unknown): Promise<string | null> {
+    // The run tools manage runs themselves (waiting, checkpoints, finishing), paused or not.
+    if (tool.category === 'agent') return null;
+    if (tool.access !== 'write' && !isExportCall(tool.name, args)) return null;
+    const run = this.activeExternalRun(principal.connectionId, projectIds);
     if (!run) return null;
     if (run.status === 'awaiting_approval') return `The run "${run.data.goal.slice(0, 60)}" is paused for approval (${run.data.pendingGate?.title}). Call agent_wait with runId ${run.id} and continue once the user answers.`;
-    const kind = gateFor(run.data.gates, tool.name, args);
+    const kind = gateFor(run.data.gates, tool.name, args, tool);
     if (!kind) return null;
     // One approval covers exactly the call that was paused.
     const key = JSON.stringify({ n: tool.name, a: args });
@@ -562,7 +575,7 @@ export class AgentService {
           results.push({ type: 'tool_result', tool_use_id: u.id, content: `This run may only change project ${projectId}.`, is_error: true });
           continue;
         }
-        const gate = gateFor(data.gates, u.name, u.input);
+        const gate = gateFor(data.gates, u.name, u.input, tool);
         if (gate) {
           tr.pending = { before: results, toolUseId: u.id, skipped: skipRest() };
           await this.saveTranscript(job.id, tr);
@@ -658,6 +671,8 @@ Start by planning (plan_stages).`;
 function describeCall(name: string, input: unknown): string {
   const a = (input ?? {}) as Record<string, unknown>;
   if (name === 'export_file') return `Export ${String(a.nodeId ?? 'a document')} as ${String(a.format ?? 'a file')}.`;
+  if (name === 'run_batch') return `${String(a.operation)} on ${Array.isArray(a.targets) ? a.targets.length : 0} item(s) ${JSON.stringify(a.params ?? {}).slice(0, 300)}.`;
+  if (name === 'merge_assets') return `Merge ${Array.isArray(a.drop) ? a.drop.length : 0} cop(ies) into ${String(a.keep)} and remove the copies from the library.`;
   if (name === 'delete_node') return `Delete ${String(a.nodeId ?? 'a node')}.`;
   return `${name} ${JSON.stringify(input).slice(0, 400)}`;
 }

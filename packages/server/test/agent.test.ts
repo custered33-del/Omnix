@@ -329,4 +329,62 @@ describe('agent runs driven by Claude over MCP', () => {
       await c.close();
     }
   });
+
+  it('gates exports and deletions made through batches, merges and plugins, and holds batch writes while paused', async () => {
+    const p = await docProject();
+    const { token } = await json(await ts.api('/api/auth/tokens', { method: 'POST', json: { name: 'Claude', scopes: ['omnix:read', 'omnix:edit', 'omnix:autonomous'] } }));
+    const c = new Client({ name: 'claude', version: '1' });
+    await c.connect(new StreamableHTTPClientTransport(new URL(`${ts.url}/mcp`), { requestInit: { headers: { Authorization: `Bearer ${token}` } } }));
+    const call = async (name: string, args: Record<string, unknown>) => {
+      const r = await c.callTool({ name, arguments: args });
+      return { error: r.isError ? JSON.stringify(r.content) : null, data: r.structuredContent as Record<string, any> };
+    };
+    const svg = (fill: string) => Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="40" height="30"><rect width="40" height="30" fill="${fill}"/><circle cx="9" cy="9" r="5" fill="#fff"/></svg>`);
+    const up = async (name: string, fill: string) => (await json(await ts.api(`/api/assets?name=${name}`, { method: 'POST', body: new Uint8Array(svg(fill)), headers: { 'content-type': 'image/svg+xml' } }))).asset ?? (await json(await ts.api(`/api/assets?name=${name}`, { method: 'POST', body: new Uint8Array(svg(fill)), headers: { 'content-type': 'image/svg+xml' } })));
+    try {
+      // Claude is told which tools can remove content.
+      const tools = (await c.listTools()).tools;
+      const hint = (name: string) => tools.find((t) => t.name === name)?.annotations?.destructiveHint;
+      expect(hint('delete_node')).toBe(true);
+      expect(hint('merge_assets')).toBe(true);
+      expect(hint('doc_insert_markdown')).toBe(false);
+
+      const start = await call('agent_start_run', { projectId: p.id, goal: 'Tidy up and export', plan: ['Tidy'] });
+      const runId = start.data.runId as string;
+      // While the plan waits for approval, a batch on the project is held like any other write.
+      const held = await call('run_batch', { operation: 'document.command', params: { text: 'make the headings bold' }, targets: [{ projectId: p.id, documentId: p.doc }] });
+      expect(held.error).toMatch(/paused for approval/);
+      // The run's own tools keep working while it is paused.
+      expect((await call('agent_status', { runId })).error).toBeNull();
+      await decide(runId, 'approve');
+      await call('agent_wait', { runId, timeoutSeconds: 5 });
+
+      // Exporting many documents at once is still exporting.
+      const ex = await call('run_batch', { operation: 'document.export', params: { format: 'md' }, targets: [{ projectId: p.id, documentId: p.doc }] });
+      expect(ex.error).toMatch(/Paused for the user's approval \(Before exporting \(run_batch\)\)/);
+      let run = (await json(await ts.api(`/api/agent/runs/${runId}`))).run;
+      expect(run.pendingGate).toMatchObject({ kind: 'export', summary: expect.stringMatching(/document.export on 1 item/) });
+      await decide(runId, 'approve');
+      await call('agent_wait', { runId, timeoutSeconds: 5 });
+      const ex2 = await call('run_batch', { operation: 'document.export', params: { format: 'md' }, targets: [{ projectId: p.id, documentId: p.doc }] });
+      expect(ex2.error).toBeNull();
+
+      // A command that removes things, and a merge that removes library files, wait for approval too.
+      const rm = await call('run_command', { projectId: p.id, documentId: p.doc, text: 'delete the second paragraph' });
+      expect(rm.error).toMatch(/Before deleting \(run_command\)/);
+      await decide(runId, 'approve');
+      await call('agent_wait', { runId, timeoutSeconds: 5 });
+      const a = await up('merge-keep.svg', '#2266aa');
+      const b = await up('merge-drop.svg', '#aa2266');
+      const merge = await call('merge_assets', { keep: a.id, drop: [b.id] });
+      expect(merge.error).toMatch(/Before deleting \(merge_assets\)/);
+      run = (await json(await ts.api(`/api/agent/runs/${runId}`))).run;
+      expect(run.pendingGate.summary).toMatch(/remove the copies/);
+      await decide(runId, 'stop');
+      // The file was not merged away.
+      expect((await ts.api(`/api/assets/${b.id}`)).status).toBe(200);
+    } finally {
+      await c.close();
+    }
+  });
 });

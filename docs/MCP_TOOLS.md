@@ -1121,7 +1121,7 @@ Example result (structured content):
 
 ### `delete_node`
 
-**Delete something** · write
+**Delete something** · write, may remove content
 
 Delete a node and everything inside it (a layer, clip, track, block, slide, slide element, code file, cell or a whole document). Deleting is recorded in history and can be undone.
 
@@ -1213,7 +1213,7 @@ Example result (structured content):
 
 ### `apply_operations`
 
-**Apply raw operations** · write
+**Apply raw operations** · write, may remove content
 
 Advanced: apply a list of scene-graph operations as one change (create, delete, update, move, listInsert, listRemove, listUpdate, batch). Use it for edits no specific tool covers. Created nodes need full props or defaults; ids you choose must be unique (letters, digits, _ and -). Everything is validated before it applies.
 
@@ -2807,7 +2807,7 @@ Example result (structured content):
 
 ### `merge_assets`
 
-**Merge near-duplicate files** · write
+**Merge near-duplicate files** · write, may remove content
 
 Keep one file and switch every use of the other copies (layers, clips, slide images, document images, LUTs) to it in each project you can edit, then remove the copies from the library. With edit-with-approval the project changes arrive as proposals and the copies stay until they are accepted.
 
@@ -5578,7 +5578,7 @@ Example result (structured content):
 
 ### `video_edit_clip`
 
-**Split, trim, move or delete a clip** · write
+**Split, trim, move or delete a clip** · write, may remove content
 
 Timeline edits on one clip. split: cut at a sequence time into two clips. trim: move the in or out edge by delta seconds (positive shortens the in edge, lengthens the out edge). move: change start time and optionally track. delete: remove it; with ripple the later clips on that track close the gap.
 
@@ -9295,7 +9295,7 @@ Example result (structured content):
 
 ### `slides_edit_slide`
 
-**Change a slide** · write
+**Change a slide** · write, may remove content
 
 Change a slide: layout (moves placeholders), background color, speaker notes, transition (none, fade, push, wipe, zoom with duration and easing), hidden, or position in the deck. Duplicate it with duplicate: true.
 
@@ -11808,7 +11808,7 @@ Example result (structured content):
 
 ### `run_command`
 
-**Run a natural-language command** · write
+**Run a natural-language command** · write, may remove content
 
 Turn a plain-language edit into operations with Omnix's command parser, for example "make the sky warmer and move the title to the lower third". The steps follow the connection's permission mode like any change. Phrases the parser does not understand are returned so you can do them with the specific tools. Examples: Make the sky warmer and move the title to the lower third; Remove the background; Make the background navy; Add a title "Spring sale"; Blur the photo a little; Make clip 2 warmer; Add a title "Coming soon" and move it to the lower third; Add crossfades between all clips.
 

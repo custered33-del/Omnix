@@ -48,12 +48,13 @@ A tool is an ordinary MCP tool:
     },
     "required": ["projectId", "canvasId", "colors"]
   },
-  "annotations": { "readOnlyHint": false }
+  "annotations": { "readOnlyHint": false, "destructiveHint": false }
 }
 ```
 
 - **Input checks.** Omnix validates every call against the input schema before your tool runs. Bad arguments never reach you.
 - **Read-only tools.** Mark tools that change nothing with `readOnlyHint: true`. View-only Claude connections can use only those.
+- **Tools that only add.** A tool that changes things is treated as one that may also remove them, as MCP specifies, unless it says `destructiveHint: false`. During an autonomous run with the "before deleting" approval (the default), every call to such a tool waits for the person's approval first. Declare `destructiveHint: false` on tools that only add or edit, so runs are not interrupted needlessly.
 - **Forms in the Plugins panel.** These argument names get special treatment:
   - `projectId` is filled in automatically.
   - `canvasId`, `sequenceId`, `deckId`, `workspaceId` and `documentId` become pickers of the project's documents.

@@ -70,8 +70,10 @@ describe('plugins (56)', () => {
   });
 
   it('offers plugin tools to Claude next to Omnix tools, with the same permission modes', async () => {
-    const names = (await auto.listTools()).tools.map((t) => t.name);
-    expect(names).toEqual(expect.arrayContaining(['list_projects', 'palette__suggest_palette', 'palette__add_swatches', 'word_tools__title_case_headings']));
+    const listed = (await auto.listTools()).tools;
+    expect(listed.map((t) => t.name)).toEqual(expect.arrayContaining(['list_projects', 'palette__suggest_palette', 'palette__add_swatches', 'word_tools__title_case_headings']));
+    // A plugin's own hints reach Claude: this one only adds, and plugin tools may reach outside Omnix.
+    expect(listed.find((t) => t.name === 'palette__add_swatches')!.annotations).toMatchObject({ readOnlyHint: false, destructiveHint: false, openWorldHint: true });
     const suggest = await call(viewer, 'palette__suggest_palette', { baseColor: '#3366cc', mood: 'bold', count: 4 });
     expect((suggest.structuredContent as { colors: string[] }).colors).toHaveLength(4);
     // Arguments are checked against the plugin's own schema before it is called.

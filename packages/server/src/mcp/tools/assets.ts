@@ -106,6 +106,7 @@ export const assetWriteTools = [
     description: 'Keep one file and switch every use of the other copies (layers, clips, slide images, document images, LUTs) to it in each project you can edit, then remove the copies from the library. With edit-with-approval the project changes arrive as proposals and the copies stay until they are accepted.',
     category: 'assets',
     access: 'write',
+    destructive: true,
     input: { keep: z.string().describe('Asset id to keep'), drop: z.array(z.string()).min(1).max(50).describe('Asset ids to merge into it') },
     output: z.object({ kept: z.string(), merged: z.array(z.string()), projects: z.array(z.unknown()) }),
     example: { input: { keep: '3f9a...', drop: ['77c1...'] }, output: { kept: '3f9a...', merged: ['77c1...'], projects: [{ projectName: 'Launch', replaced: 2, status: 'committed' }] } },

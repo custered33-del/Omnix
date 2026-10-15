@@ -171,6 +171,7 @@ export const timelineTools = [
       'Timeline edits on one clip. split: cut at a sequence time into two clips. trim: move the in or out edge by delta seconds (positive shortens the in edge, lengthens the out edge). move: change start time and optionally track. delete: remove it; with ripple the later clips on that track close the gap.',
     category: 'video',
     access: 'write',
+    destructive: true,
     input: {
       projectId: zProjectId,
       clipId: z.string(),

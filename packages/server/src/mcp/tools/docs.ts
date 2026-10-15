@@ -407,6 +407,7 @@ export const documentTools = [
     description: 'Change a slide: layout (moves placeholders), background color, speaker notes, transition (none, fade, push, wipe, zoom with duration and easing), hidden, or position in the deck. Duplicate it with duplicate: true.',
     category: 'slides',
     access: 'write',
+    destructive: true,
     input: {
       projectId: zProjectId,
       slideId: z.string(),

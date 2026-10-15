@@ -105,6 +105,17 @@ export function syncMcpTools(services: Services): void {
   }
 }
 
+/** The projects a call works on: its projectId, or the projects of its batch targets. None for library tools. */
+function projectsNamed(args: unknown): string[] | null {
+  const a = (args ?? {}) as { projectId?: unknown; targets?: unknown };
+  if (typeof a.projectId === 'string') return [a.projectId];
+  if (Array.isArray(a.targets)) {
+    const ids = [...new Set(a.targets.map((t) => (t as { projectId?: unknown } | null)?.projectId).filter((id): id is string => typeof id === 'string'))];
+    if (ids.length) return ids;
+  }
+  return null;
+}
+
 function registerOne(services: Services, server: McpServer, ctx: ToolContext, tool: ToolDef): RegisteredTool {
   return server.registerTool(
       tool.name,
@@ -112,14 +123,13 @@ function registerOne(services: Services, server: McpServer, ctx: ToolContext, to
         title: tool.title,
         description: tool.access === 'write' ? `${tool.description}\n\n(Changes project content; follows the connection's permission mode.)` : tool.description,
         inputSchema: tool.input,
-        annotations: { title: tool.title, readOnlyHint: tool.access === 'read', destructiveHint: false, openWorldHint: false },
+        annotations: { title: tool.title, readOnlyHint: tool.access === 'read', destructiveHint: tool.access === 'write' && !!tool.destructive, openWorldHint: tool.category === 'plugin' },
       },
       async (args: unknown) => {
         // A connection driving an autonomous run: hold writes while it waits for approval, gate exports and deletions.
-        const gate = services.ext.agentGate as ((p: Principal, projectId: string, t: ToolDef, a: unknown) => Promise<string | null>) | undefined;
-        const projectId = (args as { projectId?: unknown } | undefined)?.projectId;
-        if (gate && typeof projectId === 'string') {
-          const refusal = await gate(ctx.principal, projectId, tool, args);
+        const gate = services.ext.agentGate as ((p: Principal, projectIds: string[] | null, t: ToolDef, a: unknown) => Promise<string | null>) | undefined;
+        if (gate) {
+          const refusal = await gate(ctx.principal, projectsNamed(args), tool, args);
           if (refusal) return { isError: true, content: [{ type: 'text', text: refusal }] };
         }
         const r = await runTool(tool, args, ctx);

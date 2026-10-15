@@ -42,7 +42,7 @@ const TOOLS = [
       },
       required: ['projectId', 'canvasId', 'colors'],
     },
-    annotations: { readOnlyHint: false },
+    annotations: { readOnlyHint: false, destructiveHint: false },
   },
   {
     name: 'swatch_image',
@@ -53,7 +53,7 @@ const TOOLS = [
       properties: { colors: { type: 'array', items: { type: 'string', pattern: '^#[0-9a-fA-F]{6}$' }, minItems: 1, maxItems: 12 }, name: { type: 'string', default: 'palette.png' } },
       required: ['colors'],
     },
-    annotations: { readOnlyHint: false },
+    annotations: { readOnlyHint: false, destructiveHint: false },
   },
 ];
 

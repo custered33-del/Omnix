@@ -188,8 +188,8 @@ useModule(({ services, router }) => {
   services.jobs.register<AgentInput, unknown>('agent', (jc) => agent.runInternal(jc));
   registerToolProvider(services, agentTools);
   // Tool calls from a connection that is driving a run: gate exports and deletions, hold writes while paused.
-  services.ext.agentGate = (principal: Principal, projectId: string, tool: ToolDef, args: unknown) => agent.gateExternalCall(principal, projectId, tool, args);
-  services.ext.agentRunFor = (principal: Principal, projectId: string) => agent.activeExternalRun(principal.connectionId, projectId)?.id;
+  services.ext.agentGate = (principal: Principal, projectIds: string[] | null, tool: ToolDef, args: unknown) => agent.gateExternalCall(principal, projectIds, tool, args);
+  services.ext.agentRunFor = (principal: Principal, projectId: string) => agent.activeExternalRun(principal.connectionId, [projectId])?.id;
 
   const r = express.Router();
   const fail = (e: unknown): never => {
