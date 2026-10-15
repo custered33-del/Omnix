@@ -3,12 +3,15 @@ import { useStore } from 'zustand';
 import { Eye, EyeOff, Lock, LockOpen, Volume2, VolumeX, Headphones, Plus, Film, Music, Type, Sparkles, Shapes, MoreHorizontal } from 'lucide-react';
 import type { Operation, ProjectState, SceneNode, TrackType } from '@omnix/core';
 import { childrenOf, clipDuration, clipEnd, clipsOf, moveClipOp, rippleTrimOp, rollEditOp, slideEditOp, slipEditOp, splitClipOp, trimOp, tracksOf } from '@omnix/core';
-import { useProject } from '../../state/project.js';
+import { freshFocus, useProject } from '../../state/project.js';
 import { useRenderHost } from '../../render/context.js';
 import { thumbUrl, type AssetSummary } from '../../lib/api.js';
 import { Menu, MenuButton, type MenuItemDef } from '../../ui/primitives.js';
 import { t } from '../../i18n/index.js';
 import { AiMarker } from '../../components/AiMarker.js';
+import { allComments } from '../../components/CommentPins.js';
+import { documentOf } from '../../components/CommentsPanel.js';
+import { addComment, CommentThread, NewComment } from '../../components/Comments.js';
 import { toFrame } from './timelineState.js';
 import { addAssetClip, addTrack, commitOp, deleteSelected, duplicateSelected, previewOp, snap, snapPoints, splitAtPlayhead, TRACK_COLORS, TRACK_HEIGHT, tryOp, type TimelineCtx } from './timelineOps.js';
 
@@ -58,6 +61,16 @@ export function Timeline({ ctx }: { ctx: TimelineCtx }) {
   const mode = useStore(ed, (s) => s.mode);
   const snapping = useStore(ed, (s) => s.snapping);
   const solo = useStore(ed, (s) => s.soloTracks);
+  const presence = useProject((s) => s.presence);
+  const commentMode = useProject((s) => s.commentMode);
+  const timeComments = allComments(state).filter((c) => c.props.anchor.time !== undefined && documentOf(state, c.props.anchor.nodeId)?.id === sequenceId);
+  const [openComment, setOpenComment] = useState<string | null>(null);
+  const [rulerComposer, setRulerComposer] = useState<number | null>(null);
+  const focus = useProject((s) => s.focusRequest);
+  useEffect(() => {
+    if (freshFocus(focus) && focus.commentId && timeComments.some((c) => c.id === focus.commentId)) setOpenComment(focus.commentId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focus?.seq]);
   const host = useRenderHost();
   const lanesRef = useRef<HTMLDivElement>(null);
   const headsRef = useRef<HTMLDivElement>(null);
@@ -422,6 +435,10 @@ export function Timeline({ ctx }: { ctx: TimelineCtx }) {
             className="tl-ruler"
             style={{ width: viewW, left: 0, position: 'sticky' }}
             onPointerDown={(e) => {
+              if (commentMode && e.button === 0) {
+                setRulerComposer(Math.max(0, Math.round(timeAt(e.clientX) * 100) / 100));
+                return;
+              }
               ed.getState().set({ time: toFrame(timeAt(e.clientX), fps) });
               drag.current = { kind: 'scrub', id: '', startX: e.clientX, startY: e.clientY, base: state, group: [], moved: true };
               (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
@@ -459,6 +476,47 @@ export function Timeline({ ctx }: { ctx: TimelineCtx }) {
             );
           })}
           <div className="tl-playhead" style={{ left: xOf(time) }} aria-hidden="true" />
+          {Object.values(presence)
+            .filter((o) => (o.location?.tool === 'video' || o.location?.tool === 'animation') && o.location.nodeId === sequenceId && o.location.time !== undefined)
+            .map((o) => (
+              <div key={o.clientId} className="tl-other-playhead" style={{ left: xOf(o.location!.time!), borderColor: o.color }} aria-hidden="true">
+                <span style={{ background: o.color }}>{o.author.name}</span>
+              </div>
+            ))}
+          {timeComments.map((c, i) => (
+            <button
+              key={c.id}
+              type="button"
+              className={`tl-comment${c.props.resolved ? ' resolved' : ''}`}
+              style={{ left: xOf(c.props.anchor.time!) }}
+              aria-label={t('comments.pinLabel', { n: i + 1, name: c.props.author.name })}
+              aria-expanded={openComment === c.id}
+              onPointerDown={(e) => e.stopPropagation()}
+              onClick={() => {
+                ed.getState().set({ time: toFrame(c.props.anchor.time!, fps), playing: false });
+                setOpenComment(openComment === c.id ? null : c.id);
+              }}
+            >
+              {i + 1}
+            </button>
+          ))}
+          {openComment && timeComments.some((c) => c.id === openComment) && (
+            <div className="tl-comment-pop" style={{ left: Math.max(4, xOf(timeComments.find((c) => c.id === openComment)!.props.anchor.time!) - 20) }} onPointerDown={(e) => e.stopPropagation()}>
+              <CommentThread store={store} comment={timeComments.find((c) => c.id === openComment)!} />
+            </div>
+          )}
+          {rulerComposer !== null && (
+            <div className="tl-comment-pop" style={{ left: Math.max(4, xOf(rulerComposer) - 20) }} onPointerDown={(e) => e.stopPropagation()}>
+              <NewComment
+                onSubmit={(text) => {
+                  const id = addComment(store, { tool: seq.props.purpose === 'animation' ? 'animation' : 'video', nodeId: sequenceId, time: rulerComposer }, text);
+                  setRulerComposer(null);
+                  if (id) setOpenComment(id);
+                }}
+                onCancel={() => setRulerComposer(null)}
+              />
+            </div>
+          )}
           {snapLine !== null && <div className="tl-snapline" style={{ left: xOf(snapLine) }} aria-hidden="true" />}
         </div>
       </div>

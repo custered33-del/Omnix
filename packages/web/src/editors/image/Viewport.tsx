@@ -5,6 +5,7 @@ import { childrenOf, layerProps as defaultLayerProps, makeNode, newId, parseColo
 import { combineMasks, invertMask } from '@omnix/imaging';
 import { layerBounds, renderCanvasDocument, strokeDabs, type LayerCache } from '@omnix/render';
 import { useProject, useProjectStore } from '../../state/project.js';
+import { PinLayer, useAnchoredComments } from '../../components/CommentPins.js';
 import { useAuth } from '../../state/auth.js';
 import { useRenderHost, useHostVersion } from '../../render/context.js';
 import { toast } from '../../ui/toast.js';
@@ -48,6 +49,9 @@ export function Viewport({ canvasId, ed }: { canvasId: string; ed: ImageEditorSt
   const store = useProjectStore();
   const state = useProject((s) => s.state)!;
   const presence = useProject((s) => s.presence);
+  const commentMode = useProject((s) => s.commentMode);
+  const [composer, setComposer] = useState<{ x: number; y: number } | null>(null);
+  const pinComments = useAnchoredComments([canvasId], (a) => a.x !== undefined && a.y !== undefined);
   const host = useRenderHost();
   const hostVersion = useHostVersion();
   const pressureGamma = useAuth((s) => s.user?.preferences.pressureGamma ?? 1);
@@ -396,6 +400,11 @@ export function Viewport({ canvasId, ed }: { canvasId: string; ed: ImageEditorSt
 
   /* ---------------- pointer handling ---------------- */
   const onPointerDown = (e: React.PointerEvent) => {
+    if (commentMode && e.button === 0) {
+      const p = toDoc(e);
+      if (p.x >= 0 && p.y >= 0 && p.x <= cp.width && p.y <= cp.height) setComposer({ x: Math.round(p.x), y: Math.round(p.y) });
+      return;
+    }
     if (e.button === 1 || (e.button === 0 && tool === 'hand')) {
       drag.current = { kind: 'pan', start: { x: e.clientX, y: e.clientY }, last: { x: e.clientX, y: e.clientY } };
       (e.target as HTMLElement).setPointerCapture(e.pointerId);
@@ -730,7 +739,7 @@ export function Viewport({ canvasId, ed }: { canvasId: string; ed: ImageEditorSt
     }
   };
 
-  const cursor = tool === 'hand' ? (drag.current?.kind === 'pan' ? 'grabbing' : 'grab') : tool === 'zoom' ? 'zoom-in' : tool === 'move' ? 'default' : tool === 'text' ? 'text' : ['brush', 'eraser', 'clone', 'heal'].includes(tool) ? 'none' : 'crosshair';
+  const cursor = commentMode ? 'copy' : tool === 'hand' ? (drag.current?.kind === 'pan' ? 'grabbing' : 'grab') : tool === 'zoom' ? 'zoom-in' : tool === 'move' ? 'default' : tool === 'text' ? 'text' : ['brush', 'eraser', 'clone', 'heal'].includes(tool) ? 'none' : 'crosshair';
   const others = Object.values(presence).filter((p) => p.location?.tool === 'image' && p.location.nodeId === canvasId && p.location.x !== undefined);
   const textLayer = editingText ? (state.nodes[editingText] as SceneNode<'layer'> | undefined) : undefined;
 
@@ -770,6 +779,13 @@ export function Viewport({ canvasId, ed }: { canvasId: string; ed: ImageEditorSt
           {o.author.name}
         </div>
       ))}
+      <PinLayer
+        label={t('comments.title')}
+        pins={pinComments.map((c) => ({ comment: c, x: pan.x + c.props.anchor.x! * zoom, y: pan.y + c.props.anchor.y! * zoom }))}
+        composer={composer ? { x: pan.x + composer.x * zoom, y: pan.y + composer.y * zoom, anchor: { tool: 'image', nodeId: canvasId, x: composer.x, y: composer.y } } : null}
+        onCompose={() => setComposer(null)}
+        onCancelCompose={() => setComposer(null)}
+      />
       {textLayer && textLayer.props.layerType === 'text' && (
         <TextEditOverlay layer={textLayer} zoom={zoom} pan={pan} onDone={() => ed.getState().set({ editingTextLayer: null })} />
       )}

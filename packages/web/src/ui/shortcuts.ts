@@ -26,7 +26,8 @@ export function matches(e: KeyboardEvent, shortcut: string): boolean {
   const shift = parts.includes('shift');
   const alt = parts.includes('alt');
   const k = e.key.toLowerCase();
-  const keyOk = k === key || (key === 'space' && k === ' ') || (key === 'esc' && k === 'escape') || (key === 'del' && (k === 'delete' || k === 'backspace'));
+  // Option on a Mac changes the typed character (Option+M is "µ"), so letters also match by key position.
+  const keyOk = k === key || (key === 'space' && k === ' ') || (key === 'esc' && k === 'escape') || (key === 'del' && (k === 'delete' || k === 'backspace')) || (alt && /^[a-z]$/.test(key) && e.code === `Key${key.toUpperCase()}`);
   return keyOk && mod === (isMac ? e.metaKey : e.ctrlKey) && shift === e.shiftKey && alt === e.altKey;
 }
 

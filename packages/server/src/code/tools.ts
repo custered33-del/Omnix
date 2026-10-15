@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { childrenOf, closest, insertBlocksOps, makeNode, type CellOutput, type SceneNode } from '@omnix/core';
+import { childrenOf, closest, commentLineOps, insertBlocksOps, makeNode, type CellOutput, type SceneNode } from '@omnix/core';
 import { defineTool, ToolError, zProjectId, type ToolDef } from '../mcp/registry.js';
 import { edit, need, writeResult, zWriteResult } from '../mcp/tools/helpers.js';
 import type { CodeService } from './module.js';
@@ -52,7 +52,7 @@ export function codeTools(code: CodeService): ToolDef[] {
           const existing = childrenOf(state, args.workspaceId).find((n) => n.type === 'codeFile' && (n as SceneNode<'codeFile'>).props.path === args.path);
           if (existing) {
             fileId = existing.id;
-            return [{ kind: 'update', id: existing.id, set: { content: args.content } }];
+            return [{ kind: 'update', id: existing.id, set: { content: args.content } }, ...commentLineOps(state, existing.id, (existing as SceneNode<'codeFile'>).props.content, args.content)];
           }
           const f = makeNode('codeFile', { path: args.path, language: langOf(args.path) as never, content: args.content });
           fileId = f.id;
@@ -84,7 +84,8 @@ export function codeTools(code: CodeService): ToolDef[] {
             content = e.all ? content.split(e.find).join(e.replace) : content.replace(e.find, () => e.replace);
             replacements += e.all ? count : 1;
           }
-          return [{ kind: 'update', id: f.id, set: { content } }];
+          // Line comments follow the code they point at.
+          return [{ kind: 'update', id: f.id, set: { content } }, ...commentLineOps(state, f.id, f.props.content, content)];
         });
         return writeResult(out, { replacements });
       },

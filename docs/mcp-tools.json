@@ -5925,6 +5925,142 @@
     }
   },
   {
+    "name": "list_comments",
+    "title": "List comments",
+    "category": "collaboration",
+    "access": "read",
+    "description": "Read the comment threads in a project (open ones by default): who wrote what, the replies, and where each is pinned, with the context it points at (the quoted text, the code line, the slide number, the time, or the canvas position). Use it to answer review feedback; resolve threads you have addressed with resolve_comment.",
+    "inputSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Project id (from list_projects)."
+        },
+        "status": {
+          "default": "open",
+          "type": "string",
+          "enum": [
+            "open",
+            "resolved",
+            "all"
+          ]
+        },
+        "documentId": {
+          "description": "Only comments in this canvas, sequence, workspace, document or deck",
+          "type": "string"
+        }
+      },
+      "required": [
+        "projectId"
+      ]
+    },
+    "outputSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "comments": {
+          "type": "array",
+          "items": {}
+        }
+      },
+      "required": [
+        "comments"
+      ],
+      "additionalProperties": false
+    },
+    "example": {
+      "input": {
+        "projectId": "prj_8Kq2..."
+      },
+      "output": {
+        "comments": [
+          {
+            "id": "cmt_1",
+            "text": "Can the logo be larger?",
+            "author": "Seb",
+            "where": "Slide 2",
+            "documentId": "deck_1",
+            "replies": []
+          }
+        ]
+      }
+    }
+  },
+  {
+    "name": "resolve_comment",
+    "title": "Resolve a comment",
+    "category": "collaboration",
+    "access": "write",
+    "description": "Mark a comment thread resolved (or reopen it), optionally replying first to say what you changed. Like comments themselves, this applies directly in every permission mode.",
+    "inputSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Project id (from list_projects)."
+        },
+        "commentId": {
+          "type": "string"
+        },
+        "reply": {
+          "description": "A closing reply, for example what was changed",
+          "type": "string",
+          "maxLength": 10000
+        },
+        "reopen": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "projectId",
+        "commentId"
+      ]
+    },
+    "outputSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "status": {
+          "type": "string",
+          "enum": [
+            "committed",
+            "proposed"
+          ]
+        },
+        "commitId": {
+          "type": "string"
+        },
+        "proposalId": {
+          "type": "string"
+        },
+        "changes": {
+          "description": "How many changes the proposal now holds",
+          "type": "number"
+        }
+      },
+      "required": [
+        "status"
+      ],
+      "additionalProperties": false
+    },
+    "example": {
+      "input": {
+        "projectId": "prj_8Kq2...",
+        "commentId": "cmt_1",
+        "reply": "Made the logo 40% larger on slide 2."
+      },
+      "output": {
+        "status": "committed",
+        "commitId": "c_res..."
+      }
+    }
+  },
+  {
     "name": "doc_set_style",
     "title": "Change a document style",
     "category": "document",

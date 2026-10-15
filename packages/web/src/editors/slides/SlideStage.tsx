@@ -4,6 +4,8 @@ import type { SceneNode, SlideElementProps } from '@omnix/core';
 import { makeNode, slideElements } from '@omnix/core';
 import { BUILT, defaultFontSize, renderSlide } from '@omnix/render';
 import { useProject } from '../../state/project.js';
+import { PinLayer, useAnchoredComments } from '../../components/CommentPins.js';
+import { t } from '../../i18n/index.js';
 import { useHostVersion, useRenderHost } from '../../render/context.js';
 import type { ProjectStore } from '../../state/project.js';
 import type { SlidesEditorStore } from './slidesState.js';
@@ -57,6 +59,11 @@ export function SlideStage({ ctx }: { ctx: SlidesCtx }) {
   const selected = useStore(ctx.ed, (s) => s.selected);
   const editingText = useStore(ctx.ed, (s) => s.editingText);
   const preview = useStore(ctx.ed, (s) => s.preview);
+  const commentMode = useProject((s) => s.commentMode);
+  const presence = useProject((s) => s.presence);
+  const [composer, setComposer] = useState<{ x: number; y: number } | null>(null);
+  const pinComments = useAnchoredComments(slideId ? [slideId] : [], (a) => a.x !== undefined && a.y !== undefined);
+  const lastReport = useRef(0);
   const wrap = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [box, setBox] = useState({ w: 0, h: 0 });
@@ -217,9 +224,25 @@ export function SlideStage({ ctx }: { ctx: SlidesCtx }) {
   return (
     <div
       ref={wrap}
-      className="slide-stage"
+      className={`slide-stage${commentMode ? ' commenting' : ''}`}
+      onPointerDownCapture={(e) => {
+        if (!commentMode || e.button !== 0 || (e.target as HTMLElement).closest('.pin-layer')) return;
+        e.stopPropagation();
+        e.preventDefault();
+        const p = toSlide(e);
+        if (p.x >= 0 && p.y >= 0 && p.x <= W && p.y <= H) setComposer({ x: Math.round(p.x), y: Math.round(p.y) });
+      }}
       onPointerDown={() => ctx.ed.getState().set({ selected: [], editingText: null })}
-      onPointerMove={onMove}
+      onPointerMove={(e) => {
+        // Collaborators see where you point on this slide.
+        const now = performance.now();
+        if (now - lastReport.current > 80) {
+          lastReport.current = now;
+          const p = toSlide(e);
+          if (p.x >= 0 && p.y >= 0 && p.x <= W && p.y <= H) ctx.store.getState().reportLocation({ tool: 'slides', nodeId: slide.id, x: Math.round(p.x), y: Math.round(p.y) });
+        }
+        onMove(e);
+      }}
       onPointerUp={onUp}
       onDragOver={(e) => e.dataTransfer.types.includes(ASSET_DRAG) && e.preventDefault()}
       onDrop={(e) => {
@@ -272,6 +295,20 @@ export function SlideStage({ ctx }: { ctx: SlidesCtx }) {
           <div key={`gy${i}`} className="snap-guide h" style={{ top: y * k }} />
         ))}
         {editing && <TextEditor ctx={ctx} el={editing} k={k} deck={deck} />}
+        {Object.values(presence)
+          .filter((o) => o.location?.tool === 'slides' && o.location.nodeId === slide.id && o.location.x !== undefined)
+          .map((o) => (
+            <div key={o.clientId} className="cursor-badge" style={{ left: o.location!.x! * k, top: o.location!.y! * k, background: o.color }}>
+              {o.author.name}
+            </div>
+          ))}
+        <PinLayer
+          label={t('comments.title')}
+          pins={pinComments.map((c) => ({ comment: c, x: c.props.anchor.x! * k, y: c.props.anchor.y! * k }))}
+          composer={composer ? { x: composer.x * k, y: composer.y * k, anchor: { tool: 'slides', nodeId: slide.id, x: composer.x, y: composer.y } } : null}
+          onCompose={() => setComposer(null)}
+          onCancelCompose={() => setComposer(null)}
+        />
       </div>
     </div>
   );

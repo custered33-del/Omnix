@@ -3,6 +3,8 @@ import { useStore } from 'zustand';
 import type { Point, SceneNode } from '@omnix/core';
 import { renderSequenceFrame } from '@omnix/render';
 import { useProject } from '../../state/project.js';
+import { PinLayer, useAnchoredComments } from '../../components/CommentPins.js';
+import { t } from '../../i18n/index.js';
 import { useHostVersion, useRenderHost } from '../../render/context.js';
 import type { TimelineCtx } from './timelineOps.js';
 
@@ -34,6 +36,12 @@ export function Stage({ ctx, handlers, editor, label, children }: { ctx: Timelin
   const playing = useStore(ctx.ed, (s) => s.playing);
   const seq = state.nodes[ctx.sequenceId] as SceneNode<'sequence'>;
   const sp = seq.props;
+  const commentMode = useProject((s) => s.commentMode);
+  const presence = useProject((s) => s.presence);
+  const lastReport = useRef(0);
+  const [composer, setComposer] = useState<{ x: number; y: number; time: number } | null>(null);
+  // Comments pinned on the frame show around the moment they were made.
+  const pinComments = useAnchoredComments([ctx.sequenceId], (a) => a.x !== undefined && a.y !== undefined && (a.time === undefined || Math.abs(a.time - time) <= 0.5));
   const wrapRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const overlayRef = useRef<HTMLCanvasElement>(null);
@@ -104,16 +112,29 @@ export function Stage({ ctx, handlers, editor, label, children }: { ctx: Timelin
       className="tl-stage"
       role="img"
       aria-label={label}
-      style={{ cursor: handlers?.cursor ?? 'default' }}
+      style={{ cursor: commentMode ? 'copy' : (handlers?.cursor ?? 'default') }}
       onPointerDown={(e) => {
+        if (commentMode && e.button === 0) {
+          if ((e.target as HTMLElement).closest('.pin-layer')) return;
+          const p = toSeq(e);
+          if (p.x >= 0 && p.y >= 0 && p.x <= sp.width && p.y <= sp.height) setComposer({ x: Math.round(p.x), y: Math.round(p.y), time: Math.round(time * 100) / 100 });
+          return;
+        }
         if (!handlers?.onDown || e.button !== 0) return;
         (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
         handlers.onDown(toSeq(e), e);
         drawOverlay();
       }}
       onPointerMove={(e) => {
-        handlers?.onMove?.(toSeq(e), e);
+        const p = toSeq(e);
+        handlers?.onMove?.(p, e);
         drawOverlay();
+        // Share the pointer with collaborators (a few times a second is plenty).
+        const now = performance.now();
+        if (now - lastReport.current > 80 && p.x >= 0 && p.y >= 0 && p.x <= sp.width && p.y <= sp.height) {
+          lastReport.current = now;
+          ctx.store.getState().reportLocation({ tool: sp.purpose === 'animation' ? 'animation' : 'video', nodeId: ctx.sequenceId, x: Math.round(p.x), y: Math.round(p.y), time: Math.round(time * 100) / 100 });
+        }
       }}
       onPointerUp={(e) => {
         handlers?.onUp?.(toSeq(e), e);
@@ -122,6 +143,20 @@ export function Stage({ ctx, handlers, editor, label, children }: { ctx: Timelin
     >
       <canvas ref={canvasRef} className="frame" style={{ width: dispW, height: dispH, position: 'absolute', left: geo.ox, top: geo.oy, background: 'transparent' }} aria-hidden="true" />
       <canvas ref={overlayRef} className="overlay" style={{ width: box.w, height: box.h }} aria-hidden="true" />
+      {Object.values(presence)
+        .filter((o) => o.location?.nodeId === ctx.sequenceId && o.location.x !== undefined && o.location.y !== undefined)
+        .map((o) => (
+          <div key={o.clientId} className="cursor-badge" style={{ left: geo.ox + o.location!.x! * k, top: geo.oy + o.location!.y! * k, background: o.color }}>
+            {o.author.name}
+          </div>
+        ))}
+      <PinLayer
+        label={t('comments.title')}
+        pins={pinComments.map((c) => ({ comment: c, x: geo.ox + c.props.anchor.x! * k, y: geo.oy + c.props.anchor.y! * k }))}
+        composer={composer ? { x: geo.ox + composer.x * k, y: geo.oy + composer.y * k, anchor: { tool: sp.purpose === 'animation' ? 'animation' : 'video', nodeId: ctx.sequenceId, x: composer.x, y: composer.y, time: composer.time } } : null}
+        onCompose={() => setComposer(null)}
+        onCancelCompose={() => setComposer(null)}
+      />
       {children}
     </div>
   );

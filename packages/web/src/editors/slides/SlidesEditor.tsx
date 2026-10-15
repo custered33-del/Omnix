@@ -3,7 +3,7 @@ import { useStore } from 'zustand';
 import { Type, ImagePlus, Film, Shapes, BarChart3, Link2, Play, Timer, Plus, FileUp, Square, Circle, Minus, Palette } from 'lucide-react';
 import type { SceneNode, SlideElementProps } from '@omnix/core';
 import { deckSlides, makeNode, newId } from '@omnix/core';
-import { useProject, useProjectStore } from '../../state/project.js';
+import { useFocusRequest, useProject, useProjectStore } from '../../state/project.js';
 import { useRenderHost } from '../../render/context.js';
 import { useShortcuts } from '../../ui/shortcuts.js';
 import { useCommands } from '../../state/commands.js';
@@ -44,6 +44,13 @@ export function SlidesEditor({ deckId }: { deckId: string }) {
     const sel = ed.getState().selected.filter((id) => state.nodes[id]);
     if (sel.length !== ed.getState().selected.length) ed.getState().set({ selected: sel });
   }, [state]);
+  // Show the slide a comment (or search result) points at.
+  useFocusRequest(deckId, (r) => {
+    const st = store.getState().state;
+    let n = r.nodeId ? st?.nodes[r.nodeId] : undefined;
+    while (n && n.type !== 'slide') n = n.parentId ? st?.nodes[n.parentId] : undefined;
+    if (n) ed.getState().set({ slideId: n.id, selected: r.nodeId && r.nodeId !== n.id ? [r.nodeId] : [] });
+  });
   useEffect(() => {
     if (slideId) store.getState().reportLocation({ tool: 'slides', nodeId: slideId });
     store.getState().setEditorContext({ slideId });

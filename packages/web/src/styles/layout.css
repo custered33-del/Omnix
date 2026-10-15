@@ -576,6 +576,25 @@
   white-space: nowrap;
   z-index: 5;
 }
+/* The pointer itself: a small arrow at the exact spot, the name tag just below it. */
+.cursor-badge::before {
+  content: '';
+  position: absolute;
+  left: -10px;
+  top: -10px;
+  width: 12px;
+  height: 14px;
+  background: inherit;
+  clip-path: polygon(0 0, 100% 62%, 45% 62%, 0 100%);
+}
+.cursor-badge {
+  transition: left 0.08s linear, top 0.08s linear;
+}
+@media (prefers-reduced-motion: reduce) {
+  .cursor-badge {
+    transition: none;
+  }
+}
 .layer-row {
   display: flex;
   align-items: center;

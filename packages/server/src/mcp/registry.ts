@@ -4,6 +4,7 @@ import type { Services } from '../services.js';
 import type { User } from '../auth/users.js';
 import type { ProjectMeta } from '../projects/service.js';
 import { ProjectError } from '../projects/service.js';
+import { locationOfChange } from '../realtime/presence.js';
 
 /**
  * Permission scopes a connection can hold. Presets map to them:
@@ -142,6 +143,7 @@ export function makeToolContext(services: Services, principal: Principal, via: '
         const op: Operation = ops.length === 1 ? ops[0]! : { kind: 'batch', ops };
         try {
           const commit = await services.projects.commit(projectId, op, principal.author, { label, via, ...(job ? { jobId: job } : {}) });
+          void showWhere(projectId, op);
           return { status: 'committed', commitId: commit.id, label };
         } catch (e) {
           if (e instanceof ProjectError) throw new ToolError(e.message);
@@ -150,12 +152,23 @@ export function makeToolContext(services: Services, principal: Principal, via: '
       }
       try {
         const p = await services.projects.propose(projectId, ops, { author: principal.author, label, ...(description ? { description } : {}), ...(job ? { jobId: job } : {}), via, stack: true });
+        void showWhere(projectId, ops.length === 1 ? ops[0]! : { kind: 'batch', ops });
         return { status: 'proposed', proposalId: p.id, label, changes: p.steps?.length ?? 1 };
       } catch (e) {
         if (e instanceof ProjectError) throw new ToolError(e.message);
         throw e;
       }
     },
+  };
+  // Claude appears to collaborators like a person would: its name where it is working.
+  const showWhere = async (projectId: string, op: Operation) => {
+    try {
+      const location = locationOfChange(await ctx.state(projectId), op);
+      if (!location) return;
+      services.presence.update(`mcp:${ctx.principal.author.id}:${projectId}`, projectId, ctx.principal.author, { location, selection: [] }, { ttlMs: 45_000 });
+    } catch {
+      // Presence is a courtesy; never fail a write over it.
+    }
   };
   return ctx;
 }

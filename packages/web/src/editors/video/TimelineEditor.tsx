@@ -3,7 +3,7 @@ import { useStore } from 'zustand';
 import { Play, Pause, SkipBack, SkipForward, Scissors, Magnet, ZoomIn, ZoomOut, MousePointer2, ArrowLeftRight, Columns2, MoveHorizontal, Slice, StepBack, StepForward, SlidersVertical, GanttChart, Repeat, Palette, Crop } from 'lucide-react';
 import type { SceneNode } from '@omnix/core';
 import { clipEnd, clipPropsAt, contentDuration, tracksOf, clipsOf } from '@omnix/core';
-import { useProject, useProjectStore } from '../../state/project.js';
+import { useFocusRequest, useProject, useProjectStore } from '../../state/project.js';
 import { useRenderHost } from '../../render/context.js';
 import { useShortcuts, formatShortcut } from '../../ui/shortcuts.js';
 import { useCommands } from '../../state/commands.js';
@@ -76,6 +76,10 @@ export function TimelineEditor({ sequenceId }: { sequenceId: string }) {
   }, [time, purpose, sequenceId, store]);
 
   useEditorShortcuts(ctx);
+  // Jump to a comment's moment (or any requested time).
+  useFocusRequest(sequenceId, (r) => {
+    if (r.time !== undefined) ed.getState().set({ time: r.time, playing: false });
+  });
 
   if (!seq) return null;
   const isAnim = purpose === 'animation';

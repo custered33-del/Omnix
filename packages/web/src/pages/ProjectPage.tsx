@@ -1,7 +1,7 @@
 import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { useStore } from 'zustand';
-import { ArrowLeft, Undo2, Redo2, History, Sparkles, NotebookPen, Download, Settings2, Plus, Activity as ActivityIcon, Eye, X, Bookmark, Wand2, Bot } from 'lucide-react';
+import { ArrowLeft, Undo2, Redo2, History, Sparkles, NotebookPen, Download, Settings2, Plus, Activity as ActivityIcon, Eye, X, Bookmark, Wand2, Bot, MessageSquare, MessageSquarePlus } from 'lucide-react';
 import { primaryDocumentNodes, childrenOf, type SceneNode, type ToolKind } from '@omnix/core';
 import { createProjectStore, ProjectContext, useProject, type ProjectStore } from '../state/project.js';
 import { BrowserRenderHost } from '../render/browserHost.js';
@@ -21,10 +21,12 @@ import { CommandBar } from '../components/CommandBar.js';
 import { AgentRunsPanel, AgentStartDialog, useAgentRuns } from '../components/AgentRuns.js';
 import { StyleDialog } from '../components/StyleDialog.js';
 import { FindDialog } from '../components/FindDialog.js';
+import { CommentsPanel } from '../components/CommentsPanel.js';
+import { allComments } from '../components/CommentPins.js';
 import { GenerativeDialog } from '../components/GenerativeDialog.js';
 import '../styles/ai.css';
 import { toast } from '../ui/toast.js';
-import { t } from '../i18n/index.js';
+import { plural, t } from '../i18n/index.js';
 import { post } from '../lib/api.js';
 
 const ImageEditor = lazy(() => import('../editors/image/ImageEditor.js').then((m) => ({ default: m.ImageEditor })));
@@ -33,7 +35,7 @@ const CodeEditor = lazy(() => import('../editors/code/CodeEditor.js').then((m) =
 const DocumentEditor = lazy(() => import('../editors/document/DocumentEditor.js').then((m) => ({ default: m.DocumentEditor })));
 const SlidesEditor = lazy(() => import('../editors/slides/SlidesEditor.js').then((m) => ({ default: m.SlidesEditor })));
 
-type Panel = 'proposals' | 'history' | 'notes' | 'activity' | 'runs' | null;
+type Panel = 'proposals' | 'history' | 'notes' | 'activity' | 'runs' | 'comments' | null;
 
 export function toolOfDoc(n: SceneNode): ToolKind | null {
   switch (n.type) {
@@ -91,8 +93,10 @@ function ProjectView({ store }: { store: ProjectStore }) {
   const proposals = useStore(store, (s) => s.proposals);
   const presence = useStore(store, (s) => s.presence);
   const preview = useStore(store, (s) => s.preview);
+  const commentMode = useStore(store, (s) => s.commentMode);
+  const focusRequest = useStore(store, (s) => s.focusRequest);
   const [params, setParams] = useSearchParams();
-  const [panel, setPanel] = useState<Panel>(() => (params.get('panel') as Panel) ?? (params.get('proposal') ? 'proposals' : params.get('commit') ? 'history' : params.get('run') ? 'runs' : null));
+  const [panel, setPanel] = useState<Panel>(() => (params.get('panel') as Panel) ?? (params.get('proposal') ? 'proposals' : params.get('commit') ? 'history' : params.get('run') ? 'runs' : params.get('comment') ? 'comments' : null));
   const dialogs = useDialogs();
   const runs = useAgentRuns(store.getState().projectId);
   const waitingRuns = runs?.filter((r) => r.status === 'awaiting_approval').length ?? 0;
@@ -122,6 +126,13 @@ function ProjectView({ store }: { store: ProjectStore }) {
       },
       'mod+shift+k': () => dialogs.openCommand(),
       'mod+shift+f': () => dialogs.openFind(true),
+      'mod+alt+m': () => {
+        if (store.getState().canEdit()) api.setCommentMode(!store.getState().commentMode);
+      },
+      esc: () => {
+        if (!store.getState().commentMode) return false;
+        api.setCommentMode(false);
+      },
     },
     [api],
     { allowInInputs: ['mod+s'] },
@@ -141,6 +152,8 @@ function ProjectView({ store }: { store: ProjectStore }) {
       { id: 'history', label: t('project.history'), section: t('palette.actions'), run: () => setPanel('history') },
       { id: 'proposals', label: t('project.proposals'), section: t('palette.actions'), run: () => setPanel('proposals') },
       { id: 'notes', label: t('project.notes'), section: t('palette.actions'), run: () => setPanel('notes') },
+      { id: 'comments', label: t('comments.title'), section: t('palette.actions'), run: () => setPanel('comments') },
+      { id: 'comment-mode', label: t('comments.mode'), section: t('palette.actions'), shortcut: 'mod+alt+m', keywords: 'pin annotate review feedback', run: () => api.setCommentMode(!store.getState().commentMode) },
       { id: 'export', label: t('project.export'), section: t('palette.actions'), run: () => setExportOpen(true) },
       { id: 'command', label: `${t('commands.title')}…`, section: t('palette.ai'), shortcut: 'mod+shift+k', keywords: 'ask natural language', run: () => dialogs.openCommand() },
       { id: 'agent', label: `${t('agent.start')}…`, section: t('palette.ai'), keywords: 'autonomous goal claude', run: () => dialogs.openAgent() },
@@ -200,6 +213,7 @@ function ProjectView({ store }: { store: ProjectStore }) {
   };
 
   const others = Object.values(presence);
+  const openComments = allComments(state).filter((c) => !c.props.resolved).length;
   return (
     <div className="workspace">
       <header className="workbar">
@@ -231,7 +245,7 @@ function ProjectView({ store }: { store: ProjectStore }) {
         </nav>
         <div className="spacer" />
         {conn !== 'open' && <span className="conn-dot">{t('app.offline')}</span>}
-        <span className="muted" style={{ fontSize: 'var(--fs-sm)' }} role="status" aria-live="polite">
+        <span className="muted" style={{ fontSize: 'var(--fs-sm)', whiteSpace: 'nowrap' }} role="status" aria-live="polite">
           {meta.role === 'viewer' ? t('project.readOnly') : pending ? t('project.saving') : t('project.saved')}
         </span>
         {others.length > 0 && (
@@ -265,6 +279,10 @@ function ProjectView({ store }: { store: ProjectStore }) {
           <Bot />
           {(waitingRuns > 0 || activeRuns > 0) && <span className="tabular">{waitingRuns || activeRuns}</span>}
         </button>
+        <button className="btn btn-sm btn-ghost" onClick={() => setPanel(panel === 'comments' ? null : 'comments')} aria-pressed={panel === 'comments'} aria-label={`${t('comments.title')} (${plural('comments.count', openComments)})`} title={t('comments.title')}>
+          <MessageSquare />
+          {openComments > 0 && <span className="tabular">{openComments}</span>}
+        </button>
         <IconButton label={t('project.history')} pressed={panel === 'history'} onClick={() => setPanel(panel === 'history' ? null : 'history')}>
           <History />
         </IconButton>
@@ -283,6 +301,15 @@ function ProjectView({ store }: { store: ProjectStore }) {
       </header>
       <div className="workarea">
         <div style={{ display: 'flex', flexDirection: 'column', minHeight: 0, minWidth: 0 }}>
+          {commentMode && (
+            <div className="commenting-banner" role="status">
+              <MessageSquarePlus size={16} aria-hidden="true" />
+              <span className="grow">{t('comments.modeHint')}</span>
+              <button className="btn btn-sm" onClick={() => api.setCommentMode(false)}>
+                <X /> {t('app.done')}
+              </button>
+            </div>
+          )}
           {preview && (
             <div className="preview-banner" role="status">
               <Eye size={16} aria-hidden="true" />
@@ -321,7 +348,7 @@ function ProjectView({ store }: { store: ProjectStore }) {
           <aside className="drawer" aria-label={panel}>
             <div className="panel-header">
               <span className="grow">
-                {panel === 'proposals' ? t('proposals.title') : panel === 'history' ? t('history.title') : panel === 'notes' ? t('notes.title') : panel === 'runs' ? t('agent.runs') : t('activity.title')}
+                {panel === 'proposals' ? t('proposals.title') : panel === 'history' ? t('history.title') : panel === 'notes' ? t('notes.title') : panel === 'runs' ? t('agent.runs') : panel === 'comments' ? t('comments.title') : t('activity.title')}
               </span>
               <IconButton
                 small
@@ -341,6 +368,7 @@ function ProjectView({ store }: { store: ProjectStore }) {
               {panel === 'proposals' && <ProposalsPanel focusId={params.get('proposal')} />}
               {panel === 'history' && <HistoryPanel focusCommit={params.get('commit')} />}
               {panel === 'notes' && <NotesPanel />}
+              {panel === 'comments' && <CommentsPanel focusId={params.get('comment')} />}
               {panel === 'activity' && <ActivityFeed projectId={meta.id} showProject={false} filter limit={100} />}
               {panel === 'runs' && <AgentRunsPanel projectId={meta.id} projectName={meta.name} focusId={params.get('run')} onStart={() => dialogs.openAgent()} />}
             </div>

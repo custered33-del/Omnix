@@ -1,14 +1,16 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { FileCode, FilePlus, BookOpen, Play, X, Terminal as TerminalIcon, GitCommitHorizontal, Shield, MoreHorizontal, NotebookPen } from 'lucide-react';
 import type { CodeLanguage, SceneNode } from '@omnix/core';
 import { childrenOf, makeNode } from '@omnix/core';
-import { useProject, useProjectStore } from '../../state/project.js';
+import { useFocusRequest, useProject, useProjectStore } from '../../state/project.js';
+import { addComment, CommentThread, NewComment } from '../../components/Comments.js';
+import { allComments } from '../../components/CommentPins.js';
 import { IconButton, MenuButton, Spinner } from '../../ui/primitives.js';
 import { useShortcuts } from '../../ui/shortcuts.js';
 import { useCommands } from '../../state/commands.js';
 import { toast } from '../../ui/toast.js';
 import { t } from '../../i18n/index.js';
-import { CodeMirror, languageForPath } from './CodeMirror.js';
+import { CodeMirror, languageForPath, type LineMarks } from './CodeMirror.js';
 import { NotebookView } from './Notebook.js';
 import { GitHistory, SandboxSettings, Terminal, type TerminalLine } from './SidePanels.js';
 import { makeTextCommitter, runTarget, type CodeCtx, type RunResult } from './codeApi.js';
@@ -36,6 +38,12 @@ export function CodeEditor({ workspaceId }: { workspaceId: string }) {
   const [running, setRunning] = useState(false);
   const [creating, setCreating] = useState<null | 'file' | 'notebook'>(null);
   const [renaming, setRenaming] = useState<string | null>(null);
+  const commentMode = useProject((s) => s.commentMode);
+  const presence = useProject((s) => s.presence);
+  const [linePop, setLinePop] = useState<{ fileId: string; line: number; commentId: string | null; top: number } | null>(null);
+  const [reveal, setReveal] = useState<{ line: number; seq: number } | null>(null);
+  const paneRef = useRef<HTMLDivElement>(null);
+  const pendingPop = useRef<{ fileId: string; commentId: string | null } | null>(null);
 
   // Drop tabs for deleted items; keep a valid active tab.
   useEffect(() => {
@@ -58,6 +66,54 @@ export function CodeEditor({ workspaceId }: { workspaceId: string }) {
   };
 
   const activeNode = active ? state.nodes[active] : undefined;
+
+  // Line comments and collaborators' cursor lines in the open file.
+  const fileComments = activeNode ? allComments(state).filter((c) => c.props.anchor.nodeId === activeNode.id && c.props.anchor.line !== undefined) : [];
+  const commentKey = fileComments.map((c) => `${c.id}:${c.props.anchor.line}:${c.props.resolved}`).join();
+  const cursorKey = Object.values(presence)
+    .filter((p) => p.location?.tool === 'code' && p.location.nodeId === activeNode?.id && p.location.line)
+    .map((p) => `${p.clientId}:${p.location!.line}:${p.author.name}:${p.color}`)
+    .join();
+  const marks: LineMarks = useMemo(
+    () => ({
+      comments: fileComments.map((c, i) => ({ id: c.id, line: c.props.anchor.line!, n: i + 1, resolved: c.props.resolved })),
+      cursors: Object.values(presence)
+        .filter((p) => p.location?.tool === 'code' && p.location.nodeId === activeNode?.id && p.location.line)
+        .map((p) => ({ id: p.clientId, line: p.location!.line!, name: p.author.name, color: p.color })),
+    }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [commentKey, cursorKey, activeNode?.id],
+  );
+  const lastLineReport = useRef(0);
+  const cursorLine = useRef(1);
+  const reportLine = (line: number) => {
+    if (!activeNode) return;
+    cursorLine.current = line;
+    const now = performance.now();
+    if (now - lastLineReport.current < 120) return;
+    lastLineReport.current = now;
+    store.getState().reportLocation({ tool: 'code', nodeId: activeNode.id, line });
+  };
+  // Just below the line, kept inside the pane.
+  const popTop = (rect: DOMRect) => {
+    const pane = paneRef.current!.getBoundingClientRect();
+    return Math.max(4, Math.min(rect.bottom - pane.top + 4, pane.height - 180));
+  };
+  const openLinePop = (line: number, commentId: string | null, rect: DOMRect) => {
+    if (!activeNode) return;
+    if (!commentId && !canEdit) return;
+    setLinePop({ fileId: activeNode.id, line, commentId, top: popTop(rect) });
+  };
+  // Jump to a comment's line (from the comments panel or a link).
+  useFocusRequest(workspaceId, (r) => {
+    const target = r.nodeId ? state.nodes[r.nodeId] : undefined;
+    if (!target || (target.type !== 'codeFile' && target.type !== 'notebook')) return;
+    open(target.id);
+    if (r.line !== undefined) {
+      setReveal({ line: r.line, seq: r.seq });
+      pendingPop.current = r.commentId ? { fileId: target.id, commentId: r.commentId } : null;
+    }
+  });
   const runFile = async () => {
     if (!activeNode || activeNode.type !== 'codeFile') return;
     const f = activeNode as SceneNode<'codeFile'>;
@@ -101,8 +157,22 @@ export function CodeEditor({ workspaceId }: { workspaceId: string }) {
       { id: 'code.newFile', label: t('code.newFile'), section: t('tools.codeLong'), run: () => setCreating('file') },
       { id: 'code.newNotebook', label: 'New notebook', section: t('tools.codeLong'), run: () => setCreating('notebook') },
       { id: 'code.history', label: t('code.history'), section: t('tools.codeLong'), run: () => setSide('history') },
+      ...(canEdit && activeNode?.type === 'codeFile'
+        ? [
+            {
+              id: 'code.comment',
+              label: t('comments.addHere'),
+              section: t('tools.codeLong'),
+              keywords: 'comment review note',
+              run: () => {
+                pendingPop.current = { fileId: activeNode.id, commentId: null };
+                setReveal({ line: cursorLine.current, seq: Date.now() });
+              },
+            },
+          ]
+        : []),
     ],
-    [activeNode?.id],
+    [activeNode?.id, canEdit],
   );
 
   if (!ws) return null;
@@ -217,10 +287,20 @@ export function CodeEditor({ workspaceId }: { workspaceId: string }) {
             </button>
           )}
         </div>
-        <div className="code-pane" role="tabpanel">
+        <div className={`code-pane${commentMode ? ' commenting' : ''}`} role="tabpanel" ref={paneRef} style={{ position: 'relative' }}>
           {activeNode?.type === 'codeFile' && (
             <CodeMirror
               key={activeNode.id}
+              marks={marks}
+              commentMode={commentMode && canEdit}
+              onLineComment={openLinePop}
+              onCursorLine={reportLine}
+              reveal={reveal}
+              onRevealed={(line, rect) => {
+                const want = pendingPop.current;
+                pendingPop.current = null;
+                if (want && want.fileId === activeNode.id) setLinePop({ fileId: want.fileId, line, commentId: want.commentId, top: popTop(rect) });
+              }}
               value={(activeNode as SceneNode<'codeFile'>).props.content}
               language={languageForPath((activeNode as SceneNode<'codeFile'>).props.path)}
               readOnly={!canEdit}
@@ -230,6 +310,30 @@ export function CodeEditor({ workspaceId }: { workspaceId: string }) {
             />
           )}
           {activeNode?.type === 'notebook' && <NotebookView key={activeNode.id} ctx={ctx} notebookId={activeNode.id} />}
+          {linePop && linePop.fileId === activeNode?.id && (
+            <div className="code-comment-pop" style={{ top: linePop.top }} role="dialog" aria-label={t('comments.atLine', { name: (activeNode as SceneNode<'codeFile'>).props.path, line: linePop.line })}>
+              {fileComments
+                .filter((c) => (linePop.commentId ? c.props.anchor.line === fileComments.find((x) => x.id === linePop.commentId)?.props.anchor.line : c.props.anchor.line === linePop.line))
+                .map((c) => (
+                  <CommentThread key={c.id} store={store} comment={c} />
+                ))}
+              {!linePop.commentId && (
+                <NewComment
+                  quote={`${t('comments.atLine', { name: (activeNode as SceneNode<'codeFile'>).props.path, line: linePop.line })}`}
+                  onSubmit={(body) => {
+                    const id = addComment(store, { tool: 'code', nodeId: activeNode!.id, line: linePop.line }, body);
+                    setLinePop(id ? { ...linePop, commentId: id } : null);
+                  }}
+                  onCancel={() => setLinePop(null)}
+                />
+              )}
+              {linePop.commentId && (
+                <button className="btn btn-sm btn-ghost" style={{ alignSelf: 'flex-end' }} onClick={() => setLinePop(null)}>
+                  {t('app.close')}
+                </button>
+              )}
+            </div>
+          )}
           {!activeNode && (
             <div className="empty" style={{ height: '100%' }}>
               <p>Open a file or notebook, or create one.</p>

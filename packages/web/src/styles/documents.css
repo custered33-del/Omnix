@@ -496,3 +496,64 @@
     padding: 40px 32px;
   }
 }
+
+/* Collaborators' paragraphs and per-paragraph comment counts */
+.blk-wrap.has-others::before {
+  content: '';
+  position: absolute;
+  left: -14px;
+  top: 2px;
+  bottom: 2px;
+  width: 3px;
+  border-radius: 2px;
+  background: var(--remote);
+}
+.blk-presence {
+  position: absolute;
+  left: -20px;
+  top: 0.2em;
+  transform: translateX(-100%);
+  flex-direction: column;
+  align-items: flex-end;
+  display: flex;
+  gap: 4px;
+  pointer-events: none;
+  z-index: 2;
+}
+.blk-presence span {
+  padding: 0 5px;
+  border-radius: 3px;
+  color: #fff;
+  font: 600 10px/15px Inter, system-ui, sans-serif;
+  white-space: nowrap;
+}
+.blk-comments {
+  position: absolute;
+  right: -56px;
+  top: 0.15em;
+  display: grid;
+  place-items: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 5px;
+  border: 1.5px solid #fff;
+  border-radius: 10px 10px 10px 2px;
+  background: #eda100;
+  color: #1d1f24;
+  font: 700 11px/1 Inter, system-ui, sans-serif;
+  cursor: pointer;
+}
+.blk-comments:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.doc-page.commenting .blk-wrap {
+  cursor: copy;
+}
+.doc-page.commenting .blk-wrap:hover {
+  background: color-mix(in srgb, #eda100 10%, transparent);
+  border-radius: 4px;
+}
+.doc-page.commenting .blk-text {
+  cursor: copy;
+}

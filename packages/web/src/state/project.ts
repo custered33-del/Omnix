@@ -1,6 +1,6 @@
 import { createStore, type StoreApi } from 'zustand/vanilla';
 import { useStore } from 'zustand';
-import { createContext, useContext } from 'react';
+import { createContext, useContext, useEffect } from 'react';
 import { applyCommitMarks, applyOp, newId, type AiMark, type Operation, type ProjectState, type Proposal, type Snapshot, type ToolKind, type Commit, type SceneNode } from '@omnix/core';
 import { api, post, ApiError } from '../lib/api.js';
 import { realtime } from './realtime.js';
@@ -73,6 +73,12 @@ export interface ProjectStoreState {
   /** Where the person is inside the open editor (current slide, playhead), for commands and Claude. */
   editorContext: { slideId: string | null; time: number | null };
   setEditorContext(patch: Partial<ProjectStoreState['editorContext']>): void;
+  /** Clicking in an editor pins a comment there instead of editing. */
+  commentMode: boolean;
+  setCommentMode(on: boolean): void;
+  /** A request to show something in its editor (from the comments panel, search or a link). Editors consume it. */
+  focusRequest: FocusRequest | null;
+  requestFocus(r: Omit<FocusRequest, 'seq' | 'at'>): void;
 
   load(): Promise<void>;
   commit(op: Operation, label?: string): string | null;
@@ -100,6 +106,18 @@ export interface ProjectStoreState {
 }
 
 export type ProjectStore = StoreApi<ProjectStoreState>;
+
+export interface FocusRequest {
+  /** Increments so the same place can be requested twice. */
+  seq: number;
+  /** When it was requested (an editor opened much later does not jump). */
+  at: number;
+  documentId: string;
+  nodeId?: string;
+  time?: number;
+  line?: number;
+  commentId?: string;
+}
 
 const pendingKey = (projectId: string) => `omnix.pending.${projectId}`;
 
@@ -177,6 +195,18 @@ export function createProjectStore(projectId: string): ProjectStore {
       version: 0,
       aiMarks: {},
       editorContext: { slideId: null, time: null },
+      commentMode: false,
+      focusRequest: null,
+
+      setCommentMode(on) {
+        set({ commentMode: on });
+      },
+
+      requestFocus(r) {
+        const seq = (get().focusRequest?.seq ?? 0) + 1;
+        if (get().activeDocId !== r.documentId && get().state?.nodes[r.documentId]) set({ activeDocId: r.documentId, selection: [], editorContext: { slideId: null, time: null } });
+        set({ focusRequest: { ...r, seq, at: Date.now() } });
+      },
 
       setEditorContext(patch) {
         const cur = get().editorContext;
@@ -459,4 +489,21 @@ export function useProjectStore(): ProjectStore {
 
 export function useProject<T>(selector: (s: ProjectStoreState) => T): T {
   return useStore(useProjectStore(), selector);
+}
+
+/** A focus request still worth acting on (editors may mount a moment after it is made). */
+export function freshFocus(r: FocusRequest | null): r is FocusRequest {
+  return !!r && Date.now() - r.at < 10_000;
+}
+
+/**
+ * Run `fn` when something asks to show a place in this document: on mount (the request
+ * may have opened the editor) and on every later request.
+ */
+export function useFocusRequest(documentId: string, fn: (r: FocusRequest) => void): void {
+  const r = useProject((s) => s.focusRequest);
+  useEffect(() => {
+    if (freshFocus(r) && r.documentId === documentId) fn(r);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [r?.seq, documentId]);
 }

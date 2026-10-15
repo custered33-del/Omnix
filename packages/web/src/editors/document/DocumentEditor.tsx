@@ -1,8 +1,8 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactElement } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactElement } from 'react';
 import { Bold, Italic, Strikethrough, Code2, Link2, List, ListOrdered, ListChecks, Quote, Table2, ImagePlus, Minus, MessageSquarePlus, ListTree, Type, Pencil, Eye, Plus, Sparkles, Heading1, Heading2, Heading3, Pilcrow, Link as LinkIcon, Presentation, Palette } from 'lucide-react';
 import type { BlockProps, BlockType, EmbedRef, SceneNode, TextStyle } from '@omnix/core';
 import { DEFAULT_DOC_STYLES, defaultStyleFor, documentBlocks, documentOutline, documentPlainText, documentSuggestions, inlineToPlain, listNumber, wordCount } from '@omnix/core';
-import { useProject, useProjectStore } from '../../state/project.js';
+import { useFocusRequest, useProject, useProjectStore } from '../../state/project.js';
 import { makeTextCommitter } from '../../state/textCommitter.js';
 import { useCommands } from '../../state/commands.js';
 import { useDialogs } from '../../state/dialogs.js';
@@ -90,6 +90,25 @@ export function DocumentEditor({ documentId }: { documentId: string }) {
   const suggestions = doc ? documentSuggestions(state, documentId, 'open') : [];
   const blockIds = useMemo(() => new Set([documentId, ...blocks.map((b) => b.id)]), [blocks.map((b) => b.id).join(','), documentId]);
   const comments = commentsFor(state, blockIds);
+  const commentMode = useProject((s) => s.commentMode);
+  const presence = useProject((s) => s.presence);
+  // Collaborators' current paragraphs (shown as a colored bar and name beside the block).
+  const othersIn = new Map<string, { name: string; color: string; id: string }[]>();
+  for (const p of Object.values(presence)) {
+    const b = p.location?.tool === 'document' && p.location.nodeId === documentId ? p.location.blockId : undefined;
+    if (b) othersIn.set(b, [...(othersIn.get(b) ?? []), { name: p.author.name, color: p.color, id: p.clientId }]);
+  }
+  const openCommentsOn = (blockId: string) => comments.filter((c) => c.props.anchor.nodeId === blockId && !c.props.resolved);
+  const showComment = (id: string) => {
+    setActiveComment(id);
+    requestAnimationFrame(() => document.getElementById(`doc-comment-${id}`)?.scrollIntoView({ block: 'nearest', behavior: 'smooth' }));
+  };
+  // Jump to a paragraph or comment (from the comments panel, search or a link).
+  useFocusRequest(documentId, (r) => {
+    const target = r.nodeId && r.nodeId !== documentId ? r.nodeId : null;
+    if (target) requestAnimationFrame(() => els.current.get(target)?.scrollIntoView({ block: 'center' }));
+    if (r.commentId) showComment(r.commentId);
+  });
 
   const styles = doc?.props.styles ?? DEFAULT_DOC_STYLES;
   const styleOf = (b: BlockProps): TextStyle | undefined => styles[defaultStyleFor(b)] ?? styles.body;
@@ -203,7 +222,10 @@ export function DocumentEditor({ documentId }: { documentId: string }) {
     },
     closeSlash: () => setSlash(null),
     onSelectionChange,
-    onFocusBlock: setFocused,
+    onFocusBlock: (id) => {
+      setFocused(id);
+      store.getState().reportLocation({ tool: 'document', nodeId: documentId, blockId: id });
+    },
     onBlockMenu: (id, anchor) => setMenu({ anchor, items: blockMenu(id) }),
     onInsertBelow: (id, anchor) =>
       setMenu({
@@ -400,12 +422,42 @@ export function DocumentEditor({ documentId }: { documentId: string }) {
               <Eye size={14} /> Suggesting: your edits are proposals until someone accepts them.
             </div>
           )}
-          <article className="doc-page" style={{ maxWidth: PAGE_WIDTH[doc.props.pageSize] }} aria-label={doc.props.name}>
+          <article
+            className={`doc-page${commentMode ? ' commenting' : ''}`}
+            style={{ maxWidth: PAGE_WIDTH[doc.props.pageSize] }}
+            aria-label={doc.props.name}
+            onPointerDownCapture={(e) => {
+              // Comment mode: clicking a paragraph pins a comment to it.
+              if (!commentMode || !canEdit || e.button !== 0) return;
+              const id = (e.target as HTMLElement).closest('[data-block]')?.getAttribute('data-block');
+              const b = id ? (state.nodes[id] as SceneNode<'block'> | undefined) : undefined;
+              if (!b) return;
+              e.preventDefault();
+              e.stopPropagation();
+              setCommentDraft({ blockId: b.id, range: null, quote: inlineToPlain(b.props.text).slice(0, 120) });
+            }}
+          >
             {blocks.map((b, i) => {
               const mine = suggesting ? mySuggestion(state, documentId, b.id) : undefined;
               const own = suggestions.filter((s) => s.props.blockId === b.id);
+              const here = othersIn.get(b.id);
+              const open = openCommentsOn(b.id);
               return (
-                <div key={b.id} className="blk-wrap">
+                <div key={b.id} className={`blk-wrap${here ? ' has-others' : ''}`} style={here ? ({ '--remote': here[0]!.color } as CSSProperties) : undefined}>
+                  {here && (
+                    <span className="blk-presence" aria-label={here.map((h) => t('comments.editing', { name: h.name })).join(', ')}>
+                      {here.map((h) => (
+                        <span key={h.id} style={{ background: h.color }}>
+                          {h.name}
+                        </span>
+                      ))}
+                    </span>
+                  )}
+                  {open.length > 0 && (
+                    <button type="button" className="blk-comments" aria-label={plural('comments.count', open.length)} onClick={() => showComment(open[0]!.id)}>
+                      {open.length}
+                    </button>
+                  )}
                   <DocBlock
                     block={b}
                     env={env}
@@ -459,8 +511,8 @@ export function DocumentEditor({ documentId }: { documentId: string }) {
             const plainText = b ? inlineToPlain(b.props.text) : '';
             const quote = c.props.anchor.range ? plainText.slice(c.props.anchor.range[0], c.props.anchor.range[1]) : plainText.slice(0, 120);
             return (
+              <div key={c.id} id={`doc-comment-${c.id}`}>
               <CommentThread
-                key={c.id}
                 store={store}
                 comment={c}
                 quote={quote || undefined}
@@ -470,6 +522,7 @@ export function DocumentEditor({ documentId }: { documentId: string }) {
                   els.current.get(c.props.anchor.nodeId)?.scrollIntoView({ block: 'center', behavior: 'smooth' });
                 }}
               />
+              </div>
             );
           })}
           {comments.length === 0 && !commentDraft && <p className="muted" style={{ fontSize: 'var(--fs-sm)' }}>Select text and choose Comment, or use a block's menu.</p>}

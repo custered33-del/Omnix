@@ -187,6 +187,91 @@ export const documentTools = [
   }),
 
   defineTool({
+    name: 'list_comments',
+    title: 'List comments',
+    description:
+      'Read the comment threads in a project (open ones by default): who wrote what, the replies, and where each is pinned, with the context it points at (the quoted text, the code line, the slide number, the time, or the canvas position). Use it to answer review feedback; resolve threads you have addressed with resolve_comment.',
+    category: 'collaboration',
+    access: 'read',
+    input: { projectId: zProjectId, status: z.enum(['open', 'resolved', 'all']).default('open'), documentId: z.string().optional().describe('Only comments in this canvas, sequence, workspace, document or deck') },
+    output: z.object({ comments: z.array(z.unknown()) }),
+    example: { input: { projectId: 'prj_8Kq2...' }, output: { comments: [{ id: 'cmt_1', text: 'Can the logo be larger?', author: 'Seb', where: 'Slide 2', documentId: 'deck_1', replies: [] }] } },
+    async handler(args, ctx) {
+      await ctx.requireProject(args.projectId, 'read');
+      const state = await ctx.state(args.projectId);
+      const docOf = (id: string): SceneNode | undefined => {
+        let cur: SceneNode | undefined = state.nodes[id];
+        while (cur && !['canvas', 'sequence', 'codeWorkspace', 'document', 'deck'].includes(cur.type)) cur = cur.parentId ? state.nodes[cur.parentId] : undefined;
+        return cur;
+      };
+      const comments = commentsContainer(state)
+        .children.map((id) => state.nodes[id])
+        .filter((n): n is SceneNode<'comment'> => !!n && n.type === 'comment')
+        .filter((c) => args.status === 'all' || (args.status === 'open' ? !c.props.resolved : c.props.resolved))
+        .map((c) => {
+          const a = c.props.anchor;
+          const target = state.nodes[a.nodeId];
+          const doc = docOf(a.nodeId);
+          if (args.documentId && doc?.id !== args.documentId) return null;
+          let where = target ? String((target.props as { name?: string; path?: string }).name ?? (target.props as { path?: string }).path ?? target.type) : 'a deleted item';
+          let context: string | undefined;
+          if (target?.type === 'block') {
+            const plain = inlineToPlain((target as SceneNode<'block'>).props.text);
+            context = a.range ? plain.slice(a.range[0], a.range[1]) : plain.slice(0, 200);
+            where = `paragraph in ${String((doc?.props as { name?: string } | undefined)?.name ?? 'the document')}`;
+          } else if (target?.type === 'codeFile' && a.line !== undefined) {
+            context = (target as SceneNode<'codeFile'>).props.content.split('\n')[a.line - 1];
+            where = `${(target as SceneNode<'codeFile'>).props.path}, line ${a.line}`;
+          } else if (target?.type === 'slide') {
+            const deck = target.parentId ? state.nodes[target.parentId] : undefined;
+            const idx = deck ? deckSlides(state, deck.id).findIndex((sl) => sl.id === target.id) + 1 : 0;
+            where = `slide ${idx}${a.x !== undefined ? ` at (${Math.round(a.x)}, ${Math.round(a.y ?? 0)})` : ''}`;
+          } else if (a.time !== undefined) where = `${where} at ${a.time.toFixed(2)}s${a.x !== undefined ? `, frame position (${Math.round(a.x)}, ${Math.round(a.y ?? 0)})` : ''}`;
+          else if (a.x !== undefined) where = `${where} at (${Math.round(a.x)}, ${Math.round(a.y ?? 0)})`;
+          return {
+            id: c.id,
+            text: c.props.text,
+            author: c.props.author.name,
+            authorType: c.props.author.type,
+            createdAt: c.props.createdAt,
+            resolved: c.props.resolved,
+            where,
+            ...(context !== undefined ? { context } : {}),
+            anchor: a,
+            ...(doc ? { documentId: doc.id, documentType: doc.type } : {}),
+            replies: c.props.replies.map((r) => ({ author: r.author.name, text: r.text, createdAt: r.createdAt })),
+          };
+        })
+        .filter((c): c is NonNullable<typeof c> => !!c);
+      const text = comments.length
+        ? comments.map((c) => `- ${c.id} (${c.where}) ${c.author}: ${c.text.slice(0, 140)}${c.replies.length ? ` [${c.replies.length} repl${c.replies.length === 1 ? 'y' : 'ies'}]` : ''}${c.resolved ? ' [resolved]' : ''}`).join('\n')
+        : `No ${args.status === 'all' ? '' : `${args.status} `}comments.`;
+      return { text, data: { comments } };
+    },
+  }),
+
+  defineTool({
+    name: 'resolve_comment',
+    title: 'Resolve a comment',
+    description: 'Mark a comment thread resolved (or reopen it), optionally replying first to say what you changed. Like comments themselves, this applies directly in every permission mode.',
+    category: 'collaboration',
+    access: 'write',
+    input: { projectId: zProjectId, commentId: z.string(), reply: z.string().max(10_000).optional().describe('A closing reply, for example what was changed'), reopen: z.boolean().optional() },
+    output: zWriteResult,
+    example: { input: { projectId: 'prj_8Kq2...', commentId: 'cmt_1', reply: 'Made the logo 40% larger on slide 2.' }, output: { status: 'committed', commitId: 'c_res...' } },
+    async handler(args, ctx) {
+      await ctx.requireProject(args.projectId, 'write');
+      const state = await ctx.state(args.projectId);
+      const c = need(state, args.commentId, 'comment', 'comment');
+      const ops: Operation[] = [];
+      if (args.reply) ops.push({ kind: 'listInsert', id: c.id, prop: 'replies', items: [{ id: newId('rep'), author: ctx.principal.author, text: args.reply, createdAt: new Date().toISOString() }] });
+      ops.push({ kind: 'update', id: c.id, set: { resolved: !args.reopen } });
+      const out = await ctx.apply(args.projectId, ops, args.reopen ? 'Reopen comment' : 'Resolve comment', undefined, { reviewable: true });
+      return writeResult(out);
+    },
+  }),
+
+  defineTool({
     name: 'doc_set_style',
     title: 'Change a document style',
     description: 'Change a named style for the whole document (body, h1, h2, h3, quote, code, caption or a new name): font family, size (pt), weight, color, line height, spacing before/after (pt) and italic.',

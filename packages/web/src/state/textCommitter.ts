@@ -1,4 +1,15 @@
+import { commentLineOps, type Operation, type SceneNode } from '@omnix/core';
 import type { ProjectStore } from './project.js';
+
+/** One committed edit; code edits carry their line comments along with the lines they point at. */
+function commitEdit(store: ProjectStore, nodeId: string, pending: Record<string, unknown>, label: string): void {
+  const st = store.getState();
+  const node = st.state?.nodes[nodeId];
+  if (!node) return;
+  const update: Operation = { kind: 'update', id: nodeId, set: pending };
+  const follow = node.type === 'codeFile' && typeof pending.content === 'string' ? commentLineOps(st.state!, nodeId, (node as SceneNode<'codeFile'>).props.content, pending.content) : [];
+  st.commit(follow.length ? { kind: 'batch', ops: [update, ...follow] } : update, label);
+}
 
 /**
  * Debounced text editing: each keystroke shows immediately (as a transient override) and the
@@ -22,7 +33,7 @@ export function makeTextCommitter(store: ProjectStore, delay = 700) {
           const pending = st.transient[nodeId];
           if (!pending) return;
           st.clearTransient(nodeId);
-          if (st.state?.nodes[nodeId]) st.commit({ kind: 'update', id: nodeId, set: pending }, label);
+          commitEdit(store, nodeId, pending, label);
         }, delay),
       );
     },
@@ -40,7 +51,7 @@ export function makeTextCommitter(store: ProjectStore, delay = 700) {
       const pending = st.transient[nodeId];
       if (!pending) return;
       st.clearTransient(nodeId);
-      if (st.state?.nodes[nodeId]) st.commit({ kind: 'update', id: nodeId, set: pending }, labels.get(nodeId) ?? 'Edit text');
+      commitEdit(store, nodeId, pending, labels.get(nodeId) ?? 'Edit text');
     },
     /** Drop one node's pending typing (its changes are being folded into another edit). */
     discard(nodeId: string) {

@@ -17,3 +17,4 @@ export * from './schemas.js';
 export * from './documents.js';
 export * from './decks.js';
 export * from './attribution.js';
+export * from './textDiff.js';
