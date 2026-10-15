@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { t, type MessageKey } from '../i18n/index.js';
 import { formatShortcut } from '../ui/shortcuts.js';
-import '../styles/setup.css';
 
 export interface TourStep {
   /** CSS selector of the element to point at. Steps whose element is missing are skipped. */

@@ -27,7 +27,6 @@ import { DocumentBatchDialog } from '../components/BatchDialog.js';
 import { PluginsPanel } from '../components/Plugins.js';
 import { allComments } from '../components/CommentPins.js';
 import { GenerativeDialog } from '../components/GenerativeDialog.js';
-import '../styles/ai.css';
 import { toast } from '../ui/toast.js';
 import { plural, t } from '../i18n/index.js';
 import { post } from '../lib/api.js';

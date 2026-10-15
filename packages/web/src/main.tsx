@@ -8,6 +8,8 @@ import './styles/base.css';
 import './styles/components.css';
 import './styles/layout.css';
 import './styles/editors.css';
+import './styles/ai.css';
+import './styles/setup.css';
 import { App } from './App.js';
 import { setLocale } from './i18n/index.js';
 

@@ -100,7 +100,7 @@ export class BrowserRenderHost implements RenderHost {
         const url = kind === 'image' ? this.url(id, '/file') : this.url(id, '/thumbnail');
         const res = await fetch(url, { credentials: 'same-origin' });
         if (!res.ok) throw new Error(String(res.status));
-        const bitmap = await createImageBitmap(await res.blob());
+        const bitmap = await decodeImage(await res.blob(), meta?.state === 'ready' ? meta.value : undefined);
         this.images.set(id, { state: 'ready', value: bitmap });
         this.notify();
       } catch {
@@ -281,5 +281,24 @@ export class BrowserRenderHost implements RenderHost {
     }
     this.videos.clear();
     this.listeners.clear();
+  }
+}
+
+/**
+ * Decode a fetched picture. Browsers cannot make a bitmap from an SVG file directly, so SVG goes
+ * through an image element, drawn at the size the library measured for it.
+ */
+export async function decodeImage(blob: Blob, size?: { width?: number | null; height?: number | null }): Promise<ImageBitmap> {
+  if (!/svg/i.test(blob.type)) return createImageBitmap(blob);
+  const url = URL.createObjectURL(blob);
+  try {
+    const img = new Image();
+    img.src = url;
+    await img.decode();
+    const width = Math.max(1, Math.round(size?.width || img.naturalWidth || 300));
+    const height = Math.max(1, Math.round(size?.height || img.naturalHeight || 150));
+    return await createImageBitmap(img, { resizeWidth: width, resizeHeight: height });
+  } finally {
+    URL.revokeObjectURL(url);
   }
 }

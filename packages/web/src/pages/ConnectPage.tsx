@@ -7,7 +7,6 @@ import { formatRelative, t, type MessageKey } from '../i18n/index.js';
 import { PresetPicker, MODE_LABEL, type PermissionMode } from '../components/PresetPicker.js';
 import { ToolIcon } from '../ui/icons.js';
 import type { ToolKind } from '@omnix/core';
-import '../styles/setup.css';
 
 interface RequestInfo {
   client: { name: string; redirectHost: string; clientUri: string | null };

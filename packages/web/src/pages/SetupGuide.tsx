@@ -8,7 +8,6 @@ import { formatShortcut } from '../ui/shortcuts.js';
 import { toast } from '../ui/toast.js';
 import { useClaudeStatus } from '../components/ClaudeStatus.js';
 import { PresetPicker, MODE_LABEL } from '../components/PresetPicker.js';
-import '../styles/setup.css';
 
 export const SETUP_STEPS = ['account', 'open-connectors', 'add-connector', 'oauth', 'scope', 'test', 'first-project'] as const;
 export type SetupStep = (typeof SETUP_STEPS)[number];

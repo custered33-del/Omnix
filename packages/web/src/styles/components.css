@@ -1038,3 +1038,91 @@ kbd,
 .plugin-status.error {
   color: var(--danger);
 }
+
+/* Comment threads: the shared card used on canvases, timelines, code, documents and slides. */
+.comment-card {
+  display: block;
+  padding: var(--sp-3);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--surface);
+  margin-bottom: var(--sp-3);
+  cursor: default;
+}
+.comment-card.active {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-soft);
+}
+.comment-card.resolved {
+  opacity: 0.6;
+}
+.comment-quote {
+  margin: 0 0 6px;
+  padding-left: 8px;
+  border-left: 3px solid #eda100;
+  color: var(--text-2);
+  font-size: var(--fs-sm);
+  font-style: italic;
+}
+
+/* Embeds (live links to a canvas, sequence, chart or file) and their source picker, shared by documents and slides. */
+.embed-view {
+  border: 1px solid #e3e1db;
+  border-radius: 8px;
+  overflow: hidden;
+  background: #ffffff;
+  color: #1d1f24;
+}
+.embed-view .embed-body {
+  padding: 8px;
+}
+.embed-caption {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  border-top: 1px solid #e3e1db;
+  background: #faf9f6;
+  font-size: 12px;
+  color: #6b7280;
+}
+.embed-missing {
+  display: grid;
+  place-items: center;
+  gap: 6px;
+  min-height: 120px;
+  color: #8a8f99;
+  font-size: 13px;
+  background: repeating-linear-gradient(135deg, #f6f5f1 0 10px, #fbfaf7 10px 20px);
+  border-radius: 6px;
+}
+.embed-media {
+  display: block;
+  max-width: 100%;
+  margin: 0 auto;
+}
+.picker-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 52vh;
+  overflow: auto;
+}
+.picker-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 10px;
+  border: none;
+  background: none;
+  border-radius: var(--r-sm);
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+  font-size: var(--fs-sm);
+}
+.picker-row:hover,
+.picker-row:focus-visible {
+  background: var(--surface-2);
+}

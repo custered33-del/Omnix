@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { ChevronRight, Play } from 'lucide-react';
 import { t, type MessageKey } from '../i18n/index.js';
-import '../styles/setup.css';
 
 type ItemKey = 'localAddress' | 'https' | 'unreachable' | 'wrongUrl' | 'mcp' | 'noConnection' | 'noCalls' | 'expired' | 'expiredWindow' | 'aiOff' | 'viewOnly' | 'missingProject' | 'proposals' | 'disconnect' | 'afterDisconnect' | 'oneProject' | 'testProject';
 
