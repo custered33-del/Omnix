@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Search, Wand2 } from 'lucide-react';
 import { useCommandStore, type Command } from '../state/commands.js';
 import { formatShortcut } from '../ui/shortcuts.js';
 import { t } from '../i18n/index.js';
+import { captureFocus } from '../ui/primitives.js';
 
 /** Fuzzy-ish match: every query word must appear in label, section or keywords. */
 function score(c: Command, q: string): number {
@@ -44,11 +45,16 @@ export function CommandPalette() {
     return found;
   }, [scopes, q, freeText]);
 
-  useEffect(() => {
+  const restoreFocus = useRef<(() => void) | null>(null);
+  useLayoutEffect(() => {
     if (open) {
+      restoreFocus.current = captureFocus();
       setQ('');
       setActive(0);
       setTimeout(() => inputRef.current?.focus(), 0);
+    } else {
+      restoreFocus.current?.();
+      restoreFocus.current = null;
     }
   }, [open]);
   useEffect(() => setActive(0), [q]);

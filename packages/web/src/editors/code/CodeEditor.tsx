@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { FileCode, FilePlus, BookOpen, Play, X, Terminal as TerminalIcon, GitCommitHorizontal, Shield, MoreHorizontal, NotebookPen } from 'lucide-react';
-import type { CodeLanguage, SceneNode } from '@omnix/core';
+import type { CodeLanguage, Operation, SceneNode } from '@omnix/core';
 import { childrenOf, makeNode } from '@omnix/core';
 import { useFocusRequest, useProject, useProjectStore } from '../../state/project.js';
 import { addComment, CommentThread, NewComment } from '../../components/Comments.js';
@@ -52,7 +52,7 @@ export function CodeEditor({ workspaceId }: { workspaceId: string }) {
     if (active && !state.nodes[active]) setActive(alive[0] ?? null);
   }, [state]);
   // Flush typing when leaving the editor.
-  useEffect(() => () => text.flushAll(), [text]);
+  useEffect(() => text.attach(), [text]);
 
   const open = (id: string) => {
     if (!tabs.includes(id)) setTabs([...tabs, id]);
@@ -206,14 +206,23 @@ export function CodeEditor({ workspaceId }: { workspaceId: string }) {
                     style={{ margin: '2px 8px' }}
                     onKeyDown={(e) => {
                       if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
-                      if (e.key === 'Escape') setRenaming(null);
+                      if (e.key === 'Escape') {
+                        // Cancel: the blur that follows must not rename.
+                        (e.target as HTMLInputElement).dataset.cancel = '1';
+                        (e.target as HTMLInputElement).blur();
+                      }
                     }}
                     onBlur={(e) => {
                       const v = e.target.value.trim();
                       setRenaming(null);
-                      if (!v) return;
-                      if (n.type === 'codeFile') store.getState().commit({ kind: 'update', id: n.id, set: { path: v, language: fileLanguage(v) } }, `Rename to ${v}`);
-                      else store.getState().commit({ kind: 'update', id: n.id, set: { name: v } }, `Rename notebook`);
+                      if (!v || e.target.dataset.cancel) return;
+                      if (n.type === 'codeFile') {
+                        if (v === label) return;
+                        if (items.some((o) => o.id !== n.id && o.type === 'codeFile' && (o as SceneNode<'codeFile'>).props.path === v)) return void toast.error(`${v} already exists`);
+                        // The entry file follows its file to the new name.
+                        const rename: Operation = { kind: 'update', id: n.id, set: { path: v, language: fileLanguage(v) } };
+                        store.getState().commit(ws.props.entry === label ? { kind: 'batch', ops: [rename, { kind: 'update', id: ws.id, set: { entry: v } }] } : rename, `Rename to ${v}`);
+                      } else store.getState().commit({ kind: 'update', id: n.id, set: { name: v } }, `Rename notebook`);
                     }}
                   />
                 ) : (

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { commentLineOps, commentsContainer, createProjectState, diffLines, makeNode, primaryDocumentNodes, remapLine, applyOp, type ProjectState, type SceneNode } from '../src/index.js';
+import { commentLineOps, commentsContainer, createProjectState, diffLines, makeNode, mapTextOffset, mergeText, primaryDocumentNodes, remapLine, applyOp, textHunks, type ProjectState, type SceneNode } from '../src/index.js';
 
 describe('line diff', () => {
   it('reports kept, removed and added runs in order', () => {
@@ -52,5 +52,56 @@ describe('line comments follow their code', () => {
     expect((state.nodes[c3.id] as SceneNode<'comment'>).props.anchor.line).toBe(4);
     expect((state.nodes[c1.id] as SceneNode<'comment'>).props.anchor.line).toBe(1);
     expect(commentLineOps(state, file.id, 'same', 'same')).toEqual([]);
+  });
+});
+
+describe('merging two edits of one text', () => {
+  it('keeps both people\'s typing when they change different parts', () => {
+    const base = 'The lamp is bright.';
+    expect(mergeText(base, 'The new lamp is bright.', 'The lamp is very bright.')).toBe('The new lamp is very bright.');
+    expect(mergeText(base, 'The lamp is bright. Buy it.', 'Aurora: The lamp is bright.')).toBe('Aurora: The lamp is bright. Buy it.');
+    // One deletes a word, the other adds one elsewhere.
+    expect(mergeText('one two three four', 'one three four', 'one two three four five')).toBe('one three four five');
+  });
+
+  it('keeps both insertions at the same place, and prefers mine where both changed the same words', () => {
+    expect(mergeText('Hello.', 'Hello. Mine.', 'Hello. Theirs.')).toBe('Hello. Theirs. Mine.');
+    expect(mergeText('the red lamp', 'the blue lamp', 'the green lamp')).toBe('the blue lamp');
+    // The same change made twice is applied once.
+    expect(mergeText('hello', 'hello world', 'hello world')).toBe('hello world');
+    expect(mergeText('x', 'x', 'y')).toBe('y');
+    expect(mergeText('x', 'y', 'x')).toBe('y');
+  });
+
+  it('never splits characters made of two code units', () => {
+    const merged = mergeText('a😀b', 'a😀😀b', 'a😁b');
+    expect([...merged].every((ch) => ch.length === 1 || /\p{Extended_Pictographic}/u.test(ch))).toBe(true);
+    expect(textHunks('😀', '😁')).toEqual([{ start: 0, end: 2, text: '😁' }]);
+  });
+
+  it('maps a caret across an outside change', () => {
+    expect(mapTextOffset('hello world', 'oh hello world', 6)).toBe(9);
+    expect(mapTextOffset('hello world', 'hello world!', 6)).toBe(6);
+    expect(mapTextOffset('hello big world', 'hello world', 8)).toBe(6);
+  });
+
+  it('merges concurrent updates that carry the text they were written over, and undoes only their own part', () => {
+    let state: ProjectState = createProjectState({ name: 'p', primaryTool: 'code', withPrimaryDocument: false });
+    const nodes = primaryDocumentNodes('code', 'Work');
+    nodes[0]!.parentId = state.rootId;
+    state = applyOp(state, { kind: 'create', parentId: state.rootId, nodes }).state;
+    const file = makeNode('codeFile', { path: 'a.py', language: 'python', content: 'x = 1\ny = 2\n' });
+    state = applyOp(state, { kind: 'create', parentId: nodes[0]!.id, nodes: [file] }).state;
+    const base = 'x = 1\ny = 2\n';
+    // Two people type from the same starting text; the second update lands on the first.
+    const a = applyOp(state, { kind: 'update', id: file.id, set: { content: 'x = 10\ny = 2\n' }, base: { content: base } });
+    const b = applyOp(a.state, { kind: 'update', id: file.id, set: { content: 'x = 1\ny = 2\nz = 3\n' }, base: { content: base } });
+    const content = (s: ProjectState) => (s.nodes[file.id] as SceneNode<'codeFile'>).props.content;
+    expect(content(b.state)).toBe('x = 10\ny = 2\nz = 3\n');
+    // Undoing the first person's edit after the second keeps the second person's line.
+    const undoA = applyOp(b.state, a.inverse);
+    expect(content(undoA.state)).toBe('x = 1\ny = 2\nz = 3\n');
+    // Without a base an update still replaces the value outright.
+    expect(content(applyOp(b.state, { kind: 'update', id: file.id, set: { content: 'new' } }).state)).toBe('new');
   });
 });

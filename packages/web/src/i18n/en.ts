@@ -33,6 +33,7 @@ export const en = {
     untitled: 'Untitled',
     unsavedRecovered_one: 'Recovered {count} change that had not reached the server.',
     unsavedRecovered_other: 'Recovered {count} changes that had not reached the server.',
+    stillSaving: 'Your last edits are still being saved. Try again in a moment.',
   },
   time: {
     justNow: 'just now',
@@ -90,7 +91,7 @@ export const en = {
     greeting: 'Good to see you, {name}',
     subtitle: 'Pick up where you left off, or start something new.',
     recent: 'Recent projects',
-    noProjects: 'No projects yet. Start one below, or let Claude create one for you.',
+    noProjects: 'No projects yet. Start one above, or let Claude create one for you.',
     create: 'Start something new',
     fromTemplate: 'Start from a template',
     assets: 'Recent assets',
@@ -175,6 +176,7 @@ export const en = {
     saving: 'Saving…',
     readOnly: 'View only',
     notFound: 'This project does not exist or you do not have access.',
+    deleted: 'This project was deleted.',
     snapshot: 'Save version',
     snapshotName: 'Version name',
     restore: 'Restore this version',
@@ -199,6 +201,7 @@ export const en = {
     changed: 'Changed',
   },
   history: {
+    branchTip: 'Later version',
     title: 'History',
     empty: 'No changes yet.',
     current: 'Current',

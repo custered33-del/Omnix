@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactElement } from 'react';
+import { useCallback, useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactElement } from 'react';
 import { Bold, Italic, Strikethrough, Code2, Link2, List, ListOrdered, ListChecks, Quote, Table2, ImagePlus, Minus, MessageSquarePlus, ListTree, Type, Pencil, Eye, Plus, Sparkles, Heading1, Heading2, Heading3, Pilcrow, Link as LinkIcon, Presentation, Palette } from 'lucide-react';
 import type { BlockProps, BlockType, EmbedRef, SceneNode, TextStyle } from '@omnix/core';
 import { DEFAULT_DOC_STYLES, defaultStyleFor, documentBlocks, documentOutline, documentPlainText, documentSuggestions, inlineToPlain, listNumber, wordCount } from '@omnix/core';
@@ -14,7 +14,7 @@ import { EmbedPicker } from '../../components/EmbedView.js';
 import { addComment, CommentThread, commentsFor, currentAuthor, NewComment } from '../../components/Comments.js';
 import { FontSelect } from '../shared/FontSelect.js';
 import { plural, t } from '../../i18n/index.js';
-import { DocBlock, type BlockEnv } from './DocBlock.js';
+import { DocBlock, type BlockEnv, type BlockHandlers } from './DocBlock.js';
 import { SuggestionCard } from './SuggestionCard.js';
 import { insertAfter, mySuggestion, suggestDelete, TEXT_BLOCKS, turnInto, type DocCtx, type TurnInto } from './docOps.js';
 import { domToInline, selectionRange, setCaret } from './inline.js';
@@ -59,7 +59,7 @@ export function DocumentEditor({ documentId }: { documentId: string }) {
   const els = useRef(new Map<string, HTMLElement>());
   const pendingFocus = useRef<{ id: string; where: 'start' | 'end' | number } | null>(null);
   const text = useMemo(() => makeTextCommitter(store, 600), [store]);
-  useEffect(() => () => text.flushAll(), [text]);
+  useEffect(() => text.attach(), [text]);
 
   const ctx: DocCtx = useMemo(
     () => ({
@@ -87,7 +87,12 @@ export function DocumentEditor({ documentId }: { documentId: string }) {
   useLayoutEffect(applyFocus);
 
   const me = currentAuthor().id;
+  // The word count and outline follow a moment behind typing, so they never slow a keystroke.
+  const settled = useDeferredValue(state);
+  const words = useMemo(() => (settled.nodes[documentId] ? wordCount(documentPlainText(settled, documentId)) : 0), [settled, documentId]);
+  const outline = useMemo(() => (settled.nodes[documentId] ? documentOutline(settled, documentId) : []), [settled, documentId]);
   const blocks = doc ? documentBlocks(state, documentId) : [];
+  const blockProps = blocks.map((x) => x.props);
   const suggestions = doc ? documentSuggestions(state, documentId, 'open') : [];
   const blockIds = useMemo(() => new Set([documentId, ...blocks.map((b) => b.id)]), [blocks.map((b) => b.id).join(','), documentId]);
   const comments = commentsFor(state, blockIds);
@@ -181,9 +186,9 @@ export function DocumentEditor({ documentId }: { documentId: string }) {
   const slashFiltered = slash ? slashItems.filter((i) => `${i.label} ${i.keywords}`.toLowerCase().includes(slash.query.toLowerCase())) : [];
 
   /* ---------------- block environment ---------------- */
-  const env: BlockEnv = {
-    ctx,
-    canEdit,
+  // Blocks are memoized. Their environment stays the same object while only text changes, so a
+  // keystroke re-renders one block, not the whole document; handlers read the latest closures.
+  const handlers: BlockHandlers = {
     register: (id, el) => {
       if (el) els.current.set(id, el);
       else els.current.delete(id);
@@ -199,7 +204,6 @@ export function DocumentEditor({ documentId }: { documentId: string }) {
       if (next) ctx.focus(next, where);
     },
     openSlash: (id, query, rect) => setSlash((cur) => ({ blockId: id, query, rect, index: cur?.blockId === id ? Math.min(cur.index, 20) : 0 })),
-    slashOpen: !!slash,
     slashKey: (e) => {
       if (!slash) return false;
       if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
@@ -253,8 +257,18 @@ export function DocumentEditor({ documentId }: { documentId: string }) {
       }
       setDrag(null);
     },
-    dropTarget: drag?.target ?? null,
   };
+  const live = useRef(handlers);
+  live.current = handlers;
+  const stableHandlers = useMemo(() => {
+    const out: Record<string, (...args: never[]) => unknown> = {};
+    for (const k of Object.keys(handlers)) out[k] = (...args: never[]) => (live.current[k as keyof BlockHandlers] as (...a: never[]) => unknown)(...args);
+    return out as unknown as BlockHandlers;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  const slashOpen = !!slash;
+  const dropTarget = drag?.target ?? null;
+  const env: BlockEnv = useMemo(() => ({ ...stableHandlers, ctx, canEdit, slashOpen, dropTarget }), [stableHandlers, ctx, canEdit, slashOpen, dropTarget?.id, dropTarget?.where]);
 
   const blockMenu = (id: string): MenuItemDef[] => {
     const b = state.nodes[id] as SceneNode<'block'>;
@@ -318,8 +332,6 @@ export function DocumentEditor({ documentId }: { documentId: string }) {
   );
 
   if (!doc) return null;
-  const plain = documentPlainText(state, documentId);
-  const words = wordCount(plain);
   const focusedBlock = focused ? (state.nodes[focused] as SceneNode<'block'> | undefined) : undefined;
   const currentKind = focusedBlock ? (focusedBlock.props.blockType === 'heading' ? `h${focusedBlock.props.level ?? 1}` : focusedBlock.props.blockType) : 'paragraph';
 
@@ -409,12 +421,12 @@ export function DocumentEditor({ documentId }: { documentId: string }) {
         {panel === 'outline' && (
           <nav className="doc-outline" aria-label="Outline">
             <h3>Outline</h3>
-            {documentOutline(state, documentId).map((o) => (
+            {outline.map((o) => (
               <button key={o.id} className="outline-item" style={{ paddingLeft: 8 + (o.level - 1) * 14 }} onClick={() => (els.current.get(o.id)?.scrollIntoView({ block: 'center', behavior: 'smooth' }), ctx.focus(o.id, 'end'))}>
                 {o.text || 'Untitled heading'}
               </button>
             ))}
-            {documentOutline(state, documentId).length === 0 && <p className="muted" style={{ fontSize: 'var(--fs-sm)' }}>Headings appear here.</p>}
+            {outline.length === 0 && <p className="muted" style={{ fontSize: 'var(--fs-sm)' }}>Headings appear here.</p>}
           </nav>
         )}
         <div className="doc-scroll">
@@ -463,7 +475,7 @@ export function DocumentEditor({ documentId }: { documentId: string }) {
                     block={b}
                     env={env}
                     style={listSpacing(styleOf(b.props), b.props, blocks[i - 1]?.props, blocks[i + 1]?.props)}
-                    number={b.props.blockType === 'numbered' ? listNumber(blocks.map((x) => x.props), i) : 0}
+                    number={b.props.blockType === 'numbered' ? listNumber(blockProps, i) : 0}
                     displayText={mine ? mine.props.text : b.props.text}
                     suggestionPending={own.some((s) => s.props.kind === 'replace')}
                     deleted={own.some((s) => s.props.kind === 'delete')}

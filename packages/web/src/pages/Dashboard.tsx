@@ -46,6 +46,17 @@ function ProjectCard({ p, onChanged }: { p: ProjectListItem; onChanged: () => vo
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [name, setName] = useState(p.name);
   const label = t(`tools.${p.primaryTool}`);
+  const rename = () => {
+    const next = name.trim();
+    if (!next || next === p.name) return setRenaming(false);
+    void patch(`/api/projects/${p.id}`, { name: next }).then(
+      () => {
+        setRenaming(false);
+        onChanged();
+      },
+      (e) => toast.error(e.message),
+    );
+  };
   return (
     <article className="project-card">
       <Link to={`/projects/${p.id}`} className="cover" aria-label={`${p.name}, ${label}`}>
@@ -66,7 +77,15 @@ function ProjectCard({ p, onChanged }: { p: ProjectListItem; onChanged: () => vo
         <MenuButton
           label={`${t('app.more')}: ${p.name}`}
           items={[
-            { label: t('app.rename'), icon: <Pencil />, onSelect: () => setRenaming(true) },
+            {
+              label: t('app.rename'),
+              icon: <Pencil />,
+              // Start from the current name (it may have changed elsewhere since last time).
+              onSelect: () => {
+                setName(p.name);
+                setRenaming(true);
+              },
+            },
             {
               label: p.archived ? t('project.unarchive') : t('project.archive'),
               icon: p.archived ? <ArchiveRestore /> : <Archive />,
@@ -89,24 +108,20 @@ function ProjectCard({ p, onChanged }: { p: ProjectListItem; onChanged: () => vo
               <button className="btn" onClick={() => setRenaming(false)}>
                 {t('app.cancel')}
               </button>
-              <button
-                className="btn btn-primary"
-                onClick={() =>
-                  void patch(`/api/projects/${p.id}`, { name }).then(
-                    () => {
-                      setRenaming(false);
-                      onChanged();
-                    },
-                    (e) => toast.error(e.message),
-                  )
-                }
-              >
+              <button className="btn btn-primary" onClick={rename}>
                 {t('app.save')}
               </button>
             </>
           }
         >
-          <input className="input" data-autofocus value={name} onChange={(e) => setName(e.target.value)} aria-label={t('project.rename')} />
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              rename();
+            }}
+          >
+            <input className="input" data-autofocus value={name} onChange={(e) => setName(e.target.value)} aria-label={t('project.rename')} />
+          </form>
         </Dialog>
       )}
       {confirmDelete && (

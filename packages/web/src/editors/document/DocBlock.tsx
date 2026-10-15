@@ -1,7 +1,7 @@
 import { memo, useLayoutEffect, useRef, useState, type CSSProperties } from 'react';
 import { GripVertical, Plus, Trash2, ImagePlus } from 'lucide-react';
 import type { SceneNode, TextStyle } from '@omnix/core';
-import { inlineToHtml } from '@omnix/core';
+import { inlineToHtml, mapTextOffset } from '@omnix/core';
 import { assetUrl } from '../../lib/api.js';
 import { EmbedView } from '../../components/EmbedView.js';
 import { AiMarker } from '../../components/AiMarker.js';
@@ -9,14 +9,11 @@ import { CodeMirror } from '../code/CodeMirror.js';
 import { caretOffset, caretOnEdgeLine, domToInline, setCaret, splitAtCaret } from './inline.js';
 import { indent, LIST_BLOCKS, mergeNext, mergeWithPrevious, moveBlock, pasteMarkdown, shortcutFor, splitBlock, suggestEdit, suggestInsert, turnInto, type DocCtx } from './docOps.js';
 
-export interface BlockEnv {
-  ctx: DocCtx;
-  canEdit: boolean;
+export interface BlockHandlers {
   /** Register the editable element so other blocks can move focus into it. */
   register(id: string, el: HTMLElement | null): void;
   focusSibling(id: string, dir: -1 | 1, where: 'start' | 'end'): void;
   openSlash(id: string, query: string, rect: DOMRect): void;
-  slashOpen: boolean;
   slashKey(e: React.KeyboardEvent): boolean;
   closeSlash(): void;
   onSelectionChange(): void;
@@ -26,6 +23,12 @@ export interface BlockEnv {
   dragStart(id: string): void;
   dragOver(id: string, where: 'before' | 'after' | null): void;
   drop(): void;
+}
+
+export interface BlockEnv extends BlockHandlers {
+  ctx: DocCtx;
+  canEdit: boolean;
+  slashOpen: boolean;
   dropTarget: { id: string; where: 'before' | 'after' } | null;
 }
 
@@ -44,7 +47,17 @@ export function styleVars(s: TextStyle | undefined): CSSProperties {
 }
 
 /** One document block. Text-like blocks are contentEditable rich text backed by inline markdown. */
-export const DocBlock = memo(function DocBlock({ block, env, style, number, displayText, suggestionPending, deleted }: { block: SceneNode<'block'>; env: BlockEnv; style: TextStyle | undefined; number: number; displayText: string; suggestionPending: boolean; deleted: boolean }) {
+interface DocBlockProps {
+  block: SceneNode<'block'>;
+  env: BlockEnv;
+  style: TextStyle | undefined;
+  number: number;
+  displayText: string;
+  suggestionPending: boolean;
+  deleted: boolean;
+}
+
+export const DocBlock = memo(function DocBlock({ block, env, style, number, displayText, suggestionPending, deleted }: DocBlockProps) {
   const p = block.props;
   const isText = p.blockType !== 'code' && p.blockType !== 'table' && p.blockType !== 'image' && p.blockType !== 'embed' && p.blockType !== 'divider';
   const drop = env.dropTarget?.id === block.id ? env.dropTarget.where : null;
@@ -111,7 +124,20 @@ export const DocBlock = memo(function DocBlock({ block, env, style, number, disp
       )}
     </div>
   );
-});
+}, sameBlockProps);
+
+/** List items get a fresh spacing style each render; equal values must not re-render the block. */
+function sameBlockProps(a: DocBlockProps, b: DocBlockProps): boolean {
+  for (const k of Object.keys(a) as (keyof DocBlockProps)[]) {
+    if (k === 'style') {
+      const x = a.style;
+      const y = b.style;
+      if (x === y) continue;
+      if (!x || !y || Object.keys(x).length !== Object.keys(y).length || Object.keys(x).some((key) => x[key as keyof TextStyle] !== y[key as keyof TextStyle])) return false;
+    } else if (a[k] !== b[k]) return false;
+  }
+  return true;
+}
 
 function EditableText({ block, env, displayText, suggestionPending }: { block: SceneNode<'block'>; env: BlockEnv; displayText: string; suggestionPending: boolean }) {
   const ref = useRef<HTMLDivElement>(null);
@@ -124,8 +150,10 @@ function EditableText({ block, env, displayText, suggestionPending }: { block: S
     if (domToInline(el) === displayText) return;
     const focused = document.activeElement === el;
     const off = focused ? caretOffset(el) : null;
+    const before = el.textContent ?? '';
     el.innerHTML = inlineToHtml(displayText);
-    if (focused && off !== null) setCaret(el, Math.min(off, el.textContent?.length ?? 0));
+    // Keep the caret on the same character when text arrives before it.
+    if (focused && off !== null) setCaret(el, mapTextOffset(before, el.textContent ?? '', off));
   }, [displayText]);
   useLayoutEffect(() => {
     env.register(block.id, ref.current);
@@ -164,6 +192,14 @@ function EditableText({ block, env, displayText, suggestionPending }: { block: S
     const el = ref.current!;
     if (env.slashOpen && env.slashKey(e)) return;
     const mod = e.metaKey || e.ctrlKey;
+    // Undo and redo are the project's (the same as History and the toolbar), not the browser's
+    // per-field undo, which knows nothing of splits, merges or other people's edits.
+    if (mod && !e.altKey && (e.key.toLowerCase() === 'z' || e.key.toLowerCase() === 'y')) {
+      e.preventDefault();
+      if (e.key.toLowerCase() === 'y' || e.shiftKey) void ctx.store.getState().redo();
+      else void ctx.store.getState().undo();
+      return;
+    }
     if (e.key === 'Enter' && !e.nativeEvent.isComposing) {
       e.preventDefault();
       if (ctx.suggesting) return suggestInsert(ctx, block.id);

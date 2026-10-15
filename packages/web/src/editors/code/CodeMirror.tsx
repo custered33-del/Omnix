@@ -1,6 +1,7 @@
 import { useEffect, useId, useRef } from 'react';
 import { t } from '../../i18n/index.js';
-import { Annotation, EditorState, Compartment, RangeSet, StateEffect, StateField, type Extension, type Range } from '@codemirror/state';
+import { Annotation, EditorState, Compartment, RangeSet, StateEffect, StateField, Transaction, type Extension, type Range } from '@codemirror/state';
+import { textHunks } from '@omnix/core';
 import { EditorView, keymap, lineNumbers, highlightActiveLine, highlightActiveLineGutter, drawSelection, dropCursor, placeholder as cmPlaceholder, gutter, GutterMarker, Decoration, WidgetType, type DecorationSet } from '@codemirror/view';
 import { defaultKeymap, history, historyKeymap, indentWithTab } from '@codemirror/commands';
 import { bracketMatching, indentOnInput, syntaxHighlighting, HighlightStyle, foldGutter, foldKeymap } from '@codemirror/language';
@@ -313,21 +314,16 @@ export function CodeMirror(props: CodeMirrorProps) {
     });
   }, [props.reveal?.seq]);
 
-  // Apply outside changes as a single minimal replacement.
+  // Apply outside changes (other people, Claude, undo from History) as the small changes they
+  // are, so the caret and selection stay put. They are kept out of this editor's own undo, which
+  // only ever takes back your typing.
   useEffect(() => {
     const v = view.current;
     if (!v) return;
     const cur = v.state.doc.toString();
     if (cur === props.value) return;
-    let start = 0;
-    while (start < cur.length && start < props.value.length && cur[start] === props.value[start]) start++;
-    let endA = cur.length;
-    let endB = props.value.length;
-    while (endA > start && endB > start && cur[endA - 1] === props.value[endB - 1]) {
-      endA--;
-      endB--;
-    }
-    v.dispatch({ changes: { from: start, to: endA, insert: props.value.slice(start, endB) }, annotations: External.of(true) });
+    const changes = textHunks(cur, props.value).map((h) => ({ from: h.start, to: h.end, insert: h.text }));
+    v.dispatch({ changes, annotations: [External.of(true), Transaction.addToHistory.of(false)] });
   }, [props.value]);
 
   return (

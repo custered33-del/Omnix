@@ -1,5 +1,5 @@
-import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
-import { Link, useParams, useSearchParams } from 'react-router-dom';
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useStore } from 'zustand';
 import { ArrowLeft, Check, LoaderCircle, Undo2, Redo2, History, Sparkles, NotebookPen, Download, Settings2, Plus, Activity as ActivityIcon, Eye, X, Bookmark, Wand2, Bot, MessageSquare, MessageSquarePlus } from 'lucide-react';
 import { primaryDocumentNodes, childrenOf, type SceneNode, type ToolKind } from '@omnix/core';
@@ -91,7 +91,9 @@ function ProjectView({ store }: { store: ProjectStore }) {
   const meta = useStore(store, (s) => s.meta);
   const state = useStore(store, (s) => s.state);
   const activeDocId = useStore(store, (s) => s.activeDocId);
-  const pending = useStore(store, (s) => s.pending.length);
+  // Edits not yet confirmed by the server, including typing and drags not yet committed.
+  const pending = useStore(store, (s) => s.pending.length + Object.keys(s.transient).length);
+  const navigate = useNavigate();
   const proposals = useStore(store, (s) => s.proposals);
   const presence = useStore(store, (s) => s.presence);
   const preview = useStore(store, (s) => s.preview);
@@ -197,7 +199,7 @@ function ProjectView({ store }: { store: ProjectStore }) {
     return (
       <div className="page">
         <div className="empty card">
-          <p>{status === 'notFound' ? t('project.notFound') : error}</p>
+          <p>{status === 'notFound' ? (error ?? t('project.notFound')) : error}</p>
           <Link to="/" className="btn">
             {t('nav.home')}
           </Link>
@@ -223,7 +225,7 @@ function ProjectView({ store }: { store: ProjectStore }) {
   return (
     <div className="workspace">
       <header className="workbar">
-        <IconButton label={t('nav.home')} onClick={() => (window.location.href = '/')}>
+        <IconButton label={t('nav.home')} onClick={() => navigate('/')}>
           <ArrowLeft />
         </IconButton>
         <h1 className="sr-only">{meta.name}</h1>
@@ -414,6 +416,7 @@ function ProjectView({ store }: { store: ProjectStore }) {
 
 function ProjectTitle({ name, editable, onRename }: { name: string; editable: boolean; onRename: (n: string) => void }) {
   const [value, setValue] = useState(name);
+  const cancelled = useRef(false);
   useEffect(() => setValue(name), [name]);
   if (!editable) return <span style={{ fontWeight: 650, padding: '0 8px' }}>{name}</span>;
   return (
@@ -423,11 +426,17 @@ function ProjectTitle({ name, editable, onRename }: { name: string; editable: bo
       size={Math.max(6, Math.min(32, value.length + 1))}
       aria-label={t('project.rename')}
       onChange={(e) => setValue(e.target.value)}
-      onBlur={() => value.trim() && value !== name && onRename(value.trim())}
+      onBlur={() => {
+        if (cancelled.current) {
+          cancelled.current = false;
+          setValue(name);
+        } else if (value.trim() && value.trim() !== name) onRename(value.trim());
+      }}
       onKeyDown={(e) => {
         if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
         if (e.key === 'Escape') {
-          setValue(name);
+          // Escape cancels the rename; the blur that follows must not save it.
+          cancelled.current = true;
           (e.target as HTMLInputElement).blur();
         }
       }}

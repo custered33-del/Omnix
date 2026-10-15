@@ -78,12 +78,12 @@ export function diffWords(a: string, b: string): WordRun[] {
 }
 
 /** Edit script over two token arrays: 0 keep, -1 delete from a, 1 insert from b. */
-function myers(a: string[], b: string[]): number[] {
+function myers(a: string[], b: string[], limit = MAX_EDITS): number[] {
   const n = a.length;
   const m = b.length;
   if (!n) return new Array<number>(m).fill(1);
   if (!m) return new Array<number>(n).fill(-1);
-  const max = Math.min(n + m, MAX_EDITS);
+  const max = Math.min(n + m, limit);
   const off = max + 1;
   const v = new Int32Array(2 * max + 3);
   const trace: Int32Array[] = [];
@@ -130,6 +130,117 @@ function myers(a: string[], b: string[]): number[] {
     y--;
   }
   return out.reverse();
+}
+
+/** One change to a text: `base.slice(start, end)` is replaced by `text`. */
+export interface TextHunk {
+  start: number;
+  end: number;
+  text: string;
+}
+
+/** Past this many word edits a change is treated as one replacement of its middle. */
+const MERGE_MAX_EDITS = 1000;
+
+/** Words, runs of spaces and single other characters (a whole character, never half of one). */
+const mergeTokens = (s: string) => s.match(/\s+|[\p{L}\p{N}_]+|[^\s\p{L}\p{N}_]/gu) ?? [];
+
+/** The changes that turn `base` into `other`, word by word, in order and never touching one another. */
+export function textHunks(base: string, other: string): TextHunk[] {
+  if (base === other) return [];
+  const A = mergeTokens(base);
+  const B = mergeTokens(other);
+  let pre = 0;
+  let pos = 0;
+  while (pre < A.length && pre < B.length && A[pre] === B[pre]) pos += A[pre++]!.length;
+  let suf = 0;
+  while (suf < A.length - pre && suf < B.length - pre && A[A.length - 1 - suf] === B[B.length - 1 - suf]) suf++;
+  const midA = A.slice(pre, A.length - suf);
+  const midB = B.slice(pre, B.length - suf);
+  const out: TextHunk[] = [];
+  let cur: TextHunk | null = null;
+  let ai = 0;
+  let bi = 0;
+  for (const e of myers(midA, midB, MERGE_MAX_EDITS)) {
+    if (e === 0) {
+      if (cur) out.push(cur);
+      cur = null;
+      pos += midA[ai++]!.length;
+      bi++;
+      continue;
+    }
+    cur ??= { start: pos, end: pos, text: '' };
+    if (e < 0) {
+      pos += midA[ai++]!.length;
+      cur.end = pos;
+    } else cur.text += midB[bi++]!;
+  }
+  if (cur) out.push(cur);
+  return out;
+}
+
+function applyHunks(base: string, start: number, end: number, hunks: TextHunk[]): string {
+  let out = '';
+  let pos = start;
+  for (const h of hunks) {
+    out += base.slice(pos, h.start) + h.text;
+    pos = h.end;
+  }
+  return out + base.slice(pos, end);
+}
+
+/**
+ * Three-way merge of two edits of the same text. Changes to different parts of `base` are
+ * both kept; two insertions at the same place are both kept (theirs first); where the two
+ * changed the same characters differently, `mine` wins for that stretch only.
+ */
+export function mergeText(base: string, mine: string, theirs: string): string {
+  if (mine === theirs || theirs === base) return mine;
+  if (mine === base) return theirs;
+  const all = [...textHunks(base, theirs).map((h) => ({ ...h, mine: false })), ...textHunks(base, mine).map((h) => ({ ...h, mine: true }))];
+  // By position; at one position insertions come first, then theirs before mine.
+  all.sort((x, y) => x.start - y.start || x.end - x.start - (y.end - y.start) || Number(x.mine) - Number(y.mine));
+  let out = '';
+  let pos = 0;
+  for (let i = 0; i < all.length; ) {
+    const start = all[i]!.start;
+    let end = all[i]!.end;
+    let j = i + 1;
+    // A cluster: hunks that overlap, or insertions at one point.
+    while (j < all.length) {
+      const g = all[j]!;
+      const overlaps = g.start < end || (g.start === end && g.start === g.end && start === end);
+      if (!overlaps) break;
+      end = Math.max(end, g.end);
+      j++;
+    }
+    const cluster = all.slice(i, j);
+    const theirsPart = cluster.filter((h) => !h.mine);
+    const minePart = cluster.filter((h) => h.mine);
+    let text: string;
+    if (!minePart.length) text = applyHunks(base, start, end, theirsPart);
+    else if (!theirsPart.length) text = applyHunks(base, start, end, minePart);
+    else {
+      const t = applyHunks(base, start, end, theirsPart);
+      const m = applyHunks(base, start, end, minePart);
+      text = t === m ? m : start === end ? t + m : m;
+    }
+    out += base.slice(pos, start) + text;
+    pos = end;
+    i = j;
+  }
+  return out + base.slice(pos);
+}
+
+/** Where a position in `before` ends up in `after` (for keeping a caret in place across an outside change). */
+export function mapTextOffset(before: string, after: string, offset: number): number {
+  let delta = 0;
+  for (const h of textHunks(before, after)) {
+    if (h.end <= offset) delta += h.text.length - (h.end - h.start);
+    else if (h.start < offset) return h.start + delta + h.text.length;
+    else break;
+  }
+  return Math.max(0, Math.min(after.length, offset + delta));
 }
 
 /**

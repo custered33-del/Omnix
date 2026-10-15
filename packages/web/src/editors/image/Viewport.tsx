@@ -3,7 +3,7 @@ import { useStore } from 'zustand';
 import type { LayerProps, Point, ProjectState, SceneNode, Selection, Stroke, VectorShape } from '@omnix/core';
 import { childrenOf, layerProps as defaultLayerProps, makeNode, newId, parseColor, toHex } from '@omnix/core';
 import { combineMasks, invertMask } from '@omnix/imaging';
-import { layerBounds, renderCanvasDocument, strokeDabs, type LayerCache } from '@omnix/render';
+import { layerBounds, layerHitsPoint, renderCanvasDocument, strokeDabs, type LayerCache } from '@omnix/render';
 import { useProject, useProjectStore } from '../../state/project.js';
 import { PinLayer, useAnchoredComments } from '../../components/CommentPins.js';
 import { useAuth } from '../../state/auth.js';
@@ -390,8 +390,7 @@ export function Viewport({ canvasId, ed }: { canvasId: string; ed: ImageEditorSt
           if (inner) return inner;
           continue;
         }
-        const b = layerBounds(host, state, l.id);
-        if (p.x >= b.x && p.y >= b.y && p.x <= b.x + b.width && p.y <= b.y + b.height) return l.id;
+        if (layerHitsPoint(host, state, l.id, p.x, p.y, 3 / ed.getState().zoom)) return l.id;
       }
       return null;
     };
@@ -433,7 +432,9 @@ export function Viewport({ canvasId, ed }: { canvasId: string; ed: ImageEditorSt
         if (!canEdit) return;
         const handle = hitHandle(p);
         let id = st.selectedLayerId;
-        if (!handle) {
+        // A click on the selected layer's own content moves it, even with other layers above.
+        const onSelected = !!id && !!state.nodes[id] && layerHitsPoint(host, state, id, p.x, p.y, 3 / st.zoom);
+        if (!handle && !onSelected) {
           const hit = topLayerAt(p);
           if (hit && hit !== id && !e.shiftKey) {
             id = hit;

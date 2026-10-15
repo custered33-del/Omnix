@@ -1,11 +1,11 @@
 import { createStore, type StoreApi } from 'zustand/vanilla';
 import { useStore } from 'zustand';
 import { createContext, useContext, useEffect } from 'react';
-import { applyCommitMarks, applyOp, newId, type AiMark, type Operation, type ProjectState, type Proposal, type Snapshot, type ToolKind, type Commit, type SceneNode } from '@omnix/core';
+import { applyCommitMarks, applyOp, mergeText, newId, type AiMark, type Operation, type ProjectState, type Proposal, type Snapshot, type ToolKind, type Commit, type SceneNode } from '@omnix/core';
 import { api, post, ApiError } from '../lib/api.js';
 import { realtime } from './realtime.js';
 import { toast } from '../ui/toast.js';
-import { plural } from '../i18n/index.js';
+import { plural, t } from '../i18n/index.js';
 
 export interface ProjectMeta {
   id: string;
@@ -55,8 +55,10 @@ export interface ProjectStoreState {
   confirmed: ProjectState | null;
   head: string | null;
   pending: PendingOp[];
-  /** Uncommitted live overrides (dragging, scrubbing sliders). */
+  /** Uncommitted live overrides (dragging, scrubbing sliders, typing not yet committed). */
   transient: Record<string, Record<string, unknown>>;
+  /** For typing: the text each override was typed over, so someone else's edit to it merges in. */
+  transientBase: Record<string, Record<string, string>>;
   /** What the UI renders: confirmed + pending + transient (or a proposal preview). */
   state: ProjectState | null;
   proposals: Proposal[];
@@ -82,12 +84,17 @@ export interface ProjectStoreState {
 
   load(): Promise<void>;
   commit(op: Operation, label?: string): string | null;
-  setTransient(nodeId: string, props: Record<string, unknown>): void;
+  /** `text` marks typing: if someone else changes the same text meanwhile, both edits are kept. */
+  setTransient(nodeId: string, props: Record<string, unknown>, options?: { text?: boolean }): void;
   clearTransient(nodeId?: string): void;
   /** Turn transient overrides into one committed update. */
   commitTransient(label?: string): void;
   undo(): Promise<void>;
   redo(): Promise<void>;
+  /** Editors that hold typing back for a moment register here, so it can be committed on demand. */
+  registerFlusher(fn: () => void): () => void;
+  /** Commit any typing still held back (before undo, leaving the page...). */
+  flushTyping(): void;
   select(ids: string[]): void;
   setActiveDoc(id: string): void;
   reportLocation(location: PresenceInfo['location']): void;
@@ -119,35 +126,87 @@ export interface FocusRequest {
   commentId?: string;
 }
 
-const pendingKey = (projectId: string) => `omnix.pending.${projectId}`;
+/** This tab's id; it survives a reload of the tab, so the tab gets its own unsent edits back. */
+const tabId = (() => {
+  try {
+    let id = sessionStorage.getItem('omnix.tab');
+    if (!id) sessionStorage.setItem('omnix.tab', (id = newId('tab')));
+    return id;
+  } catch {
+    return newId('tab');
+  }
+})();
+
+const pendingPrefix = (projectId: string) => `omnix.pending.${projectId}`;
+const pendingKey = (projectId: string) => `${pendingPrefix(projectId)}.${tabId}`;
+/** Another tab's unsent edits are taken over once it has been quiet this long (it was probably closed). */
+const ORPHAN_AFTER_MS = 60_000;
 
 function savePending(projectId: string, pending: PendingOp[]): void {
   try {
-    if (pending.length) localStorage.setItem(pendingKey(projectId), JSON.stringify(pending));
+    if (pending.length) localStorage.setItem(pendingKey(projectId), JSON.stringify({ savedAt: Date.now(), ops: pending }));
     else localStorage.removeItem(pendingKey(projectId));
   } catch {
     // storage full or unavailable: edits still go to the server
   }
 }
 
+/**
+ * Edits this tab made but the server never confirmed (the tab was reloaded or crashed), plus
+ * those left by tabs that have since closed. Resending is safe: the server recognises an edit
+ * it already applied.
+ */
 function loadPending(projectId: string): PendingOp[] {
+  const out: PendingOp[] = [];
   try {
-    const raw = localStorage.getItem(pendingKey(projectId));
-    return raw ? (JSON.parse(raw) as PendingOp[]) : [];
+    const prefix = pendingPrefix(projectId);
+    const own = pendingKey(projectId);
+    for (let i = localStorage.length - 1; i >= 0; i--) {
+      const key = localStorage.key(i);
+      if (!key || (key !== prefix && !key.startsWith(prefix + '.'))) continue;
+      const raw = localStorage.getItem(key);
+      if (!raw) continue;
+      const parsed = JSON.parse(raw) as PendingOp[] | { savedAt: number; ops: PendingOp[] };
+      const entry = Array.isArray(parsed) ? { savedAt: 0, ops: parsed } : parsed;
+      if (key !== own && Date.now() - entry.savedAt < ORPHAN_AFTER_MS) continue;
+      out.push(...entry.ops);
+      if (key !== own) localStorage.removeItem(key);
+    }
   } catch {
-    return [];
+    // unreadable storage: nothing to recover
   }
+  return out.sort((a, b) => a.sentAt - b.sentAt);
 }
 
-/** Apply pending ops and transient overrides to the confirmed state. */
-function derive(confirmed: ProjectState | null, pending: PendingOp[], transient: Record<string, Record<string, unknown>>): ProjectState | null {
-  if (!confirmed) return null;
+/**
+ * Apply pending ops and transient overrides to the confirmed state. Typing that someone else's
+ * edit has overtaken is rebased onto it (both kept), and its base moves to the new text.
+ */
+function derive(
+  confirmed: ProjectState | null,
+  pending: PendingOp[],
+  transient: Record<string, Record<string, unknown>>,
+  bases: Record<string, Record<string, string>>,
+): { state: ProjectState | null; transient: Record<string, Record<string, unknown>>; bases: Record<string, Record<string, string>> } {
+  if (!confirmed) return { state: null, transient, bases };
   let s = confirmed;
   for (const p of pending) {
     try {
       s = applyOp(s, p.op).state;
     } catch {
       // An op that no longer applies is dropped when the server rejects it.
+    }
+  }
+  for (const [id, base] of Object.entries(bases)) {
+    const props = s.nodes[id]?.props as Record<string, unknown> | undefined;
+    const typed = transient[id];
+    if (!props || !typed) continue;
+    for (const [k, was] of Object.entries(base)) {
+      const now = props[k];
+      const mine = typed[k];
+      if (typeof now !== 'string' || now === was || typeof mine !== 'string') continue;
+      transient = { ...transient, [id]: { ...transient[id], [k]: mergeText(was, mine, now) } };
+      bases = { ...bases, [id]: { ...bases[id], [k]: now } };
     }
   }
   const ids = Object.keys(transient);
@@ -159,16 +218,28 @@ function derive(confirmed: ProjectState | null, pending: PendingOp[], transient:
     }
     s = { ...s, nodes };
   }
-  return s;
+  return { state: s, transient, bases };
+}
+
+/** A state patch plus what the UI should now render. */
+function withDerived(cur: ProjectStoreState, patch: Partial<ProjectStoreState>): Partial<ProjectStoreState> {
+  const next = { ...cur, ...patch };
+  const version = cur.version + 1;
+  if (next.preview) return { ...patch, state: next.preview.state, version };
+  const d = derive(next.confirmed, next.pending, next.transient, next.transientBase);
+  return { ...patch, state: d.state, version, ...(d.transient !== next.transient ? { transient: d.transient, transientBase: d.bases } : {}) };
 }
 
 export function createProjectStore(projectId: string): ProjectStore {
   const unsubs: (() => void)[] = [];
   const store = createStore<ProjectStoreState>((set, get) => {
-    const recompute = (patch: Partial<ProjectStoreState>) => {
-      const next = { ...get(), ...patch };
-      const state = next.preview ? next.preview.state : derive(next.confirmed, next.pending, next.transient);
-      set({ ...patch, state, version: get().version + 1 });
+    const recompute = (patch: Partial<ProjectStoreState>) => set(withDerived(get(), patch));
+    const flushers = new Set<() => void>();
+    const settle = async () => {
+      get().flushTyping();
+      if (await get().flushed()) return true;
+      toast.error(t('app.stillSaving'));
+      return false;
     };
 
     const sendPending = (p: PendingOp) => {
@@ -184,6 +255,7 @@ export function createProjectStore(projectId: string): ProjectStore {
       head: null,
       pending: [],
       transient: {},
+      transientBase: {},
       state: null,
       proposals: [],
       snapshots: [],
@@ -228,7 +300,7 @@ export function createProjectStore(projectId: string): ProjectStore {
             for (const p of recovered) sendPending(p);
           }
         } catch (e) {
-          if (e instanceof ApiError && (e.status === 404 || e.status === 403)) set({ status: 'notFound', error: e.message });
+          if (e instanceof ApiError && (e.status === 404 || e.status === 403)) set({ status: 'notFound', error: null });
           else set({ status: 'error', error: e instanceof Error ? e.message : String(e) });
         }
       },
@@ -251,17 +323,29 @@ export function createProjectStore(projectId: string): ProjectStore {
         return p.clientOpId;
       },
 
-      setTransient(nodeId, props) {
-        const transient = { ...get().transient, [nodeId]: { ...(get().transient[nodeId] ?? {}), ...props } };
-        recompute({ transient });
+      setTransient(nodeId, props, options) {
+        const cur = get();
+        let transientBase = cur.transientBase;
+        if (options?.text) {
+          // Remember the text this typing started from (the first keystroke of a burst).
+          const under = cur.state?.nodes[nodeId]?.props as Record<string, unknown> | undefined;
+          for (const [k, v] of Object.entries(props)) {
+            if (typeof v !== 'string' || typeof under?.[k] !== 'string' || (cur.transient[nodeId] && k in cur.transient[nodeId])) continue;
+            transientBase = { ...transientBase, [nodeId]: { ...transientBase[nodeId], [k]: under[k] as string } };
+          }
+        }
+        const transient = { ...cur.transient, [nodeId]: { ...(cur.transient[nodeId] ?? {}), ...props } };
+        recompute({ transient, transientBase });
       },
 
       clearTransient(nodeId) {
-        if (!nodeId) recompute({ transient: {} });
+        if (!nodeId) recompute({ transient: {}, transientBase: {} });
         else {
           const transient = { ...get().transient };
+          const transientBase = { ...get().transientBase };
           delete transient[nodeId];
-          recompute({ transient });
+          delete transientBase[nodeId];
+          recompute({ transient, transientBase });
         }
       },
 
@@ -279,6 +363,8 @@ export function createProjectStore(projectId: string): ProjectStore {
       },
 
       async undo() {
+        // Undo applies to your latest change, so typing still held back or in flight goes first.
+        if (!(await settle())) return;
         try {
           const r = await post<{ commit: Commit | null }>(`/api/projects/${projectId}/undo`);
           if (!r.commit) toast.info('Nothing of yours to undo');
@@ -288,12 +374,22 @@ export function createProjectStore(projectId: string): ProjectStore {
       },
 
       async redo() {
+        if (!(await settle())) return;
         try {
           const r = await post<{ commit: Commit | null }>(`/api/projects/${projectId}/redo`);
           if (!r.commit) toast.info('Nothing to redo');
         } catch (e) {
           toast.error(e instanceof Error ? e.message : String(e));
         }
+      },
+
+      registerFlusher(fn) {
+        flushers.add(fn);
+        return () => void flushers.delete(fn);
+      },
+
+      flushTyping() {
+        for (const f of [...flushers]) f();
       },
 
       select(ids) {
@@ -372,17 +468,38 @@ export function createProjectStore(projectId: string): ProjectStore {
       },
 
       dispose() {
-        for (const u of unsubs) u();
-        realtime.leave(projectId);
+        // Typing still held back is committed; listen a little longer so its confirmation clears it
+        // from this tab's storage (otherwise it is sent again, harmlessly, next time).
+        get().flushTyping();
+        savePending(projectId, get().pending);
+        void get()
+          .flushed(5000)
+          .then(() => {
+            for (const u of unsubs) u();
+            realtime.leave(projectId);
+          });
       },
     };
   });
 
   const s = () => store.getState();
-  const recomputeFromOutside = (patch: Partial<ProjectStoreState>) => {
-    const next = { ...s(), ...patch };
-    store.setState({ ...patch, state: next.preview ? next.preview.state : derive(next.confirmed, next.pending, next.transient), version: s().version + 1 });
+  const recomputeFromOutside = (patch: Partial<ProjectStoreState>) => store.setState(withDerived(s(), patch));
+
+  // Typing held back for a moment is committed when the page goes away; unconfirmed edits are
+  // kept in this tab's storage and sent again when the project next opens.
+  const onHide = () => {
+    s().flushTyping();
+    savePending(projectId, s().pending);
   };
+  const onVisibility = () => {
+    if (document.visibilityState === 'hidden') onHide();
+  };
+  window.addEventListener('pagehide', onHide);
+  document.addEventListener('visibilitychange', onVisibility);
+  unsubs.push(() => {
+    window.removeEventListener('pagehide', onHide);
+    document.removeEventListener('visibilitychange', onVisibility);
+  });
 
   unsubs.push(
     realtime.on('commit', (msg) => {
@@ -456,7 +573,7 @@ export function createProjectStore(projectId: string): ProjectStore {
       if (msg.projectId === projectId && s().meta) store.setState({ meta: { ...s().meta!, ...msg.meta } });
     }),
     realtime.on('deleted', (msg) => {
-      if (msg.projectId === projectId) store.setState({ status: 'notFound', error: 'This project was deleted.' });
+      if (msg.projectId === projectId) store.setState({ status: 'notFound', error: t('project.deleted') });
     }),
     realtime.on('code', (msg) => {
       if (msg.projectId !== projectId) return;

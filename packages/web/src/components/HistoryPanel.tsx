@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { RotateCcw, GitBranch, Bookmark, Undo, GitCompare } from 'lucide-react';
 import type { Commit, Snapshot, StateDiff } from '@omnix/core';
 import { useProject, useProjectStore } from '../state/project.js';
@@ -22,13 +22,21 @@ export function HistoryPanel({ focusCommit }: { focusCommit: string | null }) {
   const [detail, setDetail] = useState<string | null>(focusCommit);
   const [snapName, setSnapName] = useState('');
   const load = useCallback(() => {
-    get<{ commits: CommitSummary[]; tips: string[] }>(`/api/projects/${projectId}/history`).then(setData, (e) => toast.error(e.message));
+    // Every commit, including later versions left behind by going back to an older one.
+    get<{ commits: CommitSummary[]; tips: string[] }>(`/api/projects/${projectId}/history?all=true`).then(setData, (e) => toast.error(e.message));
   }, [projectId]);
   useEffect(() => {
     load();
   }, [load, head]);
   useEffect(() => realtime.on('snapshot', load), [load]);
-  const commits = data ? [...data.commits].reverse() : null;
+  const commits = data ? [...data.commits].sort((a, b) => b.seq - a.seq) : null;
+  // The commits that make up the current version; the others are on another branch.
+  const current = useMemo(() => {
+    const byId = new Map((data?.commits ?? []).map((c) => [c.id, c]));
+    const out = new Set<string>();
+    for (let c = head ? byId.get(head) : undefined; c; c = c.parentId ? byId.get(c.parentId) : undefined) out.add(c.id);
+    return out;
+  }, [data, head]);
   const openCompare = useDialogs((s) => s.openCompare);
   const activeDocId = useProject((s) => s.activeDocId);
   return (
@@ -91,14 +99,14 @@ export function HistoryPanel({ focusCommit }: { focusCommit: string | null }) {
       <ol style={{ listStyle: 'none', margin: 0, padding: 0 }}>
         {commits?.map((c) => (
           <li key={c.id}>
-            <button className="list-row" style={{ width: '100%', border: 'none', background: c.id === detail ? 'var(--accent-soft)' : 'transparent', textAlign: 'left', alignItems: 'flex-start', padding: '8px 6px' }} onClick={() => setDetail(c.id)} aria-current={c.id === head ? 'true' : undefined}>
+            <button className={`list-row${current.has(c.id) ? '' : ' off-branch'}`} style={{ width: '100%', border: 'none', background: c.id === detail ? 'var(--accent-soft)' : 'transparent', textAlign: 'left', alignItems: 'flex-start', padding: '8px 6px' }} onClick={() => setDetail(c.id)} aria-current={c.id === head ? 'true' : undefined}>
               <Avatar name={c.author.name} ai={c.author.type === 'ai'} />
               <span className="grow" style={{ minWidth: 0 }}>
                 <span style={{ display: 'block', fontSize: 'var(--fs-sm)' }}>
                   {c.label} {c.id === head && <span className="badge accent">{t('history.current')}</span>}
-                  {data?.tips.includes(c.id) && c.id !== head && (
+                  {data?.tips.includes(c.id) && c.id !== head && !current.has(c.id) && (
                     <span className="badge">
-                      <GitBranch /> branch
+                      <GitBranch /> {t('history.branchTip')}
                     </span>
                   )}
                 </span>

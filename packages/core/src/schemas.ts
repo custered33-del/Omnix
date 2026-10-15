@@ -416,7 +416,7 @@ export const zOperation: z.ZodType<Operation> = z.lazy(() =>
   z.discriminatedUnion('kind', [
     z.object({ kind: z.literal('create'), parentId: z.string(), index: z.number().int().optional(), nodes: z.array(zSceneNode).min(1).max(5000) }),
     z.object({ kind: z.literal('delete'), id: z.string() }),
-    z.object({ kind: z.literal('update'), id: z.string(), set: z.record(z.string(), z.unknown()), unset: z.array(z.string()).optional() }),
+    z.object({ kind: z.literal('update'), id: z.string(), set: z.record(z.string(), z.unknown()), unset: z.array(z.string()).optional(), base: z.record(z.string(), z.string()).optional() }),
     z.object({ kind: z.literal('move'), id: z.string(), parentId: z.string(), index: z.number().int().optional() }),
     z.object({ kind: z.literal('listInsert'), id: z.string(), prop: z.string(), index: z.number().int().optional(), items: z.array(z.unknown()).max(100000) }),
     z.object({ kind: z.literal('listRemove'), id: z.string(), prop: z.string(), index: z.number().int().min(0), count: z.number().int().min(1), expect: z.array(z.unknown()).max(100000).optional() }),

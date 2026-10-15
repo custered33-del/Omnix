@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Download } from 'lucide-react';
 import type { SceneNode } from '@omnix/core';
 import { get, post } from '../lib/api.js';
-import { realtime } from '../state/realtime.js';
+import { watchJob } from '../state/jobs.js';
 import { useProjectStore } from '../state/project.js';
 import { Dialog, NumberField, Select, Spinner, Switch } from '../ui/primitives.js';
 import { formatBytes, t } from '../i18n/index.js';
@@ -82,9 +82,7 @@ export function ExportDialog({ node, onClose }: { node: SceneNode; onClose: () =
   }, [presets]);
   useEffect(() => {
     if (!job) return;
-    return realtime.on('job', (m: { job: JobView }) => {
-      if (m.job.id === job.id) setJob(m.job);
-    });
+    return watchJob<JobView>(job.id, setJob);
   }, [job?.id]);
 
   const isImage = node.type === 'canvas';

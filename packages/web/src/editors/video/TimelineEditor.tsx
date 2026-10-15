@@ -142,7 +142,7 @@ function useEditorShortcuts(ctx: TimelineCtx) {
       home: () => ed.getState().set({ time: 0 }),
       end: () => ed.getState().set({ time: sequenceEnd(ctx) }),
       s: () => splitAtPlayhead(ctx),
-      'mod+k': () => splitAtPlayhead(ctx),
+      'mod+b': () => splitAtPlayhead(ctx),
       del: () => deleteSelected(ctx, false),
       'shift+del': () => deleteSelected(ctx, true),
       'mod+d': () => duplicateSelected(ctx),

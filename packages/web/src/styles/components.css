@@ -733,6 +733,11 @@ kbd,
 .list-row[aria-selected='true'] {
   background: var(--accent-soft);
 }
+/* History: versions not part of the current one (left behind by going back) */
+.list-row.off-branch {
+  box-shadow: inset 3px 0 0 var(--border-strong);
+  font-style: italic;
+}
 
 .kv {
   display: grid;

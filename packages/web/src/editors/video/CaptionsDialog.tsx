@@ -3,7 +3,7 @@ import { Captions, FileUp, Plus } from 'lucide-react';
 import type { SceneNode } from '@omnix/core';
 import { clipsOf, tracksOf } from '@omnix/core';
 import { get, post } from '../../lib/api.js';
-import { realtime } from '../../state/realtime.js';
+import { watchJob } from '../../state/jobs.js';
 import { useProject } from '../../state/project.js';
 import { Dialog, Spinner } from '../../ui/primitives.js';
 import { toast } from '../../ui/toast.js';
@@ -36,9 +36,7 @@ export function CaptionsDialog({ ctx, onClose }: { ctx: TimelineCtx; onClose: ()
   }, []);
   useEffect(() => {
     if (!job) return;
-    return realtime.on('job', (m: { job: typeof job }) => {
-      if (m.job && m.job.id === job.id) setJob(m.job);
-    });
+    return watchJob<NonNullable<typeof job>>(job.id, setJob);
   }, [job?.id]);
   useEffect(() => {
     if (job?.status === 'done') toast.success(job.result?.hasText ? `Added ${job.result.count} captions` : `Found ${job.result?.count ?? 0} stretches of speech. Type the words into each caption.`);

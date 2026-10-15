@@ -6,7 +6,7 @@ import { clipPropsAt, setSpeedOp, tracksOf, upsertKeyframe } from '@omnix/core';
 import { COLOR_GRADE_DEFAULTS, FILTER_DEFAULTS } from '@omnix/imaging';
 import { animLayerTransform } from '@omnix/render';
 import { useProject } from '../../state/project.js';
-import { realtime } from '../../state/realtime.js';
+import { watchJob } from '../../state/jobs.js';
 import { post } from '../../lib/api.js';
 import { toast } from '../../ui/toast.js';
 import { ColorField, IconButton, MenuButton, NumberField, Select, Switch } from '../../ui/primitives.js';
@@ -247,15 +247,14 @@ function GenerativeSection({ ctx, clip }: { ctx: TimelineCtx; clip: SceneNode<'c
   const gen = clip.props.generation;
   useEffect(() => {
     if (!job) return;
-    return realtime.on('job', (m: { job: { id: string; status: string; progress: number; message: string; error: string | null } }) => {
-      if (m.job.id !== job.id) return;
-      if (m.job.status === 'done') {
+    return watchJob<{ id: string; status: string; progress: number; message: string; error: string | null }>(job.id, (j) => {
+      if (j.status === 'done') {
         setJob(null);
         toast.success(t('generative.videoDone'));
-      } else if (m.job.status === 'failed' || m.job.status === 'cancelled') {
+      } else if (j.status === 'failed' || j.status === 'cancelled') {
         setJob(null);
-        if (m.job.error) toast.error(m.job.error);
-      } else setJob({ id: job.id, progress: m.job.progress, message: m.job.message });
+        if (j.error) toast.error(j.error);
+      } else setJob({ id: job.id, progress: j.progress, message: j.message });
     });
   }, [job?.id]);
   useEffect(() => () => ctx.ed.getState().set({ drawingRegion: false, regionDraft: null }), [clip.id]);

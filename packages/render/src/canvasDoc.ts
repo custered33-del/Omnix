@@ -353,6 +353,33 @@ export function renderSingleLayer(host: RenderHost, state: ProjectState, layerId
   return renderLayerBuffer(env, layer, layer.props, options.includeMask === false);
 }
 
+/**
+ * Whether a point (canvas coordinates) is on a layer's visible content: inside its bounds and,
+ * for pixel and shape layers, over pixels that are not transparent. A brush layer is as big as
+ * its canvas, so its bounds alone would catch every click.
+ */
+export function layerHitsPoint(host: RenderHost, state: ProjectState, layerId: string, x: number, y: number, tolerance = 3): boolean {
+  const b = layerBounds(host, state, layerId);
+  if (x < b.x - tolerance || y < b.y - tolerance || x > b.x + b.width + tolerance || y > b.y + b.height + tolerance) return false;
+  const p = requireNodeOfType(state, layerId, 'layer').props;
+  if (p.layerType !== 'raster' && p.layerType !== 'vector') return true;
+  const env = envFor(host, state, layerId, 1);
+  // A small rendering is enough to tell content from empty space.
+  const scale = Math.min(1, 512 / Math.max(env.docW, env.docH));
+  const c = renderSingleLayer(host, state, layerId, { scale });
+  const r = Math.max(1, Math.ceil(tolerance * scale));
+  const px = Math.round(x * scale);
+  const py = Math.round(y * scale);
+  const x0 = Math.max(0, px - r);
+  const y0 = Math.max(0, py - r);
+  const w = Math.min(c.width, px + r + 1) - x0;
+  const h = Math.min(c.height, py + r + 1) - y0;
+  if (w <= 0 || h <= 0) return false;
+  const data = ctxOf(c).getImageData(x0, y0, w, h).data;
+  for (let i = 3; i < data.length; i += 4) if (data[i]! > 16) return true;
+  return false;
+}
+
 /** The rasterized mask of a layer (null when it has none or it is disabled). */
 export function renderLayerMask(host: RenderHost, state: ProjectState, layerId: string, scale = 1): Mask | null {
   const env = envFor(host, state, layerId, scale);

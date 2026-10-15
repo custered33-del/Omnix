@@ -13,6 +13,7 @@ import {
   type Operation,
 } from '@omnix/core';
 import {
+  layerHitsPoint,
   renderCanvasDocument,
   renderSingleLayer,
   renderSequenceFrame,
@@ -182,6 +183,18 @@ describe('image compositor', () => {
     state = commit(state, { kind: 'create', parentId: canvasId, nodes: [group, inner] });
     expect(px(renderCanvasDocument(host(), state, canvasId), 5, 5)[0]).toBe(64);
     expect(px(renderCanvasDocument(host(), state, canvasId, { hiddenLayers: new Set([group.id]) }), 5, 5)[0]).toBe(128);
+  });
+
+  it('hit-tests layers by their pixels, so a brush layer only catches clicks on its strokes', () => {
+    let { state, canvasId } = canvasProject(200, 100);
+    const rect = makeNode('layer', layerProps('vector', { shapes: [{ id: 's', kind: 'rect', x: 20, y: 20, width: 40, height: 40, fill: '#00ff00', stroke: null, strokeWidth: 0 }] }));
+    const paint = makeNode('layer', layerProps('raster', { width: 200, height: 100, strokes: [{ id: 'st', tool: 'brush', color: '#ffff00', size: 10, hardness: 1, opacity: 1, tip: 'round', spacing: 0.1, points: [{ x: 120, y: 80, pressure: 1 }, { x: 190, y: 80, pressure: 1 }] }] }));
+    state = commit(state, { kind: 'create', parentId: canvasId, nodes: [rect] });
+    state = commit(state, { kind: 'create', parentId: canvasId, nodes: [paint] });
+    expect(layerHitsPoint(host(), state, paint.id, 40, 40)).toBe(false);
+    expect(layerHitsPoint(host(), state, paint.id, 150, 80)).toBe(true);
+    expect(layerHitsPoint(host(), state, rect.id, 40, 40)).toBe(true);
+    expect(layerHitsPoint(host(), state, rect.id, 150, 80)).toBe(false);
   });
 
   it('draws simple layers directly with the same pixels as compositing each layer buffer', () => {

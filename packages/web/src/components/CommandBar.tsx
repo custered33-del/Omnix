@@ -2,9 +2,9 @@ import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Wand2, ArrowRight, Check, Eye, Sparkles, CircleAlert } from 'lucide-react';
 import { useProjectStore, useProject } from '../state/project.js';
-import { realtime } from '../state/realtime.js';
+import { watchJob } from '../state/jobs.js';
 import { get, post } from '../lib/api.js';
-import { Spinner } from '../ui/primitives.js';
+import { Spinner, useRestoreFocus } from '../ui/primitives.js';
 import { toast } from '../ui/toast.js';
 import { plural, t } from '../i18n/index.js';
 
@@ -53,6 +53,7 @@ export function CommandBar({ initialText, autoRun, onClose, onReview }: { initia
   const [runState, setRunState] = useState<'running' | 'done' | 'failed' | null>(null);
   const [caps, setCaps] = useState<AiCapabilities | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  useRestoreFocus();
   const tool = toolOfActive(active?.type, (active?.props as { purpose?: string } | undefined)?.purpose);
   const examples = caps?.commandExamples[tool] ?? [];
 
@@ -67,12 +68,11 @@ export function CommandBar({ initialText, autoRun, onClose, onReview }: { initia
   useEffect(() => {
     if (result?.status !== 'delegated') return;
     setRunState('running');
-    return realtime.on('job', (m: { job: { id: string; status: string; error: string | null } }) => {
-      if (m.job.id !== result.runId) return;
-      if (m.job.status === 'done') setRunState('done');
-      if (m.job.status === 'failed' || m.job.status === 'cancelled') {
+    return watchJob<{ id: string; status: string; error: string | null }>(result.runId, (j) => {
+      if (j.status === 'done') setRunState('done');
+      if (j.status === 'failed' || j.status === 'cancelled') {
         setRunState('failed');
-        if (m.job.error) toast.error(m.job.error);
+        if (j.error) toast.error(j.error);
       }
     });
   }, [result]);

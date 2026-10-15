@@ -12,6 +12,31 @@ const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), selec
 
 /** Open dialogs, innermost last: Escape closes only the top one, wherever focus is. */
 const dialogStack: { close: () => void; el: () => HTMLElement | null }[] = [];
+
+/** The last place outside any overlay that focus was taken from (for overlays opened from overlays). */
+let lastOutside: HTMLElement | null = null;
+
+/**
+ * Remember where focus is as an overlay opens; the returned function puts it back when the
+ * overlay closes, unless something (the command just run, another dialog) has taken it since.
+ */
+export function captureFocus(): () => void {
+  const a = document.activeElement;
+  const prev = a instanceof HTMLElement && a !== document.body ? a : null;
+  if (prev && !prev.closest('[role="dialog"]')) lastOutside = prev;
+  return () =>
+    requestAnimationFrame(() => {
+      const cur = document.activeElement;
+      if (cur && cur !== document.body) return;
+      const target = prev?.isConnected ? prev : lastOutside?.isConnected ? lastOutside : null;
+      target?.focus();
+    });
+}
+
+/** For overlays that exist only while open: give focus back when they close. */
+export function useRestoreFocus(): void {
+  useLayoutEffect(() => captureFocus(), []);
+}
 if (typeof window !== 'undefined') {
   window.addEventListener('keydown', (e) => {
     const top = dialogStack[dialogStack.length - 1];

@@ -1,5 +1,6 @@
 import { ALLOWED_CHILDREN, type NodeType, type SceneNode } from './nodes.js';
 import { GraphError, type ProjectState } from './state.js';
+import { mergeText } from './textDiff.js';
 
 /**
  * Operations are the only way state changes in Omnix. Human edits, AI edits,
@@ -35,6 +36,11 @@ export interface UpdateOp {
   id: string;
   set: Record<string, unknown>;
   unset?: string[];
+  /**
+   * The text values `set` was written over. When a text prop has changed since (someone else
+   * typed in it), the two edits are merged instead of the later one replacing the other.
+   */
+  base?: Record<string, string>;
 }
 
 export interface MoveOp {
@@ -284,10 +290,15 @@ function applyUpdate(d: Draft, op: UpdateOp): Operation {
     if (Object.prototype.hasOwnProperty.call(props, k)) prevSet[k] = props[k];
     else prevUnset.push(k);
   };
+  const merged: Record<string, string> = {};
   for (const [k, v] of Object.entries(op.set ?? {})) {
     if (k === '__proto__' || k === 'constructor') throw new OpError(`Illegal prop name: ${k}`);
     record(k);
-    props[k] = v === undefined ? v : structuredClone(v);
+    const was = op.base?.[k];
+    const cur = props[k];
+    if (typeof was === 'string' && typeof v === 'string' && typeof cur === 'string' && cur !== was) props[k] = mergeText(was, v, cur);
+    else props[k] = v === undefined ? v : structuredClone(v);
+    if (typeof props[k] === 'string' && typeof prevSet[k] === 'string') merged[k] = props[k] as string;
   }
   for (const k of op.unset ?? []) {
     record(k);
@@ -295,6 +306,8 @@ function applyUpdate(d: Draft, op: UpdateOp): Operation {
   }
   const inv: UpdateOp = { kind: 'update', id: op.id, set: prevSet };
   if (prevUnset.length) inv.unset = prevUnset;
+  // Undoing typing later merges too, so it takes back only this edit's characters.
+  if (op.base && Object.keys(merged).length) inv.base = merged;
   return inv;
 }
 
