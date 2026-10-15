@@ -10069,5 +10069,188 @@
         }
       }
     }
+  },
+  {
+    "name": "list_batch_operations",
+    "title": "What batch processing can do",
+    "category": "assets",
+    "access": "read",
+    "description": "The operations run_batch can apply to many library files or project documents at once, with their settings. File operations (resize, convert, grade, LUT, filter, crop, watermark, remove background, upscale, match a look; video conversion and LUTs; audio loudness) make new files next to the originals. Document operations (run a command, export, match a look) change or export each document.",
+    "inputSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {}
+    },
+    "outputSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "operations": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "label": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "label"
+            ],
+            "additionalProperties": {}
+          }
+        }
+      },
+      "required": [
+        "operations"
+      ],
+      "additionalProperties": false
+    },
+    "example": {
+      "input": {},
+      "output": {
+        "operations": [
+          {
+            "id": "image.resize",
+            "label": "Resize",
+            "group": "image",
+            "kinds": [
+              "image"
+            ]
+          }
+        ]
+      }
+    }
+  },
+  {
+    "name": "run_batch",
+    "title": "Process many files or documents",
+    "category": "assets",
+    "access": "write",
+    "description": "Apply one operation (see list_batch_operations) to many library files ({assetId}) or project documents ({projectId, documentId}). Runs in the background; waits up to 20 seconds and returns the results so far, then check get_job with the job id. New files are tagged \"batch\" plus any tags you give. With edit-with-approval, document changes arrive as proposals.",
+    "inputSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "operation": {
+          "type": "string"
+        },
+        "params": {
+          "default": {},
+          "type": "object",
+          "propertyNames": {
+            "type": "string"
+          },
+          "additionalProperties": {}
+        },
+        "targets": {
+          "minItems": 1,
+          "maxItems": 500,
+          "type": "array",
+          "items": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "assetId": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "assetId"
+                ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "projectId": {
+                    "type": "string"
+                  },
+                  "documentId": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "projectId",
+                  "documentId"
+                ]
+              }
+            ]
+          }
+        },
+        "tags": {
+          "maxItems": 10,
+          "type": "array",
+          "items": {
+            "type": "string",
+            "maxLength": 40
+          }
+        }
+      },
+      "required": [
+        "operation",
+        "targets"
+      ]
+    },
+    "outputSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "jobId": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string"
+        },
+        "items": {
+          "type": "array",
+          "items": {}
+        }
+      },
+      "required": [
+        "jobId",
+        "status",
+        "items"
+      ],
+      "additionalProperties": false
+    },
+    "example": {
+      "input": {
+        "operation": "image.resize",
+        "params": {
+          "width": 1080,
+          "format": "webp"
+        },
+        "targets": [
+          {
+            "assetId": "3f9a..."
+          },
+          {
+            "assetId": "77c1..."
+          }
+        ],
+        "tags": [
+          "instagram"
+        ]
+      },
+      "output": {
+        "jobId": "job_b1...",
+        "status": "done",
+        "items": [
+          {
+            "label": "beach.jpg",
+            "result": {
+              "status": "done",
+              "outputAssetId": "c0de...",
+              "outputName": "beach-1080.webp"
+            }
+          }
+        ]
+      }
+    }
   }
 ]

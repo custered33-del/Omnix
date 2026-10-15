@@ -48,7 +48,7 @@ export interface AssetRecord {
   audioProxyBlob?: string | null;
   proxyStatus: 'none' | 'pending' | 'ready' | 'failed';
   waveform?: number[];
-  source: { kind: 'upload' | 'url' | 'generated' | 'export' | 'code' | 'import'; url?: string; prompt?: string; tool?: string; projectId?: string };
+  source: { kind: 'upload' | 'url' | 'generated' | 'export' | 'code' | 'import'; url?: string; prompt?: string; tool?: string; projectId?: string; /** The file this one was made from (batch results). */ fromAssetId?: string };
   createdAt: string;
   updatedAt: string;
 }

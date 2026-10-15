@@ -15,3 +15,4 @@ import './slides/module.js';
 import './agent/module.js';
 import './ai/module.js';
 import './versions/module.js';
+import './batch/module.js';

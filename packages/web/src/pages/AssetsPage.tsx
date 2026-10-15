@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { Upload, Link2, X, Search, Plus, Download, Trash2, Copy, CheckSquare, Square, Tag } from 'lucide-react';
+import { Upload, Link2, X, Search, Plus, Download, Trash2, Copy, CheckSquare, Square, Tag, Layers } from 'lucide-react';
 import { del, get, patch, post, uploadFile, assetUrl, thumbUrl, type AssetSummary } from '../lib/api.js';
 import { ConfirmDialog, Dialog, Spinner } from '../ui/primitives.js';
+import { BatchDialog } from '../components/BatchDialog.js';
 import { toast } from '../ui/toast.js';
 import { formatBytes, formatDuration, formatRelative, plural, t } from '../i18n/index.js';
 
@@ -22,7 +23,7 @@ type Listing = { assets: AssetSummary[]; tags: string[]; autoTags: string[]; tot
 
 export function AssetsPage() {
   const [params, setParams] = useSearchParams();
-  const [q, setQ] = useState('');
+  const [q, setQ] = useState(() => params.get('q') ?? '');
   const [kind, setKind] = useState<string>('');
   const [tag, setTag] = useState<string>('');
   const [sort, setSort] = useState('');
@@ -164,7 +165,7 @@ export function AssetsPage() {
           </button>
         </div>
       )}
-      {selecting && selected.size > 0 && <BulkBar ids={[...selected]} tags={data?.tags ?? []} onDone={() => (setSelected(new Set()), load())} />}
+      {selecting && selected.size > 0 && <BulkBar ids={[...selected]} kinds={[...new Set((data?.assets ?? []).filter((a) => selected.has(a.id)).map((a) => a.kind))]} tags={data?.tags ?? []} onDone={() => (setSelected(new Set()), load())} onReload={load} />}
 
       {uploads.length > 0 && (
         <div className="card" style={{ padding: 16, marginBottom: 16 }} role="status">
@@ -522,9 +523,10 @@ function SimilarDialog({ onClose, onChanged }: { onClose: () => void; onChanged:
 }
 
 /** Actions for several selected assets. */
-function BulkBar({ ids, tags, onDone }: { ids: string[]; tags: string[]; onDone: () => void }) {
+function BulkBar({ ids, kinds, tags, onDone, onReload }: { ids: string[]; kinds: string[]; tags: string[]; onDone: () => void; onReload: () => void }) {
   const [tag, setTag] = useState('');
   const [confirm, setConfirm] = useState(false);
+  const [batch, setBatch] = useState(false);
   const run = async (body: Record<string, unknown>, message: string) => {
     try {
       await post('/api/assets/bulk', { ids, ...body });
@@ -562,6 +564,10 @@ function BulkBar({ ids, tags, onDone }: { ids: string[]; tags: string[]; onDone:
         </select>
       )}
       <span className="spacer" />
+      <button className="btn btn-sm btn-primary" onClick={() => setBatch(true)}>
+        <Layers /> {t('assets.process')}
+      </button>
+      {batch && <BatchDialog targets={ids.map((assetId) => ({ assetId }))} kinds={kinds} onClose={() => setBatch(false)} onFinished={onReload} />}
       <button className="btn btn-sm btn-danger" onClick={() => setConfirm(true)}>
         <Trash2 /> {t('assets.bulkRemove')}
       </button>

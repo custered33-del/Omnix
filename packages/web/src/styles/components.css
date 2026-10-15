@@ -849,3 +849,86 @@ kbd,
   border-radius: 6px;
   background: var(--surface-2);
 }
+
+/* Batch processing */
+.batch-setup {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
+  gap: 20px;
+  min-height: 320px;
+}
+.batch-ops {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-height: 56vh;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+.batch-ops .section-title {
+  margin: 0 0 4px;
+}
+.batch-op {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 8px 10px;
+  border: 1px solid transparent;
+  border-radius: var(--r-md);
+  cursor: pointer;
+}
+.batch-op:hover {
+  background: var(--surface-2);
+}
+.batch-op.selected {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+.batch-op input {
+  margin-top: 3px;
+}
+.batch-params {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.batch-items {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 46vh;
+  overflow-y: auto;
+}
+.batch-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 8px;
+  border-radius: var(--r-md);
+  background: var(--surface);
+  font-size: var(--fs-sm);
+}
+.batch-item.done svg {
+  color: var(--success);
+}
+.batch-item.failed svg {
+  color: var(--danger);
+}
+.batch-item.skipped svg {
+  color: var(--muted);
+}
+.batch-thumb {
+  flex: none;
+  object-fit: cover;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+}
+@media (max-width: 720px) {
+  .batch-setup {
+    grid-template-columns: 1fr;
+  }
+}

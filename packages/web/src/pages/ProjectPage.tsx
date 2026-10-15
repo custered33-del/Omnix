@@ -23,6 +23,7 @@ import { StyleDialog } from '../components/StyleDialog.js';
 import { FindDialog } from '../components/FindDialog.js';
 import { CommentsPanel } from '../components/CommentsPanel.js';
 import { CompareVersions } from '../components/CompareVersions.js';
+import { DocumentBatchDialog } from '../components/BatchDialog.js';
 import { allComments } from '../components/CommentPins.js';
 import { GenerativeDialog } from '../components/GenerativeDialog.js';
 import '../styles/ai.css';
@@ -112,6 +113,7 @@ function ProjectView({ store }: { store: ProjectStore }) {
   };
   const [exportOpen, setExportOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [batchOpen, setBatchOpen] = useState(false);
   const conn = useConnectionStatus();
   useGlobalCommands();
 
@@ -160,6 +162,7 @@ function ProjectView({ store }: { store: ProjectStore }) {
       { id: 'agent', label: `${t('agent.start')}…`, section: t('palette.ai'), keywords: 'autonomous goal claude', run: () => dialogs.openAgent() },
       { id: 'runs', label: t('agent.runs'), section: t('palette.ai'), run: () => setPanel('runs') },
       { id: 'style', label: `${t('style.title')}…`, section: t('palette.ai'), keywords: 'reference look grade theme', run: () => dialogs.openStyle(null) },
+      { id: 'batch', label: t('batch.open'), section: t('palette.actions'), keywords: 'batch many all documents bulk export command', run: () => setBatchOpen(true) },
       { id: 'compare', label: t('versions.open'), section: t('palette.actions'), keywords: 'diff versions snapshot history before after', run: () => dialogs.openCompare({ documentId: store.getState().activeDocId }) },
       { id: 'find', label: t('find.title'), section: t('palette.actions'), shortcut: 'mod+shift+f', keywords: 'search', run: () => dialogs.openFind(true) },
     ],
@@ -397,6 +400,7 @@ function ProjectView({ store }: { store: ProjectStore }) {
       {dialogs.compare && <CompareVersions {...(dialogs.compare.from ? { from: dialogs.compare.from } : {})} {...(dialogs.compare.to ? { to: dialogs.compare.to } : {})} documentId={dialogs.compare.documentId ?? activeDocId} onClose={() => dialogs.close('compare')} />}
       {dialogs.generative && <GenerativeDialog mode={dialogs.generative.mode} canvasId={dialogs.generative.canvasId} {...(dialogs.generative.replaceLayerId ? { replaceLayerId: dialogs.generative.replaceLayerId } : {})} {...(dialogs.generative.prompt !== undefined ? { initialPrompt: dialogs.generative.prompt } : {})} onClose={() => dialogs.close('generative')} />}
       {settingsOpen && <ProjectSettingsDialog onClose={() => setSettingsOpen(false)} />}
+      {batchOpen && <DocumentBatchDialog projectId={meta.id} docs={docs.map((d) => ({ id: d.id, name: docName(d), type: d.type }))} initial={docs.filter((d) => active && d.type === active.type).map((d) => d.id)} onClose={() => setBatchOpen(false)} />}
     </div>
   );
 }

@@ -196,12 +196,22 @@ export function searchAssets(list: AssetRecord[], o: SearchOptions): AssetRecord
 /* Near duplicates                                                    */
 /* ------------------------------------------------------------------ */
 
+/**
+ * Files made from one another on purpose (a batch resize, a cut-out) or that differ in a way
+ * the fingerprint cannot see (one is transparent) are versions, not accidental duplicates.
+ */
+function related(a: AssetRecord, b: AssetRecord): boolean {
+  const from = (x: AssetRecord) => x.source.fromAssetId;
+  if (from(a) === b.id || from(b) === a.id || (from(a) && from(a) === from(b))) return true;
+  return (a.autoTags ?? []).includes('transparent') !== (b.autoTags ?? []).includes('transparent');
+}
+
 /** Assets that look like `a` (same kind, close fingerprint, similar shape), closest first. */
 export function similarTo(a: AssetRecord, list: AssetRecord[]): { asset: AssetRecord; distance: number }[] {
   if (!a.phash) return [];
   const ratio = a.width && a.height ? a.width / a.height : null;
   return list
-    .filter((b) => b.id !== a.id && b.kind === a.kind && b.phash)
+    .filter((b) => b.id !== a.id && b.kind === a.kind && b.phash && !related(a, b))
     .map((b) => ({ asset: b, distance: hammingDistance(a.phash!, b.phash!) }))
     .filter(({ asset: b, distance }) => {
       if (distance > SIMILAR_BITS) return false;

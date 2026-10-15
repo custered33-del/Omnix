@@ -232,3 +232,51 @@ describe('asset library', () => {
     expect(calls.find((c) => c.url === '/api/assets/bulk')!.body).toEqual({ ids: [a.id, b.id], addTags: ['hero'] });
   });
 });
+
+describe('batch dialog', () => {
+  it('offers only operations that fit, builds the settings form and follows the run', async () => {
+    const { MemoryRouter } = await import('react-router-dom');
+    const { BatchDialog } = await import('../src/components/BatchDialog.js');
+    const operations = [
+      { id: 'image.resize', label: 'Resize', description: 'Fit pictures', group: 'image', ai: false, kinds: ['image'], params: { type: 'object', properties: { width: { type: 'integer', minimum: 16, maximum: 8000 }, mode: { type: 'string', enum: ['fit', 'fill'], default: 'fit' } }, required: ['mode'] } },
+      { id: 'image.upscale', label: 'Upscale', description: 'Enlarge', group: 'image', ai: true, kinds: ['image'], params: { type: 'object', properties: {}, required: [] } },
+      { id: 'audio.convert', label: 'Convert audio', description: 'mp3', group: 'audio', ai: false, kinds: ['audio'], params: { type: 'object', properties: {} } },
+      { id: 'document.export', label: 'Export', description: 'files', group: 'document', ai: false, documentTypes: ['canvas'], params: { type: 'object', properties: {} } },
+    ];
+    let polls = 0;
+    const calls: { url: string; body: unknown }[] = [];
+    globalThis.fetch = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
+      const u = String(url);
+      calls.push({ url: u, body: init?.body ? JSON.parse(String(init.body)) : undefined });
+      if (u === '/api/batch/operations') return new Response(JSON.stringify({ operations }), { status: 200 });
+      if (u === '/api/batch') return new Response(JSON.stringify({ job: { id: 'job_1', title: 'Resize · 2 items', status: 'running', progress: 0, message: 'Starting', error: null, items: [] } }), { status: 202 });
+      if (u === '/api/batch/job_1') {
+        polls++;
+        const done = polls > 1;
+        return new Response(JSON.stringify({ job: { id: 'job_1', title: 'Resize · 2 items', status: done ? 'done' : 'running', progress: done ? 1 : 0.5, message: 'Resize: b.png', error: null, items: [{ target: { assetId: 'a' }, label: 'a.png', result: { status: 'done', outputAssetId: 'x'.repeat(64), outputName: 'a-640.png' } }, { target: { assetId: 'b' }, label: 'b.png', result: done ? { status: 'failed', message: 'Too large' } : null }] } }), { status: 200 });
+      }
+      return new Response('{}', { status: 404 });
+    }) as typeof fetch;
+    const onFinished = vi.fn();
+    render(
+      <MemoryRouter>
+        <BatchDialog targets={[{ assetId: 'a' }, { assetId: 'b' }]} kinds={['image']} onClose={() => {}} onFinished={onFinished} />
+      </MemoryRouter>,
+    );
+    expect(await screen.findByRole('radio', { name: /Resize/ })).toBeInTheDocument();
+    expect(screen.getByRole('radio', { name: /Upscale/ })).toBeInTheDocument();
+    expect(screen.queryByRole('radio', { name: /Convert audio/ })).toBeNull();
+    expect(screen.queryByRole('radio', { name: /Export/ })).toBeNull();
+    await userEvent.click(screen.getByRole('radio', { name: /Resize/ }));
+    await userEvent.type(screen.getByRole('spinbutton', { name: /Width/ }), '640');
+    expect(screen.getByRole('combobox', { name: 'Mode' })).toHaveValue('fit');
+    await userEvent.type(screen.getByRole('textbox', { name: 'Tag the new files' }), 'web, small');
+    await userEvent.click(screen.getByRole('button', { name: 'Resize · 2 items' }));
+    expect(calls.find((c) => c.url === '/api/batch')!.body).toEqual({ operation: 'image.resize', params: { mode: 'fit', width: 640 }, targets: [{ assetId: 'a' }, { assetId: 'b' }], tags: ['web', 'small'] });
+    expect(await screen.findByText('a-640.png', { exact: false })).toBeInTheDocument();
+    expect(await screen.findByText('Too large')).toBeInTheDocument();
+    expect(screen.getByText('1 done · 1 failed')).toBeInTheDocument();
+    expect(onFinished).toHaveBeenCalled();
+    expect(screen.getByRole('link', { name: 'Show the new files' })).toHaveAttribute('href', '/assets?q=tag%3Aweb');
+  });
+});

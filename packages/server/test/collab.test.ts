@@ -2,7 +2,11 @@ import { describe, expect, it, beforeAll, afterAll } from 'vitest';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import sharp from 'sharp';
-import { assetRefs, deckSlides, type ProjectState, type SceneNode } from '@omnix/core';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { execFileSync } from 'node:child_process';
+import { assetRefs, deckSlides, slideElements, type ProjectState, type SceneNode } from '@omnix/core';
 import { startTestServer, json, type TestServer } from './helpers.js';
 
 let ts: TestServer;
@@ -251,5 +255,122 @@ describe('asset library (53)', () => {
     // Until the proposal is accepted the copy stays where it is.
     expect(merged.merged).toEqual([]);
     expect(assetRefs(await state(p.projectId)).has(b.asset.id)).toBe(true);
+  });
+});
+
+describe('batch processing (54)', () => {
+  const waitBatch = async (id: string) => {
+    for (let i = 0; i < 200; i++) {
+      const j = (await json(await ts.api(`/api/batch/${id}`))).job;
+      if (['done', 'failed', 'cancelled'].includes(j.status)) return j;
+      await new Promise((r) => setTimeout(r, 100));
+    }
+    throw new Error('batch did not finish');
+  };
+
+  it('lists operations with their settings', async () => {
+    const ops = (await json(await ts.api('/api/batch/operations'))).operations as { id: string; ai: boolean; params: { properties: Record<string, unknown> } }[];
+    const ids = ops.map((o) => o.id);
+    expect(ids).toEqual(expect.arrayContaining(['image.resize', 'image.removeBackground', 'video.transcode', 'audio.normalize', 'document.command', 'document.export']));
+    expect(ops.find((o) => o.id === 'image.resize')!.params.properties).toHaveProperty('width');
+    expect(ops.find((o) => o.id === 'image.upscale')!.ai).toBe(true);
+  });
+
+  it('resizes, cuts out and converts many pictures into new tagged files', async () => {
+    const a = await upload('wide.png', await landscape(1240, 'png'), 'image/png');
+    const b = await upload('other.png', await landscape(820, 'png', 1), 'image/png');
+    const start = await json(await ts.api('/api/batch', { method: 'POST', json: { operation: 'image.resize', params: { width: 300, format: 'webp' }, targets: [{ assetId: a.asset.id }, { assetId: b.asset.id }], tags: ['thumbs'] } }));
+    const job = await waitBatch(start.job.id);
+    expect(job.status).toBe('done');
+    expect(job.items.map((x: { result: { status: string } }) => x.result.status)).toEqual(['done', 'done']);
+    for (const item of job.items) {
+      const out = (await json(await ts.api(`/api/assets/${item.result.outputAssetId}`))).asset;
+      expect(out.width).toBe(300);
+      expect(out.mime).toBe('image/webp');
+      expect(out.tags).toEqual(expect.arrayContaining(['batch', 'thumbs']));
+    }
+    expect(job.items[0].result.outputName).toBe('wide-300.webp');
+
+    // An AI operation: background removal gives transparent PNGs.
+    const cut = await waitBatch((await json(await ts.api('/api/batch', { method: 'POST', json: { operation: 'image.removeBackground', params: {}, targets: [{ assetId: b.asset.id }] } }))).job.id);
+    const cutout = (await json(await ts.api(`/api/assets/${cut.items[0].result.outputAssetId}`))).asset;
+    expect(cutout.mime).toBe('image/png');
+    expect(cutout.autoTags).toContain('transparent');
+  });
+
+  it('processes audio with ffmpeg and refuses settings or targets that do not fit', async () => {
+    const wav = path.join(os.tmpdir(), `omnix-tone-${Date.now()}.wav`);
+    execFileSync('ffmpeg', ['-v', 'error', '-y', '-f', 'lavfi', '-i', 'sine=frequency=330:duration=2', '-af', 'volume=0.1', wav]);
+    const tone = await upload('tone.wav', fs.readFileSync(wav), 'audio/wav');
+    fs.rmSync(wav, { force: true });
+    const job = await waitBatch((await json(await ts.api('/api/batch', { method: 'POST', json: { operation: 'audio.convert', params: { format: 'mp3' }, targets: [{ assetId: tone.asset.id }] } }))).job.id);
+    expect(job.items[0].result).toMatchObject({ status: 'done', outputName: 'tone-converted.mp3' });
+    const mp3 = (await json(await ts.api(`/api/assets/${job.items[0].result.outputAssetId}`))).asset;
+    expect(mp3.kind).toBe('audio');
+    expect(mp3.duration).toBeGreaterThan(1.5);
+
+    const bad = await ts.api('/api/batch', { method: 'POST', json: { operation: 'image.resize', params: { width: 'big' }, targets: [{ assetId: tone.asset.id }] } });
+    expect(bad.status).toBe(400);
+    expect((await json(bad)).error).toMatch(/width/);
+    const wrongKind = await ts.api('/api/batch', { method: 'POST', json: { operation: 'image.resize', params: { width: 100 }, targets: [{ assetId: tone.asset.id }] } });
+    expect((await json(wrongKind)).error).toMatch(/does not apply to tone\.wav/);
+  });
+
+  it('runs a command on many documents and exports them', async () => {
+    const p = await call(auto, 'create_project', { name: 'Three decks', primaryTool: 'slides' });
+    const d2 = await call(auto, 'add_document', { projectId: p.projectId, tool: 'slides', name: 'Deck 2' });
+    let s = await state(p.projectId);
+    const d1 = Object.values(s.nodes).find((n) => n.type === 'deck' && n.id !== d2.documentId)!;
+    const targets = [d1.id, d2.documentId].map((documentId) => ({ projectId: p.projectId, documentId }));
+    const job = await waitBatch((await json(await ts.api('/api/batch', { method: 'POST', json: { operation: 'document.command', params: { text: 'Add a slide titled "Thanks"', apply: true }, targets } }))).job.id);
+    expect(job.items.map((x: { result: { status: string; commitId?: string } }) => [x.result.status, !!x.result.commitId])).toEqual([
+      ['done', true],
+      ['done', true],
+    ]);
+    s = await state(p.projectId);
+    // Each deck now ends with its own "Thanks" slide.
+    for (const id of [d1.id, d2.documentId]) {
+      const slides = deckSlides(s, id);
+      expect(slides).toHaveLength(2);
+      expect(slideElements(s, slides[1]!.id).some((e) => String(e.props.text ?? '').includes('Thanks'))).toBe(true);
+    }
+
+    const canvasP = await call(auto, 'create_project', { name: 'Exports', primaryTool: 'image' });
+    const cs = await state(canvasP.projectId);
+    const canvas = Object.values(cs.nodes).find((n) => n.type === 'canvas')!;
+    const exp = await waitBatch((await json(await ts.api('/api/batch', { method: 'POST', json: { operation: 'document.export', params: { format: 'png', scale: 0.25 }, targets: [{ projectId: canvasP.projectId, documentId: canvas.id }] } }))).job.id);
+    expect(exp.items[0].result.status).toBe('done');
+    expect((await json(await ts.api(`/api/assets/${exp.items[0].result.outputAssetId}`))).asset.mime).toBe('image/png');
+  });
+
+  it('lets Claude run batches; in approval mode document changes become proposals', async () => {
+    const p = await call(auto, 'create_project', { name: 'Review me', primaryTool: 'slides' });
+    const s = await state(p.projectId);
+    const deck = Object.values(s.nodes).find((n) => n.type === 'deck')!;
+    const ops = await call(approve, 'list_batch_operations', {});
+    expect(ops.operations.length).toBeGreaterThan(10);
+    const r = await call(approve, 'run_batch', { operation: 'document.command', params: { text: 'Add a slide titled "Agenda"', apply: true }, targets: [{ projectId: p.projectId, documentId: deck.id }] });
+    expect(r.status).toBe('done');
+    expect(r.items[0].result.proposalId).toBeTruthy();
+    expect(r.items[0].result.commitId).toBeUndefined();
+    expect(deckSlides(await state(p.projectId), deck.id)).toHaveLength(1);
+  });
+});
+
+describe('batch results and look-alikes', () => {
+  it('does not flag a batch result as a duplicate of the file it was made from', async () => {
+    // A picture no other test uploads.
+    const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="700" viewBox="0 0 100 70"><rect width="100" height="70" fill="#0b6e4f"/><polygon points="10,60 50,8 90,60" fill="#f2c14e"/><circle cx="50" cy="45" r="9" fill="#5b2a86"/></svg>';
+    const src = await upload('family.png', await sharp(Buffer.from(svg)).png().toBuffer(), 'image/png');
+    const start = await json(await ts.api('/api/batch', { method: 'POST', json: { operation: 'image.resize', params: { width: 500 }, targets: [{ assetId: src.asset.id }] } }));
+    let job;
+    for (let i = 0; i < 100; i++) {
+      job = (await json(await ts.api(`/api/batch/${start.job.id}`))).job;
+      if (job.status === 'done') break;
+      await new Promise((r) => setTimeout(r, 100));
+    }
+    const out = job.items[0].result.outputAssetId;
+    const groups = (await json(await ts.api('/api/assets/similar'))).groups as { id: string }[][];
+    expect(groups.some((g) => g.some((a) => a.id === out))).toBe(false);
   });
 });
