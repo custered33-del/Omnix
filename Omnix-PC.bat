@@ -9,8 +9,9 @@ rem 1. Programs Omnix needs (installed once).
 where git >nul 2>nul || (echo   Installing Git... & winget install -e --id Git.Git --accept-source-agreements --accept-package-agreements & set RESTART=1)
 where node >nul 2>nul || (echo   Installing Node.js... & winget install -e --id OpenJS.NodeJS.LTS --accept-source-agreements --accept-package-agreements & set RESTART=1)
 where ffmpeg >nul 2>nul || (echo   Installing FFmpeg... & winget install -e --id Gyan.FFmpeg --accept-source-agreements --accept-package-agreements & set RESTART=1)
-rem Node.js 22.13 or newer is needed (older versions have a broken package tool).
-node -e "const [a,b]=process.versions.node.split('.').map(Number);process.exit(a>22||(a===22&&b>=13)?0:1)" || (echo   Updating Node.js... & winget upgrade -e --id OpenJS.NodeJS.LTS --accept-source-agreements --accept-package-agreements & set RESTART=1)
+rem Code Grounds keeps code away from your files with Node.js 22.13 or newer. On an older Node.js,
+rem Omnix still runs: only you use it on this PC, so code runs without that extra wall.
+node -e "const [a,b]=process.versions.node.split('.').map(Number);process.exit(a>22||(a===22&&b>=13)?0:1)" || set "OMNIX_SANDBOX_ISOLATION=best-effort"
 if defined RESTART (
   echo.
   echo   Programs installed. Close this window and double-click Omnix-PC.bat again.
