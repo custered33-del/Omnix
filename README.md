@@ -35,6 +35,7 @@ Useful scripts:
 | `pnpm test:e2e` | Drive the app in Chromium against a fresh server (run `pnpm build` first) |
 | `pnpm typecheck` | Type-check every package |
 | `pnpm catalog` | Regenerate the MCP tool catalog in `docs/` |
+| `pnpm bench` | Time the hot paths (editing, history, comparisons, diffs, rendering) on a large project |
 | `pnpm mcp:stdio` | MCP over stdio (bridges to the running server) |
 
 ### Configuration
@@ -55,6 +56,7 @@ Useful scripts:
 | `OMNIX_AGENT_MODEL` | newest available | Model for the agent runner; when unset Omnix asks the Models API for the newest model your key can use |
 | `OMNIX_IMAGE_GEN_URL`, `OMNIX_IMAGE_GEN_API_KEY`, `OMNIX_IMAGE_GEN_MODEL` | unset | Optional image model for generative fill and extend: any server speaking the OpenAI images edit API (`…/images/edits`). Without one, Omnix fills areas from their surroundings |
 | `OMNIX_STT_URL` | unset | OpenAI-compatible speech-to-text endpoint for automatic captions (otherwise speech detection leaves timed caption slots) |
+| `OMNIX_PLUGINS_DIR` | `<data folder>/plugins` | Folder of installed plugins (see [`docs/PLUGINS.md`](docs/PLUGINS.md)) |
 
 ## Connect Omnix to Claude
 
@@ -103,21 +105,35 @@ Each change Claude makes is attributed to Claude in the project history, appears
 - **AI markers.** A small sparkle marks layers, clips, blocks and slides that Claude changed last; it clears when you edit them.
 - **Across tools.** Claude sees every tool in a project at once (`get_project`, `find_in_project`), can turn a document into slides, place code output in documents and slides, and reuse text from one tool in another.
 
+[`docs/WALKTHROUGH.md`](docs/WALKTHROUGH.md) follows Claude through one whole goal, with screenshots: a poster, a brief, a deck built from it, a teaser and the exports, reviewed stage by stage.
+
+## Working together
+
+- **Comments where they belong.** Turn on comment mode (`Ctrl+Alt+M`) and click to pin a comment to a point on a canvas or slide, a moment in a video, a line of code or a phrase in a document. Code comments move with their lines. The Comments panel lists every thread; Claude reads them with `list_comments` and closes them with `resolve_comment`.
+- **Live cursors.** Everyone in a project sees where the others are working, Claude included: cursors on canvases and slides, playheads on the timeline, tagged lines in code, and bars beside paragraphs.
+- **Compare versions.** Compare any two versions as pictures (side by side, swipe, overlay, or the difference) and as text (paragraphs, code lines, slides), then go back to either one.
+- **Asset library.** Uploads are tagged automatically and searchable by name, tag, color, size, kind or `unused`. Identical files are stored once; look-alike copies (resized or re-saved) are found and can be merged, with every use switched to the copy you keep.
+- **Batch processing.** Select many files (**Process…**) or documents (**Apply to several documents…**) and resize, convert, grade, remove backgrounds, export, apply a preset or run a plain-language command on all of them as one job.
+- **Templates and presets.** Save a project as a template, and layer effects, clip looks, animation rigs, document styles and slide themes as presets (**Presets** page, or the Presets menu in each editor). Presets can be shared with everyone on the same Omnix.
+- **Plugins.** Add third-party tools as MCP servers or local modules (**Settings → Plugins**). They appear to Claude, in each project's Plugins panel and as batch operations, and their changes go through the same review and history as everything else. See [`docs/PLUGINS.md`](docs/PLUGINS.md).
+
 ## Project layout
 
 | Package | Purpose |
 | --- | --- |
-| `packages/core` | Scene graph, operations, history (undo, redo, branches, proposals, snapshots), keyframes, paths, IK, timeline edits, markdown, validation |
-| `packages/imaging` | Pixel algorithms shared by browser and server (adjustments, LUTs, filters, blend modes, selections, content-aware fill, background removal, upscaling, style transfer) |
+| `packages/core` | Scene graph, operations, history (undo, redo, branches, proposals, snapshots), keyframes, paths, IK, timeline edits, markdown, validation, text diffs, version comparison, presets |
+| `packages/imaging` | Pixel algorithms shared by browser and server (adjustments, LUTs, filters, blend modes, selections, content-aware fill, background removal, upscaling, style transfer, pixel diffs, perceptual hashes) |
 | `packages/render` | Canvas 2D renderer for canvases, video and animation frames, slides, charts and thumbnails |
 | `packages/exporters` | PSD (read and write), SVG, GIF, APNG, Lottie, sprite sheets, captions, ffmpeg pipelines, DOCX/PDF/Markdown/HTML documents, PowerPoint export and import, slide PDFs |
 | `packages/sandbox` | Isolated code kernels for Code Grounds (Python via Pyodide, JavaScript, TypeScript) |
-| `packages/server` | HTTP API, realtime hub, storage, asset pipeline, jobs, exports, imports, public presentation links, MCP server, OAuth for the Claude connector, the agent runner, commands, generative fill and style reference |
-| `packages/web` | The web app: dashboard, the six editors, presenter, history, proposals, Claude runs, the command bar, settings, the Claude setup guide and troubleshooting |
+| `packages/server` | HTTP API, realtime hub and presence, storage, asset pipeline and library, jobs, batch processing, exports, imports, public presentation links, MCP server, OAuth for the Claude connector, the agent runner, commands, generative fill, style reference, version comparison, presets and templates, the plugin host |
+| `packages/web` | The web app: dashboard, the six editors, presenter, history and version comparison, proposals, comments, Claude runs, the command bar, the library, presets, plugins, settings, the Claude setup guide and troubleshooting |
 
 Documentation:
 
+- [`docs/WALKTHROUGH.md`](docs/WALKTHROUGH.md): Claude completing a whole goal, step by step
 - [`docs/MCP_TOOLS.md`](docs/MCP_TOOLS.md): MCP tool catalog (generated)
+- [`docs/PLUGINS.md`](docs/PLUGINS.md): writing a plugin
 - [`docs/phases`](docs/phases): what was built in each phase, decisions and gaps
 
 ## License
