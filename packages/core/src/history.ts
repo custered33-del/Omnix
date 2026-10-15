@@ -446,6 +446,33 @@ export class ProjectSession {
     return p;
   }
 
+  /**
+   * Take back the last change stacked into an open proposal (its author's undo while it is still
+   * being drafted). A proposal with one change left is withdrawn.
+   */
+  dropLastProposalStep(id: string, by: Author): { proposal: Proposal; removed: string } {
+    const p = this.requireOpenProposal(id);
+    const steps = p.steps && p.steps.length === p.ops.length && p.ops.length > 1 ? p.steps : null;
+    if (!steps) {
+      p.status = 'rejected';
+      p.resolvedAt = new Date().toISOString();
+      p.resolvedBy = by;
+      p.reason = 'Withdrawn by its author';
+      this.emit({ type: 'proposal', proposal: p });
+      return { proposal: p, removed: p.label };
+    }
+    const removed = steps[steps.length - 1]!;
+    const left = steps.slice(0, -1);
+    Object.assign(p, {
+      ops: p.ops.slice(0, -1),
+      steps: left,
+      label: left.length === 1 ? left[0]! : `${left[0]} and ${left.length - 1} more ${left.length === 2 ? 'change' : 'changes'}`,
+      updatedAt: new Date().toISOString(),
+    });
+    this.emit({ type: 'proposal', proposal: p });
+    return { proposal: p, removed };
+  }
+
   private requireOpenProposal(id: string): Proposal {
     const p = this.proposals.get(id);
     if (!p) throw new OpError(`Unknown proposal: ${id}`);

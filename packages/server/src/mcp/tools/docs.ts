@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import {
+  applyOp,
   acceptSuggestionOp,
   childrenOf,
   applyLayoutOps,
@@ -169,7 +170,7 @@ export const documentTools = [
       }
       if (!args.nodeId) throw new ToolError('Pass nodeId (what the comment is about) or replyTo.');
       const target = state.nodes[args.nodeId];
-      if (!target) throw new ToolError(`No node "${args.nodeId}".`);
+      if (!target) throw new ToolError(`No node with id "${args.nodeId}" in this project. Call get_project (or get_node) to find the right id.`);
       const tool = ({ block: 'document', document: 'document', slide: 'slides', slideElement: 'slides', deck: 'slides', layer: 'image', canvas: 'image', clip: 'video', track: 'video', sequence: 'video', animLayer: 'animation', codeFile: 'code', cell: 'code', notebook: 'code', codeWorkspace: 'code' } as Record<string, string>)[target.type];
       if (!tool) throw new ToolError(`Comments cannot be pinned to a ${target.type}.`);
       let range: [number, number] | undefined;
@@ -356,7 +357,7 @@ export const documentTools = [
       y: z.number(),
       w: z.number().positive(),
       h: z.number().min(0),
-      rotation: z.number().default(0),
+      rotation: z.number().default(0).describe('Degrees, clockwise'),
       text: z.string().max(20_000).optional(),
       fontSize: z.number().positive().max(500).optional(),
       fontFamily: z.string().max(80).optional(),
@@ -414,7 +415,7 @@ export const documentTools = [
   defineTool({
     name: 'slides_edit_slide',
     title: 'Change a slide',
-    description: 'Change a slide: layout (moves placeholders), background color, speaker notes, transition (none, fade, push, wipe, zoom with duration and easing), hidden, or position in the deck. Duplicate it with duplicate: true.',
+    description: 'Change a slide: layout (moves placeholders), background color, speaker notes, transition (none, fade, push, wipe, zoom with duration and easing), hidden, or position in the deck. With duplicate: true a copy is made and the other changes apply to the copy (index places the copy); the original is left as it is.',
     category: 'slides',
     access: 'write',
     destructive: true,
@@ -435,13 +436,16 @@ export const documentTools = [
     async handler(args, ctx) {
       let slideId = args.slideId;
       const out = await edit(ctx, args.projectId, args.duplicate ? 'Duplicate slide' : 'Change slide', (state) => {
-        const slide = need(state, args.slideId, 'slide', 'slide');
+        let slide = need(state, args.slideId, 'slide', 'slide');
+        const ops: Operation[] = [];
         if (args.duplicate) {
           const d = duplicateSlideOps(state, slide.id);
           slideId = d.slideId;
-          return [d.op];
+          ops.push(d.op);
+          // The remaining changes are made to the copy.
+          state = applyOp(state, d.op).state;
+          slide = need(state, d.slideId, 'slide', 'slide');
         }
-        const ops: Operation[] = [];
         if (args.layout) ops.push(applyLayoutOps(state, slide.id, args.layout));
         const set: Record<string, unknown> = {};
         if (args.background !== undefined) set.background = args.background;

@@ -373,6 +373,10 @@ List recent changes on the current branch (who made them, human or AI, when, and
           },
           "timestamp": {
             "type": "string"
+          },
+          "approvedBy": {
+            "description": "Who approved it, for a proposed change",
+            "type": "string"
           }
         },
         "required": [
@@ -856,8 +860,10 @@ Add another canvas, video or animation sequence, code workspace, document or sli
       "type": "string",
       "enum": [
         "committed",
-        "proposed"
-      ]
+        "proposed",
+        "none"
+      ],
+      "description": "committed: applied; proposed: waiting for the user's review; none: nothing needed changing"
     },
     "commitId": {
       "type": "string"
@@ -910,7 +916,7 @@ Example result (structured content):
 
 **Change properties of anything** · write
 
-Set (or unset) properties on any node: a layer, clip, track, sequence, canvas, block, slide, slide element, code file or cell. Use get_node to see current properties. Values are validated against the node type; for example a layer accepts opacity 0..1, blendMode, x, y, rotation; a clip accepts start, in, out, x, y, scale, opacity, volume. Prefer the tool-specific tools when one fits.
+Set (or unset) properties on any node: a layer, clip, track, sequence, canvas, block, slide, slide element, code file or cell. Use get_node to see current properties. Values are validated against the node type; for example a layer accepts opacity 0..1, blendMode, x, y, rotation; a clip accepts start, in, out, x, y, scale, opacity, volume. Rotation is in degrees, clockwise, everywhere except animation rig bones (radians, see anim_rig). Prefer the tool-specific tools when one fits.
 
 <details><summary>Input schema</summary>
 
@@ -970,8 +976,10 @@ Set (or unset) properties on any node: a layer, clip, track, sequence, canvas, b
       "type": "string",
       "enum": [
         "committed",
-        "proposed"
-      ]
+        "proposed",
+        "none"
+      ],
+      "description": "committed: applied; proposed: waiting for the user's review; none: nothing needed changing"
     },
     "commitId": {
       "type": "string"
@@ -1074,8 +1082,10 @@ Move a node to another parent or position: reorder layers (bottom to top), move 
       "type": "string",
       "enum": [
         "committed",
-        "proposed"
-      ]
+        "proposed",
+        "none"
+      ],
+      "description": "committed: applied; proposed: waiting for the user's review; none: nothing needed changing"
     },
     "commitId": {
       "type": "string"
@@ -1162,8 +1172,10 @@ Delete a node and everything inside it (a layer, clip, track, block, slide, slid
       "type": "string",
       "enum": [
         "committed",
-        "proposed"
-      ]
+        "proposed",
+        "none"
+      ],
+      "description": "committed: applied; proposed: waiting for the user's review; none: nothing needed changing"
     },
     "commitId": {
       "type": "string"
@@ -1380,6 +1392,15 @@ Advanced: apply a list of scene-graph operations as one change (create, delete, 
               "items": {
                 "type": "string"
               }
+            },
+            "base": {
+              "type": "object",
+              "propertyNames": {
+                "type": "string"
+              },
+              "additionalProperties": {
+                "type": "string"
+              }
             }
           },
           "required": [
@@ -1466,6 +1487,11 @@ Advanced: apply a list of scene-graph operations as one change (create, delete, 
               "type": "integer",
               "minimum": 1,
               "maximum": 9007199254740991
+            },
+            "expect": {
+              "maxItems": 100000,
+              "type": "array",
+              "items": {}
             }
           },
           "required": [
@@ -1498,6 +1524,13 @@ Advanced: apply a list of scene-graph operations as one change (create, delete, 
                 "type": "string"
               },
               "additionalProperties": {}
+            },
+            "unset": {
+              "maxItems": 1000,
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
             }
           },
           "required": [
@@ -1547,8 +1580,10 @@ Advanced: apply a list of scene-graph operations as one change (create, delete, 
       "type": "string",
       "enum": [
         "committed",
-        "proposed"
-      ]
+        "proposed",
+        "none"
+      ],
+      "description": "committed: applied; proposed: waiting for the user's review; none: nothing needed changing"
     },
     "commitId": {
       "type": "string"
@@ -1611,7 +1646,7 @@ Example result (structured content):
 
 **Undo your last change** · write
 
-Undo the most recent change you (this connection) made in a project. People's changes are never undone by this tool.
+Undo the most recent change you (this connection) made in a project. People's changes are never undone by this tool. In edit-with-approval mode this takes back the last change in your open proposal; when nothing of yours is waiting for review, the reversal of your last applied change is proposed for the user to approve.
 
 <details><summary>Input schema</summary>
 
@@ -2496,8 +2531,10 @@ Apply a preset (id or name from list_presets) to a target: layer-effects to a la
       "type": "string",
       "enum": [
         "committed",
-        "proposed"
-      ]
+        "proposed",
+        "none"
+      ],
+      "description": "committed: applied; proposed: waiting for the user's review; none: nothing needed changing"
     },
     "commitId": {
       "type": "string"
@@ -2909,7 +2946,7 @@ Example result (structured content):
 
 **Import a file from a URL** · write
 
-Download an image, video, audio file, font or LUT from a public URL (or a data: URL) into the asset library, optionally attached to a project, so it can be placed in canvases, timelines, documents and slides. Identical files are stored once.
+Download an image, video, audio file, font or LUT from a public URL (or a data: URL) into the asset library, optionally attached to a project, so it can be placed in canvases, timelines, documents and slides. Identical files are stored once: importing a file that is already in the library returns that asset, under its existing name (rename it with tag_asset).
 
 <details><summary>Input schema</summary>
 
@@ -3337,7 +3374,7 @@ Example result (structured content):
 
 **Add a layer** · write
 
-Add a layer to a canvas: raster (an image asset), text, shape (vector shapes), fill (solid color) or group. New layers go on top unless you pass index (0 = bottom). Coordinates are canvas pixels from the top-left.
+Add a layer to a canvas: raster (an image asset, or without assetId an empty pixel layer to paint on with image_paint), text, shape (vector shapes), fill (solid color) or group. New layers go on top unless you pass index (0 = bottom). Coordinates are canvas pixels from the top-left. Giving only width or only height keeps the image's proportions.
 
 <details><summary>Input schema</summary>
 
@@ -3379,7 +3416,7 @@ Add a layer to a canvas: raster (an image asset), text, shape (vector shapes), f
       "maximum": 9007199254740991
     },
     "assetId": {
-      "description": "raster: the image asset to place",
+      "description": "raster: the image asset to place (leave out for an empty layer to paint on)",
       "type": "string"
     },
     "x": {
@@ -3623,8 +3660,10 @@ Add a layer to a canvas: raster (an image asset), text, shape (vector shapes), f
       "type": "string",
       "enum": [
         "committed",
-        "proposed"
-      ]
+        "proposed",
+        "none"
+      ],
+      "description": "committed: applied; proposed: waiting for the user's review; none: nothing needed changing"
     },
     "commitId": {
       "type": "string"
@@ -3993,8 +4032,10 @@ Add a non-destructive adjustment layer that changes everything below it: curves,
       "type": "string",
       "enum": [
         "committed",
-        "proposed"
-      ]
+        "proposed",
+        "none"
+      ],
+      "description": "committed: applied; proposed: waiting for the user's review; none: nothing needed changing"
     },
     "commitId": {
       "type": "string"
@@ -4120,8 +4161,10 @@ Add a non-destructive filter to a layer (gaussianBlur {radius}, sharpen {amount}
       "type": "string",
       "enum": [
         "committed",
-        "proposed"
-      ]
+        "proposed",
+        "none"
+      ],
+      "description": "committed: applied; proposed: waiting for the user's review; none: nothing needed changing"
     },
     "commitId": {
       "type": "string"
@@ -4343,8 +4386,10 @@ Set the canvas selection to a rectangle, ellipse or polygon (canvas pixels), or 
       "type": "string",
       "enum": [
         "committed",
-        "proposed"
-      ]
+        "proposed",
+        "none"
+      ],
+      "description": "committed: applied; proposed: waiting for the user's review; none: nothing needed changing"
     },
     "commitId": {
       "type": "string"
@@ -4486,8 +4531,10 @@ Make a selection from the pixels: "color" selects similar colors starting at a p
       "type": "string",
       "enum": [
         "committed",
-        "proposed"
-      ]
+        "proposed",
+        "none"
+      ],
+      "description": "committed: applied; proposed: waiting for the user's review; none: nothing needed changing"
     },
     "commitId": {
       "type": "string"
@@ -4626,8 +4673,10 @@ Give a layer a mask from the current selection (shows only the selected area; in
       "type": "string",
       "enum": [
         "committed",
-        "proposed"
-      ]
+        "proposed",
+        "none"
+      ],
+      "description": "committed: applied; proposed: waiting for the user's review; none: nothing needed changing"
     },
     "commitId": {
       "type": "string"
@@ -4729,8 +4778,10 @@ Find the subject of a pixel layer and hide its background with an editable layer
       "type": "string",
       "enum": [
         "committed",
-        "proposed"
-      ]
+        "proposed",
+        "none"
+      ],
+      "description": "committed: applied; proposed: waiting for the user's review; none: nothing needed changing"
     },
     "commitId": {
       "type": "string"
@@ -4946,8 +4997,10 @@ Fill the selected area with texture taken from its surroundings (removes objects
       "type": "string",
       "enum": [
         "committed",
-        "proposed"
-      ]
+        "proposed",
+        "none"
+      ],
+      "description": "committed: applied; proposed: waiting for the user's review; none: nothing needed changing"
     },
     "commitId": {
       "type": "string"
@@ -5114,8 +5167,10 @@ Paint brush (or eraser) strokes onto a pixel layer. Points are canvas pixels; pr
       "type": "string",
       "enum": [
         "committed",
-        "proposed"
-      ]
+        "proposed",
+        "none"
+      ],
+      "description": "committed: applied; proposed: waiting for the user's review; none: nothing needed changing"
     },
     "commitId": {
       "type": "string"
@@ -5253,8 +5308,10 @@ Change the canvas size. anchor says where existing content stays (0,0 top-left; 
       "type": "string",
       "enum": [
         "committed",
-        "proposed"
-      ]
+        "proposed",
+        "none"
+      ],
+      "description": "committed: applied; proposed: waiting for the user's review; none: nothing needed changing"
     },
     "commitId": {
       "type": "string"
@@ -5309,7 +5366,7 @@ Example result (structured content):
 
 **Put media on the timeline** · write
 
-Place a video, audio or image asset on a track. Without trackId the first track of the right kind is used (one is created if needed). Without start the clip goes after the last clip on that track. in/out pick the part of the source to use (seconds); for a still image, out is how long it shows (default 5 s). The sequence grows to fit.
+Place a video, audio or image asset on a track of this sequence (video and images on a video track, audio on an audio track). Without trackId the first track of the right kind is used (one is created if needed). Without start the clip goes after the last clip on that track. in/out pick the part of the source to use, in seconds, so the clip lasts out − in; a still image lasts 5 s unless you pass out (with in 0, out is its length). The sequence grows to fit.
 
 <details><summary>Input schema</summary>
 
@@ -5370,8 +5427,10 @@ Place a video, audio or image asset on a track. Without trackId the first track 
       "type": "string",
       "enum": [
         "committed",
-        "proposed"
-      ]
+        "proposed",
+        "none"
+      ],
+      "description": "committed: applied; proposed: waiting for the user's review; none: nothing needed changing"
     },
     "commitId": {
       "type": "string"
@@ -5524,8 +5583,10 @@ Add text on screen for a time range: a title (large, centred, fades in and out) 
       "type": "string",
       "enum": [
         "committed",
-        "proposed"
-      ]
+        "proposed",
+        "none"
+      ],
+      "description": "committed: applied; proposed: waiting for the user's review; none: nothing needed changing"
     },
     "commitId": {
       "type": "string"
@@ -5659,8 +5720,10 @@ Timeline edits on one clip. split: cut at a sequence time into two clips. trim: 
       "type": "string",
       "enum": [
         "committed",
-        "proposed"
-      ]
+        "proposed",
+        "none"
+      ],
+      "description": "committed: applied; proposed: waiting for the user's review; none: nothing needed changing"
     },
     "commitId": {
       "type": "string"
@@ -5794,8 +5857,10 @@ Play a clip faster or slower (0.1 to 16, 1 = normal), optionally in reverse. Wit
       "type": "string",
       "enum": [
         "committed",
-        "proposed"
-      ]
+        "proposed",
+        "none"
+      ],
+      "description": "committed: applied; proposed: waiting for the user's review; none: nothing needed changing"
     },
     "commitId": {
       "type": "string"
@@ -5843,7 +5908,7 @@ Example result (structured content):
 
 **Animate a property** · write
 
-Set a keyframe on a clip or animation layer: property x, y, scale, rotation, opacity, volume (dB, audio) or blur at a time relative to the clip or layer start. Between keyframes values move with the easing of the earlier keyframe. Pass remove: true to delete the keyframe at that time.
+Set a keyframe on a clip or animation layer: property x, y, scale, rotation (degrees, clockwise), opacity, volume (dB, audio) or blur at a time relative to the clip or layer start. Between keyframes values move with the easing of the earlier keyframe. Pass remove: true to delete the keyframe at that time.
 
 <details><summary>Input schema</summary>
 
@@ -5953,8 +6018,10 @@ Set a keyframe on a clip or animation layer: property x, y, scale, rotation, opa
       "type": "string",
       "enum": [
         "committed",
-        "proposed"
-      ]
+        "proposed",
+        "none"
+      ],
+      "description": "committed: applied; proposed: waiting for the user's review; none: nothing needed changing"
     },
     "commitId": {
       "type": "string"
@@ -6127,8 +6194,10 @@ Set or clear the transition at the start (in) or end (out) of a clip: crossfade,
       "type": "string",
       "enum": [
         "committed",
-        "proposed"
-      ]
+        "proposed",
+        "none"
+      ],
+      "description": "committed: applied; proposed: waiting for the user's review; none: nothing needed changing"
     },
     "commitId": {
       "type": "string"
@@ -6249,8 +6318,10 @@ Add an effect to a clip: colorGrade {exposure, contrast, saturation, temperature
       "type": "string",
       "enum": [
         "committed",
-        "proposed"
-      ]
+        "proposed",
+        "none"
+      ],
+      "description": "committed: applied; proposed: waiting for the user's review; none: nothing needed changing"
     },
     "commitId": {
       "type": "string"
@@ -6373,8 +6444,10 @@ Cut the subject out of a video clip: "chroma" keys out a color (green or blue sc
       "type": "string",
       "enum": [
         "committed",
-        "proposed"
-      ]
+        "proposed",
+        "none"
+      ],
+      "description": "committed: applied; proposed: waiting for the user's review; none: nothing needed changing"
     },
     "commitId": {
       "type": "string"
@@ -6481,8 +6554,10 @@ Add a video, audio, title, effect or animation track to a sequence. Visual track
       "type": "string",
       "enum": [
         "committed",
-        "proposed"
-      ]
+        "proposed",
+        "none"
+      ],
+      "description": "committed: applied; proposed: waiting for the user's review; none: nothing needed changing"
     },
     "commitId": {
       "type": "string"
@@ -6599,8 +6674,10 @@ Audio mixing for a track: gain in dB (-60..12), pan (-1 left .. 1 right), mute, 
       "type": "string",
       "enum": [
         "committed",
-        "proposed"
-      ]
+        "proposed",
+        "none"
+      ],
+      "description": "committed: applied; proposed: waiting for the user's review; none: nothing needed changing"
     },
     "commitId": {
       "type": "string"
@@ -6698,8 +6775,10 @@ Listen to the sequence's dialogue and add timed captions on a Captions track. Wi
       "type": "string",
       "enum": [
         "committed",
-        "proposed"
-      ]
+        "proposed",
+        "none"
+      ],
+      "description": "committed: applied; proposed: waiting for the user's review; none: nothing needed changing"
     },
     "commitId": {
       "type": "string"
@@ -6814,8 +6893,10 @@ Change a sequence to a new frame size (for example 16:9 to 9:16) and fill the sp
       "type": "string",
       "enum": [
         "committed",
-        "proposed"
-      ]
+        "proposed",
+        "none"
+      ],
+      "description": "committed: applied; proposed: waiting for the user's review; none: nothing needed changing"
     },
     "commitId": {
       "type": "string"
@@ -7073,8 +7154,10 @@ Add an animation layer (a drawing that can be frame-by-frame, tweened with keyfr
       "type": "string",
       "enum": [
         "committed",
-        "proposed"
-      ]
+        "proposed",
+        "none"
+      ],
+      "description": "committed: applied; proposed: waiting for the user's review; none: nothing needed changing"
     },
     "commitId": {
       "type": "string"
@@ -7337,8 +7420,10 @@ Add a frame-by-frame drawing to an animation layer. hold is how many timeline fr
       "type": "string",
       "enum": [
         "committed",
-        "proposed"
-      ]
+        "proposed",
+        "none"
+      ],
+      "description": "committed: applied; proposed: waiting for the user's review; none: nothing needed changing"
     },
     "commitId": {
       "type": "string"
@@ -7516,8 +7601,10 @@ Make an animation layer follow a path over its duration (points in sequence coor
       "type": "string",
       "enum": [
         "committed",
-        "proposed"
-      ]
+        "proposed",
+        "none"
+      ],
+      "description": "committed: applied; proposed: waiting for the user's review; none: nothing needed changing"
     },
     "commitId": {
       "type": "string"
@@ -7728,8 +7815,10 @@ Bone rigging for a character layer. addBones appends bones (parentId null for a 
       "type": "string",
       "enum": [
         "committed",
-        "proposed"
-      ]
+        "proposed",
+        "none"
+      ],
+      "description": "committed: applied; proposed: waiting for the user's review; none: nothing needed changing"
     },
     "commitId": {
       "type": "string"
@@ -7864,8 +7953,10 @@ Insert Markdown into a document as editable blocks: headings, paragraphs, lists,
       "type": "string",
       "enum": [
         "committed",
-        "proposed"
-      ]
+        "proposed",
+        "none"
+      ],
+      "description": "committed: applied; proposed: waiting for the user's review; none: nothing needed changing"
     },
     "commitId": {
       "type": "string"
@@ -8017,8 +8108,10 @@ Change a document block directly: its text (inline markdown), type (heading with
       "type": "string",
       "enum": [
         "committed",
-        "proposed"
-      ]
+        "proposed",
+        "none"
+      ],
+      "description": "committed: applied; proposed: waiting for the user's review; none: nothing needed changing"
     },
     "commitId": {
       "type": "string"
@@ -8138,8 +8231,10 @@ Propose a change to a document block that people (or other AIs) accept or reject
       "type": "string",
       "enum": [
         "committed",
-        "proposed"
-      ]
+        "proposed",
+        "none"
+      ],
+      "description": "committed: applied; proposed: waiting for the user's review; none: nothing needed changing"
     },
     "commitId": {
       "type": "string"
@@ -8246,8 +8341,10 @@ Accept a suggested edit (optionally with adjusted text) so it changes the docume
       "type": "string",
       "enum": [
         "committed",
-        "proposed"
-      ]
+        "proposed",
+        "none"
+      ],
+      "description": "committed: applied; proposed: waiting for the user's review; none: nothing needed changing"
     },
     "commitId": {
       "type": "string"
@@ -8374,8 +8471,10 @@ Change a named style for the whole document (body, h1, h2, h3, quote, code, capt
       "type": "string",
       "enum": [
         "committed",
-        "proposed"
-      ]
+        "proposed",
+        "none"
+      ],
+      "description": "committed: applied; proposed: waiting for the user's review; none: nothing needed changing"
     },
     "commitId": {
       "type": "string"
@@ -8496,8 +8595,10 @@ Leave a comment pinned to something: a document block (optionally on a quoted ph
       "type": "string",
       "enum": [
         "committed",
-        "proposed"
-      ]
+        "proposed",
+        "none"
+      ],
+      "description": "committed: applied; proposed: waiting for the user's review; none: nothing needed changing"
     },
     "commitId": {
       "type": "string"
@@ -8686,8 +8787,10 @@ Mark a comment thread resolved (or reopen it), optionally replying first to say 
       "type": "string",
       "enum": [
         "committed",
-        "proposed"
-      ]
+        "proposed",
+        "none"
+      ],
+      "description": "committed: applied; proposed: waiting for the user's review; none: nothing needed changing"
     },
     "commitId": {
       "type": "string"
@@ -8808,8 +8911,10 @@ Add a slide built from a layout (title, title-body, two-column, section, image-f
       "type": "string",
       "enum": [
         "committed",
-        "proposed"
-      ]
+        "proposed",
+        "none"
+      ],
+      "description": "committed: applied; proposed: waiting for the user's review; none: nothing needed changing"
     },
     "commitId": {
       "type": "string"
@@ -8920,6 +9025,7 @@ Add an element to a slide: text (inline markdown), image or video (asset), shape
     },
     "rotation": {
       "default": 0,
+      "description": "Degrees, clockwise",
       "type": "number"
     },
     "text": {
@@ -9220,8 +9326,10 @@ Add an element to a slide: text (inline markdown), image or video (asset), shape
       "type": "string",
       "enum": [
         "committed",
-        "proposed"
-      ]
+        "proposed",
+        "none"
+      ],
+      "description": "committed: applied; proposed: waiting for the user's review; none: nothing needed changing"
     },
     "commitId": {
       "type": "string"
@@ -9297,7 +9405,7 @@ Example result (structured content):
 
 **Change a slide** · write, may remove content
 
-Change a slide: layout (moves placeholders), background color, speaker notes, transition (none, fade, push, wipe, zoom with duration and easing), hidden, or position in the deck. Duplicate it with duplicate: true.
+Change a slide: layout (moves placeholders), background color, speaker notes, transition (none, fade, push, wipe, zoom with duration and easing), hidden, or position in the deck. With duplicate: true a copy is made and the other changes apply to the copy (index places the copy); the original is left as it is.
 
 <details><summary>Input schema</summary>
 
@@ -9441,8 +9549,10 @@ Change a slide: layout (moves placeholders), background color, speaker notes, tr
       "type": "string",
       "enum": [
         "committed",
-        "proposed"
-      ]
+        "proposed",
+        "none"
+      ],
+      "description": "committed: applied; proposed: waiting for the user's review; none: nothing needed changing"
     },
     "commitId": {
       "type": "string"
@@ -9625,8 +9735,10 @@ Add a build animation to a slide element: fade-in, fly-in, zoom-in, pulse, spin,
       "type": "string",
       "enum": [
         "committed",
-        "proposed"
-      ]
+        "proposed",
+        "none"
+      ],
+      "description": "committed: applied; proposed: waiting for the user's review; none: nothing needed changing"
     },
     "commitId": {
       "type": "string"
@@ -9769,8 +9881,10 @@ Apply a theme to the whole deck: a preset (Calm, Midnight, Paper, Bold, Forest) 
       "type": "string",
       "enum": [
         "committed",
-        "proposed"
-      ]
+        "proposed",
+        "none"
+      ],
+      "description": "committed: applied; proposed: waiting for the user's review; none: nothing needed changing"
     },
     "commitId": {
       "type": "string"
@@ -9982,8 +10096,10 @@ Turn a document into slides: one slide per heading with the text under it as sho
       "type": "string",
       "enum": [
         "committed",
-        "proposed"
-      ]
+        "proposed",
+        "none"
+      ],
+      "description": "committed: applied; proposed: waiting for the user's review; none: nothing needed changing"
     },
     "commitId": {
       "type": "string"
@@ -10040,9 +10156,9 @@ Example result (structured content):
 
 ### `export_file`
 
-**Export a file** · read-only
+**Export a file** · write
 
-Export a canvas or layer (png, jpeg, webp, avif, svg, psd), a video or animation sequence (a preset id such as youtube-1080p or instagram-reel, or gif, apng, webm, mp4, lottie, spritesheet; srt or vtt for captions), a document (docx, pdf, md, html), a slideshow (pptx, pdf, pdf-notes, png) or a code workspace (zip, ipynb). Returns a download link that works for 24 hours, and the file is also saved in the asset library.
+Export a canvas (png, jpeg, webp, avif, svg, psd) or one layer of it (png, jpeg, webp, avif: just that layer, cropped to its content), a video or animation sequence (a preset id such as youtube-1080p or instagram-reel, or gif, apng, webm, mp4, lottie, spritesheet; srt or vtt for captions), a document (docx, pdf, md, html), a slideshow (pptx, pdf, pdf-notes, png) or a code workspace (zip, ipynb). Returns a download link that works for 24 hours. The file is added to your asset library, so this needs a connection that can edit; the project itself is not changed.
 
 <details><summary>Input schema</summary>
 
@@ -10221,8 +10337,10 @@ Create a file in a code workspace, or replace its whole content if the path exis
       "type": "string",
       "enum": [
         "committed",
-        "proposed"
-      ]
+        "proposed",
+        "none"
+      ],
+      "description": "committed: applied; proposed: waiting for the user's review; none: nothing needed changing"
     },
     "commitId": {
       "type": "string"
@@ -10345,8 +10463,10 @@ Replace exact text in a file. Each find must occur exactly once (or pass all: tr
       "type": "string",
       "enum": [
         "committed",
-        "proposed"
-      ]
+        "proposed",
+        "none"
+      ],
+      "description": "committed: applied; proposed: waiting for the user's review; none: nothing needed changing"
     },
     "commitId": {
       "type": "string"
@@ -10466,8 +10586,10 @@ Add a code or markdown cell to a notebook, after afterCellId (default: at the en
       "type": "string",
       "enum": [
         "committed",
-        "proposed"
-      ]
+        "proposed",
+        "none"
+      ],
+      "description": "committed: applied; proposed: waiting for the user's review; none: nothing needed changing"
     },
     "commitId": {
       "type": "string"
@@ -10721,8 +10843,10 @@ Link a notebook cell's chart, table or output live into a document (as a block a
       "type": "string",
       "enum": [
         "committed",
-        "proposed"
-      ]
+        "proposed",
+        "none"
+      ],
+      "description": "committed: applied; proposed: waiting for the user's review; none: nothing needed changing"
     },
     "commitId": {
       "type": "string"
@@ -11390,7 +11514,7 @@ Example result (structured content):
 
 **Wait for the user's answer** · read-only
 
-Wait (up to about 50 seconds) for the user to answer the current approval gate. If it returns still waiting, call it again. The answer is approve (continue), changes (with feedback to address), or stopped.
+Wait (up to about 50 seconds) for the user to answer the current approval gate. If it returns still waiting, call it again. The answer is approve (continue), changes (with feedback to address), or stopped. Calling it again returns the same answer until the next gate.
 
 <details><summary>Input schema</summary>
 
@@ -11864,8 +11988,10 @@ Turn a plain-language edit into operations with Omnix's command parser, for exam
       "type": "string",
       "enum": [
         "committed",
-        "proposed"
-      ]
+        "proposed",
+        "none"
+      ],
+      "description": "committed: applied; proposed: waiting for the user's review; none: nothing needed changing"
     },
     "commitId": {
       "type": "string"
@@ -12113,8 +12239,10 @@ Fill an area of the image from a prompt: remove an object, replace a sky, patch 
       "type": "string",
       "enum": [
         "committed",
-        "proposed"
-      ]
+        "proposed",
+        "none"
+      ],
+      "description": "committed: applied; proposed: waiting for the user's review; none: nothing needed changing"
     },
     "commitId": {
       "type": "string"
@@ -12254,8 +12382,10 @@ Grow the canvas and fill the new margins so the picture continues past its edges
       "type": "string",
       "enum": [
         "committed",
-        "proposed"
-      ]
+        "proposed",
+        "none"
+      ],
+      "description": "committed: applied; proposed: waiting for the user's review; none: nothing needed changing"
     },
     "commitId": {
       "type": "string"
@@ -12511,8 +12641,10 @@ Apply the look of a reference (an image or video asset, or a canvas, layer, clip
       "type": "string",
       "enum": [
         "committed",
-        "proposed"
-      ]
+        "proposed",
+        "none"
+      ],
+      "description": "committed: applied; proposed: waiting for the user's review; none: nothing needed changing"
     },
     "commitId": {
       "type": "string"

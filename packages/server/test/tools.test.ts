@@ -66,7 +66,7 @@ describe('project tools', () => {
     const bad = await callError(auto, 'update_node', { projectId: p.projectId, nodeId: deck.documentId, set: { width: -5 } });
     expect(bad).toMatch(/Invalid operation/);
     const missing = await callError(auto, 'delete_node', { projectId: p.projectId, nodeId: 'nope' });
-    expect(missing).toMatch(/No deletable node/);
+    expect(missing).toMatch(/No node with id \\"nope\\"/);
     const raw = await call(auto, 'apply_operations', { projectId: p.projectId, label: 'Rename twice', operations: [{ kind: 'update', id: deck.documentId, set: { name: 'A' } }, { kind: 'update', id: deck.documentId, set: { name: 'B' } }] });
     expect(raw.status).toBe('committed');
     const undone = await call(auto, 'undo', { projectId: p.projectId });
@@ -288,5 +288,128 @@ describe('edit with approval', () => {
     await call(approve, 'start_new_proposal', { projectId: p.projectId });
     const d = await call(approve, 'slides_set_theme', { projectId: p.projectId, deckId: deck, preset: 'Bold' });
     expect(d.proposalId).not.toBe(c.proposalId);
+  });
+});
+
+describe('fixes from the Phase 6 review', () => {
+  const png = (w: number, h: number, color: { r: number; g: number; b: number }) => sharp({ create: { width: w, height: h, channels: 4, background: { ...color, alpha: 1 } } }).png().toBuffer();
+
+  it('renders canvases with a LUT adjustment, and grows canvases whose layers have pixel masks', async () => {
+    const p = await call(auto, 'create_project', { name: 'Grade', primaryTool: 'image' });
+    const canvas = p.documentId as string;
+    const lines = ['LUT_3D_SIZE 2'];
+    for (let b = 0; b < 2; b++) for (let g = 0; g < 2; g++) for (let r = 0; r < 2; r++) lines.push(`${1 - r} ${1 - g} ${1 - b}`);
+    const lut = (await json(await ts.api(`/api/assets?name=invert.cube&projectId=${p.projectId}`, { method: 'POST', body: lines.join('\n') }))).asset;
+    await call(auto, 'image_add_adjustment', { projectId: p.projectId, canvasId: canvas, adjustment: { kind: 'lut', assetId: lut.id, intensity: 1 } });
+    const preview = await auto.callTool({ name: 'render_preview', arguments: { projectId: p.projectId, nodeId: canvas, maxSize: 128 } });
+    expect(preview.isError).toBeFalsy();
+
+    const asset = await upload('photo.png', await png(200, 120, { r: 30, g: 120, b: 220 }), p.projectId, 'image/png');
+    const photo = await call(auto, 'image_add_layer', { projectId: p.projectId, canvasId: canvas, kind: 'raster', assetId: asset.id });
+    await call(auto, 'image_remove_background', { projectId: p.projectId, layerId: photo.layerId });
+    const s0 = await state(p.projectId);
+    const { width, height } = (s0.nodes[canvas] as SceneNode<'canvas'>).props;
+    // Centered, so every layer and mask moves right and down.
+    await call(auto, 'image_resize_canvas', { projectId: p.projectId, canvasId: canvas, width: width + 200, height: height + 100 });
+    const s = await state(p.projectId);
+    expect((s.nodes[photo.layerId] as SceneNode<'layer'>).props.x).toBe(100);
+  });
+
+  it('keeps layers and clips where they belong', async () => {
+    const p = await call(auto, 'create_project', { name: 'Places', primaryTool: 'image' });
+    const canvas = p.documentId as string;
+    const text = await call(auto, 'image_add_layer', { projectId: p.projectId, canvasId: canvas, kind: 'text', text: 'Hi' });
+    expect(await callError(auto, 'image_add_adjustment', { projectId: p.projectId, canvasId: canvas, adjustment: { kind: 'invert' }, parentId: text.layerId })).toMatch(/not a group/);
+    expect(await callError(auto, 'image_add_adjustment', { projectId: p.projectId, canvasId: canvas, adjustment: { kind: 'invert' }, parentId: 'nope' })).toMatch(/No group layer with id/);
+    // Only height given: the picture keeps its proportions.
+    const asset = await upload('wide.png', await png(800, 600, { r: 200, g: 40, b: 40 }), p.projectId, 'image/png');
+    const pic = await call(auto, 'image_add_layer', { projectId: p.projectId, canvasId: canvas, kind: 'raster', assetId: asset.id, height: 300 });
+    expect((await state(p.projectId)).nodes[pic.layerId]!.props).toMatchObject({ width: 400, height: 300 });
+    // An empty pixel layer to paint on.
+    const paint = await call(auto, 'image_add_layer', { projectId: p.projectId, canvasId: canvas, kind: 'raster' });
+    await call(auto, 'image_paint', { projectId: p.projectId, layerId: paint.layerId, strokes: [{ points: [{ x: 5, y: 5 }], color: '#000000', size: 4 }] });
+
+    const v = await call(auto, 'add_document', { projectId: p.projectId, tool: 'video', name: 'One' });
+    const w = await call(auto, 'add_document', { projectId: p.projectId, tool: 'video', name: 'Two' });
+    const audio = await call(auto, 'video_add_track', { projectId: p.projectId, sequenceId: v.documentId, trackType: 'audio', name: 'Music' });
+    const other = await call(auto, 'video_add_track', { projectId: p.projectId, sequenceId: w.documentId, trackType: 'video', name: 'B roll' });
+    expect(await callError(auto, 'video_add_clip', { projectId: p.projectId, sequenceId: v.documentId, assetId: asset.id, trackId: audio.trackId })).toMatch(/needs a video track/);
+    expect(await callError(auto, 'video_add_clip', { projectId: p.projectId, sequenceId: v.documentId, assetId: asset.id, trackId: other.trackId })).toMatch(/another sequence/);
+    const still = await call(auto, 'video_add_clip', { projectId: p.projectId, sequenceId: v.documentId, assetId: asset.id, in: 2, out: 3 });
+    expect(still.end - still.start).toBe(1);
+  });
+
+  it('uses its own proposed changes in approval mode, and undo takes them back from the proposal', async () => {
+    const p = await call(auto, 'create_project', { name: 'Draft code', primaryTool: 'code' });
+    const ws = p.documentId as string;
+    const file = await call(auto, 'code_write_file', { projectId: p.projectId, workspaceId: ws, path: 'v.py', content: 'print("v1")\n' });
+    const edit = await call(approve, 'code_edit_file', { projectId: p.projectId, fileId: file.fileId, edits: [{ find: 'v1', replace: 'v2' }] });
+    expect(edit.status).toBe('proposed');
+    const run = await call(approve, 'code_run', { projectId: p.projectId, workspaceId: ws, fileId: file.fileId });
+    expect(JSON.stringify(run.outputs)).toContain('v2');
+    expect(await callError(approve, 'code_run', { projectId: p.projectId, workspaceId: ws, fileId: 'nope' })).toMatch(/No code file with id nope/);
+
+    // A second change stacks; undo removes only it, then the proposal goes.
+    await call(approve, 'code_write_file', { projectId: p.projectId, workspaceId: ws, path: 'w.py', content: 'print("w")\n' });
+    const one = await call(approve, 'undo', { projectId: p.projectId });
+    expect(one.undone).toMatch(/w\.py/);
+    let open = (await json(await ts.api(`/api/projects/${p.projectId}/proposals?status=open`))).proposals;
+    expect(open).toHaveLength(1);
+    expect(open[0].ops).toHaveLength(1);
+    await call(approve, 'undo', { projectId: p.projectId });
+    open = (await json(await ts.api(`/api/projects/${p.projectId}/proposals?status=open`))).proposals;
+    expect(open).toHaveLength(0);
+    // Nothing waiting: undoing an applied change is itself proposed, never applied directly.
+    const before = await state(p.projectId);
+    await call(approve, 'add_comment', { projectId: p.projectId, nodeId: file.fileId, text: 'Looks good' });
+    const third = await call(approve, 'undo', { projectId: p.projectId });
+    expect(third.undone).toBeTruthy();
+    expect(Object.keys((await state(p.projectId)).nodes).length).toBe(Object.keys(before.nodes).length + 1);
+    const waiting = (await json(await ts.api(`/api/projects/${p.projectId}/proposals?status=open`))).proposals;
+    expect(waiting).toHaveLength(1);
+    // Once a person approves it, the history says who did (and matches its declared output).
+    await ts.api(`/api/projects/${p.projectId}/proposals/${waiting[0].id}/accept`, { method: 'POST', json: {} });
+    const history = await call(approve, 'get_history', { projectId: p.projectId });
+    expect(history.commits.some((c: { approvedBy?: string }) => c.approvedBy)).toBe(true);
+  });
+
+  it('duplicates a slide with the other changes applied to the copy, and exports one layer', async () => {
+    const p = await call(auto, 'create_project', { name: 'Deck', primaryTool: 'slides' });
+    const deck = p.documentId as string;
+    const s0 = await state(p.projectId);
+    const first = deckSlides(s0, deck)[0]!;
+    const dup = await call(auto, 'slides_edit_slide', { projectId: p.projectId, slideId: first.id, duplicate: true, notes: 'Copy notes', hidden: true, index: 0 });
+    const s = await state(p.projectId);
+    const slides = deckSlides(s, deck);
+    expect(slides[0]!.id).toBe(dup.slideId);
+    expect(slides[0]!.props).toMatchObject({ notes: 'Copy notes', hidden: true });
+    expect((s.nodes[first.id] as SceneNode<'slide'>).props.hidden).toBeFalsy();
+
+    const img = await call(auto, 'add_document', { projectId: p.projectId, tool: 'image', name: 'Poster' });
+    const asset = await upload('red.png', await png(80, 40, { r: 220, g: 20, b: 20 }), p.projectId, 'image/png');
+    const layer = await call(auto, 'image_add_layer', { projectId: p.projectId, canvasId: img.documentId, kind: 'raster', assetId: asset.id, x: 10, y: 10, name: 'Badge' });
+    const ex = await call(auto, 'export_file', { projectId: p.projectId, nodeId: layer.layerId, format: 'png' });
+    expect(ex.name).toBe('Poster-Badge.png');
+    const meta = await sharp(Buffer.from(await (await fetch(ex.url)).arrayBuffer())).metadata();
+    expect([meta.width, meta.height]).toEqual([80, 40]);
+    expect(await callError(viewer, 'export_file', { projectId: p.projectId, nodeId: layer.layerId, format: 'png' })).toMatch(/view-only/);
+    expect(await callError(viewer, 'start_new_proposal', { projectId: p.projectId })).toMatch(/view-only/);
+  });
+
+  it('reports agent errors as tool errors, and the latest decision without using it up', async () => {
+    expect(await callError(auto, 'agent_status', { runId: 'job_nope' })).toMatch(/No agent run job_nope/);
+    expect(await callError(auto, 'agent_set_plan', { runId: 'job_nope', stages: ['A'] })).toMatch(/No agent run job_nope/);
+    const p = await call(auto, 'create_project', { name: 'Run', primaryTool: 'document' });
+    const run = await call(auto, 'agent_start_run', { projectId: p.projectId, goal: 'Write a note', plan: ['Write'], gates: [{ kind: 'plan' }] });
+    const id = run.runId as string;
+    expect(run.status).toBe('awaiting_approval');
+    expect((await ts.api(`/api/agent/runs/${id}/decision`, { method: 'POST', json: { decision: 'changes', feedback: 'Shorter, please.' } })).status).toBe(200);
+    const first = await call(auto, 'agent_wait', { runId: id, timeoutSeconds: 5 });
+    expect(first.decision).toMatchObject({ decision: 'changes', feedback: 'Shorter, please.' });
+    // Reading it again (or checking status) gives the same answer.
+    const again = await call(auto, 'agent_wait', { runId: id, timeoutSeconds: 1 });
+    expect(again.decision).toMatchObject({ decision: 'changes' });
+    const status = await call(auto, 'agent_status', { runId: id });
+    expect(status.runs[0].decision).toMatchObject({ decision: 'changes' });
   });
 });

@@ -113,22 +113,33 @@ export class CodeService {
     return out;
   }
 
-  async run(projectId: string, target: CodeRunTarget, by: { userId: string; author: Author; via: 'ui' | 'mcp' | 'agent' | 'api'; jobId?: string; persist?: boolean }): Promise<CodeRunResult> {
-    const state = await this.services.projects.state(projectId);
-    const ws = requireNodeOfType(state, target.workspaceId, 'codeWorkspace');
+  /**
+   * Run a file, cell or snippet. `state` is the project as the caller sees it (Claude in approval
+   * mode runs the code it has proposed, not what is committed); it defaults to the current state.
+   */
+  async run(projectId: string, target: CodeRunTarget, by: { userId: string; author: Author; via: 'ui' | 'mcp' | 'agent' | 'api'; jobId?: string; persist?: boolean; state?: ProjectState }): Promise<CodeRunResult> {
+    const state = by.state ?? (await this.services.projects.state(projectId));
+    const node = <T extends 'codeWorkspace' | 'cell' | 'codeFile'>(id: string, type: T, what: string) => {
+      try {
+        return requireNodeOfType(state, id, type);
+      } catch {
+        throw new ProjectError(`No ${what} with id ${id} in this project. List the workspace's files and notebooks with get_project.`, 404);
+      }
+    };
+    const ws = node(target.workspaceId, 'codeWorkspace', 'code workspace');
     const runId = `run_${Date.now().toString(36)}_${++runSeq}`;
     let code: string;
     let language: SandboxLanguage;
     let filename: string | undefined;
     let cell: SceneNode<'cell'> | undefined;
     if (target.cellId) {
-      cell = requireNodeOfType(state, target.cellId, 'cell');
+      cell = node(target.cellId, 'cell', 'notebook cell');
       if (closest(state, cell.id, 'codeWorkspace')?.id !== ws.id) throw new ProjectError('That cell is not in this workspace', 400);
       if (cell.props.cellType === 'markdown') return { ok: true, outputs: [], ms: 0, runId };
       code = cell.props.source;
       language = cell.props.language;
     } else if (target.fileId) {
-      const file = requireNodeOfType(state, target.fileId, 'codeFile');
+      const file = node(target.fileId, 'codeFile', 'code file');
       const lang = languageOfFile(file.props.path);
       if (!lang) throw new ProjectError(`${file.props.path} is not a runnable Python, JavaScript or TypeScript file`, 400);
       code = file.props.content;

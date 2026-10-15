@@ -164,7 +164,7 @@ function layerMask(env: Env, p: LayerProps): Mask | null {
 function applyAdjustmentLayer(env: Env, acc: CanvasLike, p: LayerProps): void {
   if (!p.adjustment) return;
   const before = readRaster(acc);
-  const after = applyAdjustment(before, p.adjustment, env.host.lut);
+  const after = applyAdjustment(before, p.adjustment, env.host.lut ? (id) => env.host.lut!(id) : undefined);
   writeRaster(acc, mixByMask(before, after, layerMask(env, p), Math.min(1, Math.max(0, p.opacity))));
 }
 

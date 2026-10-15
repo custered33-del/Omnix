@@ -112,7 +112,7 @@ async function labelOf(services: Services, target: BatchTarget): Promise<string>
 /** Check a batch request: the operation exists, the parameters fit, and every target suits it and is reachable. */
 export async function prepareBatch(services: Services, user: User, req: { operation: string; params: unknown; targets: BatchTarget[] }): Promise<{ op: BatchOperation; params: Record<string, unknown> }> {
   const op = batchOperations(services).find((o) => o.id === req.operation);
-  if (!op) throw new ProjectError(`Unknown batch operation "${req.operation}". See /api/batch/operations.`, 400);
+  if (!op) throw new ProjectError(`Unknown batch operation "${req.operation}". Call list_batch_operations for the ones available.`, 400);
   const parsed = z.object(op.params).safeParse(req.params ?? {});
   if (!parsed.success) throw new ProjectError(`Check the settings: ${parsed.error.issues.map((i) => `${i.path.join('.') || 'value'}: ${i.message}`).join('; ')}`, 400);
   if (!req.targets.length) throw new ProjectError('Pick at least one file or document.', 400);

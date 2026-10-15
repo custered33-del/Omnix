@@ -235,7 +235,7 @@ export async function styleMatch(
   input: { targetId: string; reference: StyleReference; aspects: StyleAspect[]; strength: number; projectId: string; ownerId: string },
 ): Promise<StyleMatchResult> {
   const target = state.nodes[input.targetId];
-  if (!target) throw new Error('Target not found.');
+  if (!target) throw new Error(`No item with id "${input.targetId}" in this project to restyle. Pass a canvas, layer, clip, sequence, slide, deck or document id from get_project.`);
   const ref = input.reference;
   const aspects = new Set(input.aspects.length ? input.aspects : STYLE_ASPECTS);
   const strength = Math.max(0, Math.min(1, input.strength));

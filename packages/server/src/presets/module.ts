@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import express from 'express';
-import { applyPresetOps, BUILTIN_PRESETS, newId, parsePresetData, PRESET_KINDS, PRESET_TARGETS, presetFromNode, type Author, type Preset, type PresetKind } from '@omnix/core';
+import { applyPresetOps, BUILTIN_PRESETS, newId, parsePresetData, PRESET_KINDS, PRESET_TARGETS, presetFromNode, type Author, type Preset, type PresetKind, type ProjectState } from '@omnix/core';
 import type { Services } from '../services.js';
 import { useModule } from '../app.js';
 import { h, requireUser } from '../http/middleware.js';
@@ -62,9 +62,10 @@ export class PresetService {
     return p;
   }
 
-  async saveFromNode(user: { id: string; name: string }, projectId: string, nodeId: string, input: { name: string; description?: string; shared?: boolean }): Promise<StoredPreset> {
+  /** Save a node's look as a preset. `state` is the project as the caller sees it (with its own proposed changes). */
+  async saveFromNode(user: { id: string; name: string }, projectId: string, nodeId: string, input: { name: string; description?: string; shared?: boolean }, inState?: ProjectState): Promise<StoredPreset> {
     await this.services.projects.requireAccess(projectId, user.id, 'read');
-    const state = await this.services.projects.state(projectId);
+    const state = inState ?? (await this.services.projects.state(projectId));
     let captured;
     try {
       captured = presetFromNode(state, nodeId);
@@ -147,7 +148,7 @@ function presetTools(services: Services): ToolDef[] {
         if (ctx.principal.mode === 'view') throw new ToolError('This connection is view-only.');
         await ctx.requireProject(args.projectId, 'read');
         try {
-          const p = await presets.saveFromNode({ id: ctx.principal.user.id, name: ctx.principal.author.name }, args.projectId, args.nodeId, { name: args.name, ...(args.description ? { description: args.description } : {}), ...(args.shared !== undefined ? { shared: args.shared } : {}) });
+          const p = await presets.saveFromNode({ id: ctx.principal.user.id, name: ctx.principal.author.name }, args.projectId, args.nodeId, { name: args.name, ...(args.description ? { description: args.description } : {}), ...(args.shared !== undefined ? { shared: args.shared } : {}) }, await ctx.state(args.projectId));
           return { text: `Saved ${p.kind} preset "${p.name}" (${p.id}).`, data: { presetId: p.id, kind: p.kind } };
         } catch (e) {
           throw new ToolError(e instanceof Error ? e.message : String(e));

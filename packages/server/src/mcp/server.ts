@@ -45,6 +45,8 @@ export async function runTool(tool: ToolDef, rawArgs: unknown, ctx: ToolContext)
     return { ok: false, result: null, error };
   }
   try {
+    // Every tool that changes something (or adds files) is closed to view-only connections.
+    if (tool.access === 'write' && ctx.principal.mode === 'view') throw new ToolError('This connection is view-only. Ask the user to switch Claude to "edit with approval" or "autonomous" in Omnix to make changes.');
     const result = await tool.handler(parsed.data as never, ctx);
     await ctx.services.activity.record({
       projectId,

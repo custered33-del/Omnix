@@ -68,7 +68,7 @@ export const projectReadTools = [
       await ctx.requireProject(args.projectId, 'read');
       const state = await ctx.state(args.projectId);
       const n = state.nodes[args.nodeId];
-      if (!n) throw new ToolError(`No node ${args.nodeId} in this project`);
+      if (!n) throw new ToolError(`No node with id "${args.nodeId}" in this project. Call get_project to see its documents and their ids.`);
       const data = { id: n.id, type: n.type, parentId: n.parentId, children: n.children, props: compactProps(n.props as unknown as Record<string, unknown>) };
       return { text: `${n.type} ${n.id}`, data };
     },
@@ -81,7 +81,7 @@ export const projectReadTools = [
     category: 'project',
     access: 'read',
     input: { projectId: zProjectId, limit: z.number().int().min(1).max(200).optional() },
-    output: z.object({ head: z.string().nullable(), commits: z.array(z.object({ id: z.string(), label: z.string(), author: z.string(), authorType: z.string(), timestamp: z.string() })), versions: z.array(z.object({ id: z.string(), name: z.string(), commitId: z.string().nullable(), createdAt: z.string(), author: z.string() })) }),
+    output: z.object({ head: z.string().nullable(), commits: z.array(z.object({ id: z.string(), label: z.string(), author: z.string(), authorType: z.string(), timestamp: z.string(), approvedBy: z.string().optional().describe('Who approved it, for a proposed change') })), versions: z.array(z.object({ id: z.string(), name: z.string(), commitId: z.string().nullable(), createdAt: z.string(), author: z.string() })) }),
     example: { input: { projectId: 'prj_8Kq2...', limit: 5 } },
     async handler(args, ctx) {
       await ctx.requireProject(args.projectId, 'read');
@@ -226,7 +226,7 @@ export const projectWriteTools = [
     name: 'update_node',
     title: 'Change properties of anything',
     description:
-      'Set (or unset) properties on any node: a layer, clip, track, sequence, canvas, block, slide, slide element, code file or cell. Use get_node to see current properties. Values are validated against the node type; for example a layer accepts opacity 0..1, blendMode, x, y, rotation; a clip accepts start, in, out, x, y, scale, opacity, volume. Prefer the tool-specific tools when one fits.',
+      'Set (or unset) properties on any node: a layer, clip, track, sequence, canvas, block, slide, slide element, code file or cell. Use get_node to see current properties. Values are validated against the node type; for example a layer accepts opacity 0..1, blendMode, x, y, rotation; a clip accepts start, in, out, x, y, scale, opacity, volume. Rotation is in degrees, clockwise, everywhere except animation rig bones (radians, see anim_rig). Prefer the tool-specific tools when one fits.',
     category: 'project',
     access: 'write',
     input: {
@@ -260,7 +260,8 @@ export const projectWriteTools = [
     async handler(args, ctx) {
       const out = await edit(ctx, args.projectId, (state) => `Move ${describeNode(state, args.nodeId)}`, (state) => {
         const n = state.nodes[args.nodeId];
-        if (!n?.parentId) throw new ToolError(`No movable node "${args.nodeId}".`);
+        if (!n) throw new ToolError(`No node with id "${args.nodeId}" in this project. Call get_project (or get_node) to find the right id.`);
+        if (!n.parentId) throw new ToolError('The project itself cannot be moved; pass the id of something inside it.');
         return [{ kind: 'move', id: n.id, parentId: args.parentId ?? n.parentId, index: args.index }];
       });
       return writeResult(out);
@@ -281,7 +282,8 @@ export const projectWriteTools = [
       let count = 0;
       const out = await edit(ctx, args.projectId, (state) => `Delete ${describeNode(state, args.nodeId)}`, (state) => {
         const n = state.nodes[args.nodeId];
-        if (!n || !n.parentId) throw new ToolError(`No deletable node "${args.nodeId}".`);
+        if (!n) throw new ToolError(`No node with id "${args.nodeId}" in this project. Call get_project (or get_node) to find the right id.`);
+        if (!n.parentId) throw new ToolError('The project itself cannot be deleted from here; pass the id of something inside it.');
         if (n.type === 'notes' || n.type === 'comments') throw new ToolError('Session memory and comment containers cannot be deleted.');
         count = subtreeIds(state, n.id).length;
         return [{ kind: 'delete', id: n.id }];
@@ -310,7 +312,7 @@ export const projectWriteTools = [
   defineTool({
     name: 'undo',
     title: 'Undo your last change',
-    description: 'Undo the most recent change you (this connection) made in a project. People\'s changes are never undone by this tool.',
+    description: 'Undo the most recent change you (this connection) made in a project. People\'s changes are never undone by this tool. In edit-with-approval mode this takes back the last change in your open proposal; when nothing of yours is waiting for review, the reversal of your last applied change is proposed for the user to approve.',
     category: 'project',
     access: 'write',
     input: { projectId: zProjectId },
@@ -319,8 +321,20 @@ export const projectWriteTools = [
     async handler(args, ctx) {
       if (ctx.principal.mode === 'view') throw new ToolError('This connection is view-only.');
       await ctx.requireProject(args.projectId, 'write');
+      if (ctx.principal.mode === 'approve') {
+        // Changes waiting for review are taken back from the proposal; nothing is committed.
+        const removed = await ctx.services.projects.undoProposed(args.projectId, ctx.principal.author, ctx.jobId);
+        if (removed) return { text: `Took back "${removed}" from your proposal; it was never applied.`, data: { undone: removed } };
+        const session = await ctx.services.projects.session(args.projectId);
+        const target = session.undoTarget(ctx.principal.author.id);
+        if (!target) return { text: 'Nothing of yours to undo in this project.', data: { undone: null } };
+        const out = await ctx.apply(args.projectId, [target.inverse], `Undo: ${target.label}`);
+        return { text: out.status === 'proposed' ? `Proposed undoing "${target.label}"; it waits for the user's approval.` : `Undid: ${target.label}`, data: { undone: target.label } };
+      }
+      const target = (await ctx.services.projects.session(args.projectId)).undoTarget(ctx.principal.author.id);
       const c = await ctx.services.projects.undo(args.projectId, ctx.principal.author, ctx.via);
-      return { text: c ? `Undid: ${c.label}` : 'Nothing of yours to undo in this project.', data: { undone: c?.label ?? null } };
+      const label = target?.label ?? c?.label ?? null;
+      return { text: c ? `Undid: ${label}` : 'Nothing of yours to undo in this project.', data: { undone: c ? label : null } };
     },
   }),
 
@@ -334,6 +348,7 @@ export const projectWriteTools = [
     output: z.object({ sealed: z.string().nullable() }),
     example: { input: { projectId: 'prj_8Kq2...' }, output: { sealed: 'prop_1x...' } },
     async handler(args, ctx) {
+      if (ctx.principal.mode === 'view') throw new ToolError('This connection is view-only, so it makes no proposals.');
       await ctx.requireProject(args.projectId, 'write');
       const session = await ctx.services.projects.session(args.projectId);
       const open = session.listProposals('open').filter((p) => p.author.id === ctx.principal.author.id && !p.sealed);

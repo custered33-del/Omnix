@@ -4,7 +4,7 @@ import { ToolError, outcomeText, type ApplyOutcome, type ToolContext, type ToolR
 
 /** Result of every write tool: committed (autonomous) or proposed (edit with approval). */
 export const zWriteResult = z.object({
-  status: z.enum(['committed', 'proposed']),
+  status: z.enum(['committed', 'proposed', 'none']).describe('committed: applied; proposed: waiting for the user\'s review; none: nothing needed changing'),
   commitId: z.string().optional(),
   proposalId: z.string().optional(),
   changes: z.number().optional().describe('How many changes the proposal now holds'),

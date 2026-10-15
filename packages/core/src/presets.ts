@@ -111,7 +111,7 @@ export function presetKindFor(node: SceneNode): PresetKind | null {
 /** Capture a node's reusable part as preset data. */
 export function presetFromNode(state: ProjectState, nodeId: string): { kind: PresetKind; data: PresetDataMap[PresetKind] } {
   const n = state.nodes[nodeId];
-  if (!n) throw new Error('Nothing to save: that item no longer exists.');
+  if (!n) throw new Error(`Nothing to save: there is no item with id "${nodeId}" in this project.`);
   const kind = presetKindFor(n);
   if (!kind) throw new Error(`A ${n.type} cannot be saved as a preset. Save a layer's filters, a clip's effects, an animation rig, a document's styles or a slideshow's theme.`);
   const p = n.props as unknown as Record<string, unknown>;
@@ -149,7 +149,7 @@ function freshIds<T extends object>(items: T[], prefix: string): (T & { id: stri
  */
 export function applyPresetOps(state: ProjectState, preset: Pick<Preset, 'kind' | 'data' | 'name'>, targetId: string): Operation[] {
   const target = state.nodes[targetId];
-  if (!target) throw new Error('The target no longer exists.');
+  if (!target) throw new Error(`There is no item with id "${targetId}" in this project to apply the preset to.`);
   if (!PRESET_TARGETS[preset.kind].includes(target.type)) throw new Error(`A ${preset.kind} preset does not apply to a ${target.type}. It applies to: ${PRESET_TARGETS[preset.kind].join(', ')}.`);
   const kids = (id: string) => state.nodes[id]?.children.map((c) => state.nodes[c]!).filter(Boolean) ?? [];
   switch (preset.kind) {

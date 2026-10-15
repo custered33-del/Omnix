@@ -127,7 +127,7 @@ export const assetWriteTools = [
   defineTool({
     name: 'import_asset',
     title: 'Import a file from a URL',
-    description: 'Download an image, video, audio file, font or LUT from a public URL (or a data: URL) into the asset library, optionally attached to a project, so it can be placed in canvases, timelines, documents and slides. Identical files are stored once.',
+    description: 'Download an image, video, audio file, font or LUT from a public URL (or a data: URL) into the asset library, optionally attached to a project, so it can be placed in canvases, timelines, documents and slides. Identical files are stored once: importing a file that is already in the library returns that asset, under its existing name (rename it with tag_asset).',
     category: 'assets',
     access: 'write',
     input: { url: z.string().url(), name: z.string().max(200).optional(), projectId: z.string().optional(), tags: z.array(z.string().max(40)).max(20).optional() },
@@ -138,7 +138,8 @@ export const assetWriteTools = [
       if (args.projectId) await ctx.requireProject(args.projectId, 'write');
       const a = await importFromUrl(ctx.services, args.url, { ownerId: ctx.principal.user.id, ...(args.name ? { name: args.name } : {}), ...(args.projectId ? { projectId: args.projectId } : {}), tags: args.tags ?? [], source: { kind: 'url', url: args.url, tool: 'mcp' } });
       const s = assetSummary(a, ctx.services.config.publicUrl);
-      return { text: `Imported ${a.name} (${a.kind}${a.width ? ` ${a.width}x${a.height}` : ''}${a.duration ? ` ${a.duration.toFixed(1)}s` : ''}) as ${a.id}.`, data: s };
+      const already = args.name && a.name !== args.name ? ` This file was already in the library as "${a.name}"; rename it with tag_asset if you want "${args.name}".` : '';
+      return { text: `Imported ${a.name} (${a.kind}${a.width ? ` ${a.width}x${a.height}` : ''}${a.duration ? ` ${a.duration.toFixed(1)}s` : ''}) as ${a.id}.${already}`, data: s };
     },
   }),
   defineTool({

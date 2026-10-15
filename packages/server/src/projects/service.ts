@@ -420,6 +420,22 @@ export class ProjectService extends EventEmitter {
     return c;
   }
 
+  /**
+   * Undo for an author whose changes go through review: take back the last change in their open
+   * proposal. Returns what was taken back, or null when nothing of theirs is waiting for review.
+   */
+  async undoProposed(projectId: string, author: Author, jobId?: string): Promise<string | null> {
+    const session = await this.session(projectId);
+    const p = session
+      .listProposals('open')
+      .filter((x) => x.author.id === author.id && (jobId === undefined || (x.jobId ?? null) === jobId))
+      .sort((a, b) => (b.updatedAt ?? b.createdAt).localeCompare(a.updatedAt ?? a.createdAt))[0];
+    if (!p) return null;
+    const { removed } = session.dropLastProposalStep(p.id, author);
+    await this.flush(projectId);
+    return removed;
+  }
+
   async redo(projectId: string, author: Author, via: Via = 'ui'): Promise<Commit | null> {
     const { session, meta } = await this.guard(projectId, author);
     const c = session.redo(author);

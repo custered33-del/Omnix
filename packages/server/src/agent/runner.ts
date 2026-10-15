@@ -96,7 +96,7 @@ export interface AgentRunData extends Record<string, unknown> {
   connectionId: string | null;
   summary: string | null;
   startHead: string | null;
-  /** Internal runs: the decision to apply when the job resumes. External runs: the answer not yet read by the driver. */
+  /** Internal runs: the decision to apply when the job resumes. External runs: the answer to the last gate, until the next gate opens. */
   resume?: { decision: 'approve' | 'changes'; feedback?: string } | null;
   /** External runs: the gated tool call waiting for approval, and the one approved to go ahead. */
   gatedCall?: string | null;
@@ -271,6 +271,8 @@ export class AgentService {
     const data = job.data as AgentRunData;
     const gate: PendingGate = { id: `gate_${data.decisions.length + 1}_${Date.now().toString(36)}`, kind, title, summary: summary.slice(0, 4000), at: new Date().toISOString(), ...(tool ? { tool } : {}) };
     data.pendingGate = gate;
+    // An external driver's last answer stays readable until the next question replaces it.
+    if (data.driver === 'external') data.resume = null;
     this.log(job, { kind: 'gate', text: `${title}${summary ? `: ${summary.split('\n')[0]!.slice(0, 200)}` : ''}` });
     await this.save(job, { status: 'awaiting_approval', message: `Waiting for approval: ${title}` });
     await this.services.activity.record({ projectId: job.projectId, projectName: (await this.services.projects.getMeta(job.projectId!).catch(() => null))?.name ?? null, actor: AGENT_AUTHOR, kind: 'job', summary: `Paused for approval: ${title}`, via: 'agent', jobId: job.id });
@@ -377,13 +379,16 @@ export class AgentService {
   }
 
   /** Consume the latest decision for an external run (returned once to the driver). */
-  takeDecision(job: JobRecord<AgentInput> & { data: AgentRunData }): AgentRunData['resume'] {
-    const r = job.data.resume ?? null;
-    if (r) {
-      job.data.resume = null;
-      void this.save(job);
-    }
-    return r;
+  /** The user's answer to the run's last approval gate (null while waiting, or before any). Reading it does not use it up. */
+  lastDecision(job: JobRecord<AgentInput> & { data: AgentRunData }): AgentRunData['resume'] {
+    return job.status === 'awaiting_approval' ? null : (job.data.resume ?? null);
+  }
+
+  /** A run this person may look at: their own. */
+  requireOwn(principal: Principal, runId: string): JobRecord<AgentInput> & { data: AgentRunData } {
+    const job = this.get(runId);
+    if (job.ownerId !== principal.user.id) throw new AgentError(`No agent run ${runId}`, 404);
+    return job;
   }
 
   requireExternal(principal: Principal, runId: string): JobRecord<AgentInput> & { data: AgentRunData } {

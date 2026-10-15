@@ -55,7 +55,7 @@ export const timelineTools = [
     name: 'video_add_clip',
     title: 'Put media on the timeline',
     description:
-      'Place a video, audio or image asset on a track. Without trackId the first track of the right kind is used (one is created if needed). Without start the clip goes after the last clip on that track. in/out pick the part of the source to use (seconds); for a still image, out is how long it shows (default 5 s). The sequence grows to fit.',
+      'Place a video, audio or image asset on a track of this sequence (video and images on a video track, audio on an audio track). Without trackId the first track of the right kind is used (one is created if needed). Without start the clip goes after the last clip on that track. in/out pick the part of the source to use, in seconds, so the clip lasts out − in; a still image lasts 5 s unless you pass out (with in 0, out is its length). The sequence grows to fit.',
     category: 'video',
     access: 'write',
     input: {
@@ -82,6 +82,10 @@ export const timelineTools = [
         const ops: Operation[] = [];
         const kind: TrackType = a.kind === 'audio' ? 'audio' : 'video';
         let track = args.trackId ? need(state, args.trackId, 'track', 'track') : tracksOf(state, seq.id).find((t) => t.props.trackType === kind);
+        if (args.trackId && track) {
+          if (track.parentId !== seq.id) throw new ToolError(`Track ${args.trackId} is in another sequence. Pass one of this sequence's tracks (${tracksOf(state, seq.id).map((t) => `${t.props.name}: ${t.id}`).join(', ') || 'it has none yet'}), or leave trackId out.`);
+          if (track.props.trackType !== kind) throw new ToolError(`"${track.props.name}" is ${track.props.trackType === 'audio' ? 'an audio' : `a ${track.props.trackType}`} track, but ${a.name} needs ${kind === 'audio' ? 'an audio' : 'a video'} track. Leave trackId out to use the first ${kind} track.`);
+        }
         if (!track) {
           track = makeNode('track', { name: `${TRACK_NAMES[kind]} 1`, trackType: kind });
           ops.push({ kind: 'create', parentId: seq.id, ...(kind === 'audio' ? {} : { index: 0 }), nodes: [track] });
@@ -235,7 +239,7 @@ export const timelineTools = [
     name: 'video_set_keyframe',
     title: 'Animate a property',
     description:
-      'Set a keyframe on a clip or animation layer: property x, y, scale, rotation, opacity, volume (dB, audio) or blur at a time relative to the clip or layer start. Between keyframes values move with the easing of the earlier keyframe. Pass remove: true to delete the keyframe at that time.',
+      'Set a keyframe on a clip or animation layer: property x, y, scale, rotation (degrees, clockwise), opacity, volume (dB, audio) or blur at a time relative to the clip or layer start. Between keyframes values move with the easing of the earlier keyframe. Pass remove: true to delete the keyframe at that time.',
     category: 'video',
     access: 'write',
     input: { projectId: zProjectId, nodeId: z.string().describe('Clip or animation layer'), property: zKeyProp, time: z.number().min(0), value: z.number().optional(), easing: zEasing.default('ease-in-out'), remove: z.boolean().default(false) },
@@ -382,7 +386,7 @@ export const timelineTools = [
       const provider = ctx.services.ext.speechProvider as SpeechProvider | undefined;
       if (!provider) throw new ToolError('Captions are not available on this server.');
       const { segments, hasText } = await captionSegments(ctx.services, state, { projectId: args.projectId, sequenceId: args.sequenceId, ...(args.clipIds ? { clipIds: args.clipIds } : {}), ...(args.language ? { language: args.language } : {}) }, provider, () => {});
-      if (!segments.length) return { text: 'No speech found in the sequence.', data: { status: 'committed', captions: 0, transcribed: hasText } };
+      if (!segments.length) return { text: 'No speech found in the sequence, so nothing was added.', data: { status: 'none', captions: 0, transcribed: hasText } };
       const out = await ctx.apply(args.projectId, captionClipOps(state, args.sequenceId, segments), hasText ? `Generate ${segments.length} captions` : `Add ${segments.length} caption slots`);
       return writeResult(out, { captions: segments.length, transcribed: hasText });
     },

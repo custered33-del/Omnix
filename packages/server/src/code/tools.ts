@@ -129,7 +129,9 @@ export function codeTools(code: CodeService): ToolDef[] {
         await ctx.requireProject(args.projectId, 'write');
         if (!args.fileId && !args.cellId && args.source === undefined) throw new ToolError('Pass fileId, cellId or source.');
         const persist = ctx.principal.mode === 'autonomous';
-        const r = await code.run(args.projectId, { workspaceId: args.workspaceId, ...(args.fileId ? { fileId: args.fileId } : {}), ...(args.cellId ? { cellId: args.cellId } : {}), ...(args.source !== undefined ? { source: args.source } : {}), ...(args.language ? { language: args.language } : {}) }, { userId: ctx.principal.user.id, author: ctx.principal.author, via: ctx.via === 'agent' ? 'agent' : 'mcp', ...(ctx.jobId ? { jobId: ctx.jobId } : {}), persist });
+        // Runs the code as this connection sees it, including changes it has proposed.
+        const state = await ctx.state(args.projectId);
+        const r = await code.run(args.projectId, { workspaceId: args.workspaceId, ...(args.fileId ? { fileId: args.fileId } : {}), ...(args.cellId ? { cellId: args.cellId } : {}), ...(args.source !== undefined ? { source: args.source } : {}), ...(args.language ? { language: args.language } : {}) }, { userId: ctx.principal.user.id, author: ctx.principal.author, via: ctx.via === 'agent' ? 'agent' : 'mcp', ...(ctx.jobId ? { jobId: ctx.jobId } : {}), persist, state });
         const saved = persist && !!r.commitId;
         return { text: `${r.ok ? 'Ran' : 'Failed'} in ${r.ms} ms${saved ? ' (outputs saved to the notebook)' : ''}.\n${summarize(r.outputs) || '(no output)'}`, data: { ok: r.ok, ms: r.ms, outputs: r.outputs as unknown as Record<string, unknown>[], saved } };
       },

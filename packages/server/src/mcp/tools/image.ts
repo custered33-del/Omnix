@@ -1,5 +1,4 @@
 import { z } from 'zod';
-import sharp from 'sharp';
 import { childrenOf, closest, layerProps, makeNode, newId, zAdjustment, zColor, zFilterKind, zSelection, zVectorShape, type LayerProps, type Operation, type ProjectState, type SceneNode, type Selection } from '@omnix/core';
 import { contentAwareFill, createMask, crop, magicWand, maskBounds, objectSelect, removeBackground, type Raster } from '@omnix/imaging';
 import { defineTool, ToolError, zProjectId, type ToolContext } from '../registry.js';
@@ -53,7 +52,7 @@ export const imageTools = [
     name: 'image_add_layer',
     title: 'Add a layer',
     description:
-      'Add a layer to a canvas: raster (an image asset), text, shape (vector shapes), fill (solid color) or group. New layers go on top unless you pass index (0 = bottom). Coordinates are canvas pixels from the top-left.',
+      'Add a layer to a canvas: raster (an image asset, or without assetId an empty pixel layer to paint on with image_paint), text, shape (vector shapes), fill (solid color) or group. New layers go on top unless you pass index (0 = bottom). Coordinates are canvas pixels from the top-left. Giving only width or only height keeps the image\'s proportions.',
     category: 'image',
     access: 'write',
     input: {
@@ -63,7 +62,7 @@ export const imageTools = [
       name: z.string().max(200).optional(),
       parentId: z.string().optional().describe('A group layer to put it in (default: the canvas)'),
       index: z.number().int().min(0).optional(),
-      assetId: z.string().optional().describe('raster: the image asset to place'),
+      assetId: z.string().optional().describe('raster: the image asset to place (leave out for an empty layer to paint on)'),
       x: z.number().optional(),
       y: z.number().optional(),
       width: z.number().positive().optional().describe('raster: displayed width (default: the image size)'),
@@ -86,11 +85,7 @@ export const imageTools = [
       let layerId = '';
       const out = await edit(ctx, args.projectId, `Add ${args.kind} layer${args.name ? ` "${args.name}"` : ''}`, async (state) => {
         const canvas = need(state, args.canvasId, 'canvas', 'canvas');
-        const parentId = args.parentId ?? canvas.id;
-        if (parentId !== canvas.id) {
-          const g = need(state, parentId, 'layer', 'group layer');
-          if (g.props.layerType !== 'group') throw new ToolError(`${parentId} is not a group layer.`);
-        }
+        const parentId = layerParent(state, canvas.id, args.parentId);
         const common: Partial<LayerProps> = {
           ...(args.name ? { name: args.name } : {}),
           ...(args.x !== undefined ? { x: args.x } : {}),
@@ -101,11 +96,17 @@ export const imageTools = [
         let props: Partial<LayerProps>;
         switch (args.kind) {
           case 'raster': {
-            if (!args.assetId) throw new ToolError('A raster layer needs assetId (an image in the asset library).');
+            if (!args.assetId) {
+              // An empty pixel layer the size of the canvas, for painting.
+              props = layerProps('raster', { name: 'Paint', ...common, width: canvas.props.width, height: canvas.props.height, strokes: [] });
+              break;
+            }
             const a = await ctx.services.assets.get(args.assetId);
-            if (!a || a.kind !== 'image') throw new ToolError(`Asset ${args.assetId} is not an image.`);
-            const w = args.width ?? a.width ?? canvas.props.width;
-            const h = args.height ?? (args.width && a.width && a.height ? (args.width * a.height) / a.width : (a.height ?? canvas.props.height));
+            if (!a || a.kind !== 'image') throw new ToolError(`Asset ${args.assetId} is not an image. Find images with list_assets (kind "image").`);
+            // One side given: the other follows the image's proportions.
+            const ratio = a.width && a.height ? a.width / a.height : null;
+            const w = args.width ?? (args.height && ratio ? args.height * ratio : (a.width ?? canvas.props.width));
+            const h = args.height ?? (args.width && ratio ? args.width / ratio : (a.height ?? canvas.props.height));
             props = layerProps('raster', { name: a.name.replace(/\.[^.]+$/, ''), ...common, assetId: a.id, width: Math.round(w), height: Math.round(h) });
             break;
           }
@@ -144,7 +145,7 @@ export const imageTools = [
       let layerId = '';
       const out = await edit(ctx, args.projectId, `Add ${args.adjustment.kind} adjustment`, (state) => {
         const canvas = need(state, args.canvasId, 'canvas', 'canvas');
-        const parentId = args.parentId ?? canvas.id;
+        const parentId = layerParent(state, canvas.id, args.parentId);
         const node = makeNode('layer', layerProps('adjustment', { name: args.name ?? args.adjustment.kind, adjustment: args.adjustment }));
         layerId = node.id;
         return [{ kind: 'create', parentId, index: insertAt(state, parentId, args.index), nodes: [node] }];
@@ -343,7 +344,7 @@ export const imageTools = [
     async handler(args, ctx) {
       const out = await edit(ctx, args.projectId, `Paint ${args.strokes.length} stroke${args.strokes.length === 1 ? '' : 's'}`, (state) => {
         const l = need(state, args.layerId, 'layer', 'layer');
-        if (l.props.layerType !== 'raster') throw new ToolError('Paint on a pixel (raster) layer; add one with image_add_layer kind "raster" or use a new empty layer.');
+        if (l.props.layerType !== 'raster') throw new ToolError(`"${l.props.name}" is a ${l.props.layerType} layer. Paint on a pixel layer: add an empty one with image_add_layer kind "raster" and no assetId.`);
         return [{ kind: 'listInsert', id: l.id, prop: 'strokes', items: args.strokes.map((s) => ({ id: newId('stk'), tool: s.tool, color: s.color, size: s.size, hardness: s.hardness, opacity: s.opacity, tip: 'round', spacing: 0.15, points: s.points })) }];
       });
       return writeResult(out);
@@ -375,6 +376,15 @@ export const imageTools = [
   }),
 ];
 
+/** Where a new layer goes: the canvas itself, or a group layer inside it. */
+function layerParent(state: ProjectState, canvasId: string, parentId: string | undefined): string {
+  if (!parentId || parentId === canvasId) return canvasId;
+  const g = need(state, parentId, 'layer', 'group layer');
+  if (g.props.layerType !== 'group') throw new ToolError(`${parentId} is a ${g.props.layerType} layer, not a group. Leave parentId out to add to the canvas, or pass a group layer's id.`);
+  if (closest(state, g.id, 'canvas')?.id !== canvasId) throw new ToolError(`Group ${parentId} is on another canvas.`);
+  return parentId;
+}
+
 /**
  * Operations that resize a canvas and move every layer (and its mask) by (dx, dy), so content keeps its
  * place relative to the anchor. Shared by the resize tool and generative extend.
@@ -387,12 +397,14 @@ export async function canvasResizeOps(services: ToolContext['services'], state: 
     if (sel.kind === 'rect' || sel.kind === 'ellipse') return { ...sel, x: sel.x + dx, y: sel.y + dy };
     if (sel.kind === 'polygon') return { ...sel, points: sel.points.map((p) => ({ x: p.x + dx, y: p.y + dy })) };
     const m = await selectionToMask(services.renderHost(), sel, cp.width, cp.height);
-    const moved = await sharp(Buffer.from(m.data), { raw: { width: m.width, height: m.height, channels: 1 } })
-      .extend({ top: Math.max(0, dy), left: Math.max(0, dx), bottom: Math.max(0, height - m.height - dy), right: Math.max(0, width - m.width - dx), background: { r: 0, g: 0, b: 0, alpha: 1 } })
-      .extract({ left: Math.max(0, -dx), top: Math.max(0, -dy), width, height })
-      .raw()
-      .toBuffer();
-    const id = await uploadRaster(services, { width, height, data: new Uint8ClampedArray(moved) }, 'mask.png', projectId, ownerId, { asMask: true });
+    // Copy the mask into a canvas of the new size at (dx, dy); whatever falls outside is dropped.
+    const moved = new Uint8ClampedArray(width * height);
+    const x0 = Math.max(0, dx);
+    const x1 = Math.min(width, m.width + dx);
+    for (let y = Math.max(0, dy); y < Math.min(height, m.height + dy); y++) {
+      if (x1 > x0) moved.set(m.data.subarray((y - dy) * m.width + (x0 - dx), (y - dy) * m.width + (x1 - dx)), y * width + x0);
+    }
+    const id = await uploadRaster(services, { width, height, data: moved }, 'mask.png', projectId, ownerId, { asMask: true });
     return { kind: 'mask', assetId: id };
   };
   const visit = async (parentId: string) => {

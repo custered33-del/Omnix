@@ -7,7 +7,7 @@ import crypto from 'node:crypto';
 import { z } from 'zod';
 import type { ProjectState, SceneNode } from '@omnix/core';
 import { childrenOf, closest, requireNodeOfType } from '@omnix/core';
-import { renderCanvasDocument, renderSpriteSheet } from '@omnix/render';
+import { layerBounds, renderCanvasDocument, renderSingleLayer, renderSpriteSheet, type CanvasLike } from '@omnix/render';
 import { exportPsd, exportSvg, encodeGif, encodeApng, exportLottie, spriteAtlas, toSrt, toVtt, VIDEO_PRESETS, type CaptionCue } from '@omnix/exporters';
 import type { Raster } from '@omnix/imaging';
 import type { Services } from '../services.js';
@@ -59,18 +59,38 @@ export function registerExportHandler(services: Services, handler: ExportHandler
 
 const safe = (s: string) => s.replace(/[^\w\- ]+/g, '').trim().replace(/\s+/g, '-').slice(0, 60) || 'export';
 
-async function exportCanvas(services: Services, state: ProjectState, node: SceneNode<'canvas'>, req: ExportRequest): Promise<ExportOutput> {
+async function exportCanvas(services: Services, state: ProjectState, node: SceneNode<'canvas'>, req: ExportRequest, layer?: SceneNode<'layer'>): Promise<ExportOutput> {
   const host = services.renderHost();
   await host.prepare(state, node.id);
   const base = safe(node.props.name);
   const fmt = req.format as (typeof IMAGE_FORMATS)[number];
+  if (layer && fmt !== 'psd' && fmt !== 'svg') {
+    // One layer's own pixels (with its filters and mask), cropped to its content.
+    const scale = req.scale ?? 1;
+    const full = renderSingleLayer(host, state, layer.id, { scale });
+    const b = layerBounds(host, state, layer.id);
+    const x0 = Math.max(0, Math.floor(b.x * scale));
+    const y0 = Math.max(0, Math.floor(b.y * scale));
+    const w = Math.max(1, Math.min(full.width, Math.ceil((b.x + b.width) * scale)) - x0);
+    const h = Math.max(1, Math.min(full.height, Math.ceil((b.y + b.height) * scale)) - y0);
+    const out = host.createCanvas(w, h) as CanvasLike;
+    const ctx = out.getContext('2d')!;
+    if (fmt === 'jpeg') {
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, w, h);
+    }
+    ctx.drawImage(full as never, -x0, -y0);
+    const data = await encodeCanvas(out, fmt, { quality: req.quality ?? 90, colorProfile: req.colorProfile ?? node.props.colorProfile });
+    return { data, name: `${base}-${safe(layer.props.name)}.${fmt === 'jpeg' ? 'jpg' : fmt}`, mime: `image/${fmt}`, notes: fmt === 'jpeg' ? ['JPEG has no transparency; the layer is on white.'] : [] };
+  }
+  const layerNote = layer ? [`${fmt.toUpperCase()} exports the whole canvas "${node.props.name}"; use png, jpeg, webp or avif for one layer.`] : [];
   if (fmt === 'psd') {
     const r = exportPsd(host, state, node.id);
-    return { data: r.data, name: `${base}.psd`, mime: 'image/vnd.adobe.photoshop', notes: r.notes };
+    return { data: r.data, name: `${base}.psd`, mime: 'image/vnd.adobe.photoshop', notes: [...layerNote, ...r.notes] };
   }
   if (fmt === 'svg') {
     const svg = exportSvg(host, state, node.id, { encodePng: (c) => (c as unknown as { toBuffer(m: string): Buffer }).toBuffer('image/png').toString('base64') });
-    return { data: Buffer.from(svg), name: `${base}.svg`, mime: 'image/svg+xml', notes: [] };
+    return { data: Buffer.from(svg), name: `${base}.svg`, mime: 'image/svg+xml', notes: layerNote };
   }
   const canvas = renderCanvasDocument(host, state, node.id, { scale: req.scale ?? 1, transparent: req.transparent && fmt !== 'jpeg' });
   const data = await encodeCanvas(canvas, fmt, { quality: req.quality ?? 90, colorProfile: req.colorProfile ?? node.props.colorProfile });
@@ -208,7 +228,7 @@ export async function runExport(services: Services, projectId: string, req: Expo
     if (node.type === 'canvas' || node.type === 'layer') {
       const canvas = node.type === 'canvas' ? (node as SceneNode<'canvas'>) : closest(state, node.id, 'canvas')!;
       if (!(IMAGE_FORMATS as readonly string[]).includes(req.format)) throw new ProjectError(`Images export as ${IMAGE_FORMATS.join(', ')}`, 400);
-      output = await exportCanvas(services, state, canvas, req);
+      output = await exportCanvas(services, state, canvas, req, node.type === 'layer' ? (node as SceneNode<'layer'>) : undefined);
     } else if (node.type === 'sequence') {
       output = await exportSequence(services, state, node as SceneNode<'sequence'>, req, ctx);
     } else {
@@ -229,13 +249,14 @@ function exportTools(services: Services): ToolDef[] {
       name: 'export_file',
       title: 'Export a file',
       description:
-        'Export a canvas or layer (png, jpeg, webp, avif, svg, psd), a video or animation sequence (a preset id such as youtube-1080p or instagram-reel, or gif, apng, webm, mp4, lottie, spritesheet; srt or vtt for captions), a document (docx, pdf, md, html), a slideshow (pptx, pdf, pdf-notes, png) or a code workspace (zip, ipynb). Returns a download link that works for 24 hours, and the file is also saved in the asset library.',
+        'Export a canvas (png, jpeg, webp, avif, svg, psd) or one layer of it (png, jpeg, webp, avif: just that layer, cropped to its content), a video or animation sequence (a preset id such as youtube-1080p or instagram-reel, or gif, apng, webm, mp4, lottie, spritesheet; srt or vtt for captions), a document (docx, pdf, md, html), a slideshow (pptx, pdf, pdf-notes, png) or a code workspace (zip, ipynb). Returns a download link that works for 24 hours. The file is added to your asset library, so this needs a connection that can edit; the project itself is not changed.',
       category: 'export',
-      access: 'read',
+      access: 'write',
       input: { projectId: zProjectId, nodeId: z.string(), format: z.string().min(2).max(40), scale: z.number().min(0.05).max(4).optional(), quality: z.number().min(1).max(100).optional(), start: z.number().min(0).optional(), end: z.number().min(0).optional(), transparent: z.boolean().optional() },
       output: z.object({ name: z.string(), url: z.string(), expiresAt: z.string(), assetId: z.string(), size: z.number(), notes: z.array(z.string()) }),
       example: { input: { projectId: 'prj_8Kq2...', nodeId: 'dck_1', format: 'pptx' }, output: { name: 'Launch.pptx', url: 'https://omnix.example.com/api/files/9f2c...?exp=1760000000&sig=...', expiresAt: '2026-10-15T18:00:00.000Z', assetId: '9f2c...', size: 482113, notes: [] } },
       async handler(args, ctx) {
+        if (ctx.principal.mode === 'view') throw new ToolError('This connection is view-only, and exporting adds a file to the library. Ask the user to export, or to connect with edit access.');
         await ctx.requireProject(args.projectId, 'read');
         const { projectId, ...rest } = args;
         const request = ExportRequest.parse(rest);
