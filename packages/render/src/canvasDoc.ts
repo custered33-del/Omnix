@@ -89,13 +89,41 @@ function compositeLayer(env: Env, acc: CanvasLike, layer: SceneNode<'layer'>): v
     applyAdjustmentLayer(env, acc, p);
     return;
   }
-  const buf = cachedLayerBuffer(env, layer, p);
   const ctx = ctxOf(acc);
+  if (drawsDirectly(env, p)) {
+    ctx.save();
+    ctx.globalAlpha = Math.min(1, Math.max(0, p.opacity));
+    drawLayerContent(env, ctx, acc, layer, p);
+    ctx.restore();
+    return;
+  }
+  const buf = cachedLayerBuffer(env, layer, p);
   ctx.save();
   ctx.globalAlpha = Math.min(1, Math.max(0, p.opacity));
   ctx.globalCompositeOperation = (p.blendMode === 'normal' ? 'source-over' : p.blendMode) as GlobalCompositeOperation;
   ctx.drawImage(drawable(buf), 0, 0);
   ctx.restore();
+}
+
+/**
+ * Whether a layer can be drawn straight onto the layers beneath it instead of into its own
+ * full-size buffer first. That is only the same picture when nothing works on the layer as a
+ * whole (blend modes, filters, masks) and its opacity can't change how its own marks overlap.
+ */
+function drawsDirectly(env: Env, p: LayerProps): boolean {
+  if (p.blendMode !== 'normal' || p.mask?.enabled || (p.filters ?? []).some((f) => f.enabled)) return false;
+  switch (p.layerType) {
+    case 'fill':
+      return true;
+    case 'raster':
+      // One drawImage, so opacity applies exactly. The editor keeps painted rasters in its cache.
+      return !env.options.cache;
+    case 'vector':
+    case 'text':
+      return p.opacity >= 1;
+    default:
+      return false;
+  }
 }
 
 function cachedLayerBuffer(env: Env, layer: SceneNode<'layer'>, p: LayerProps): CanvasLike {
@@ -147,11 +175,9 @@ function applyLayerTransform(ctx: Ctx2D, p: LayerProps, scale: number): void {
   if (p.scaleX !== 1 || p.scaleY !== 1) ctx.scale(p.scaleX, p.scaleY);
 }
 
-/** Render one layer (content, smart filters, mask) into a full-size transparent buffer. */
-export function renderLayerBuffer(env: Env, layer: SceneNode<'layer'>, p: LayerProps = layer.props, skipMask = false): CanvasLike {
+/** Draw a layer's own content (no filters or mask) with an absolute transform onto `ctx`, the context of `target`. */
+function drawLayerContent(env: Env, ctx: Ctx2D, target: CanvasLike, layer: SceneNode<'layer'>, p: LayerProps): void {
   const { host, W, H, scale } = env;
-  const buf = host.createCanvas(W, H);
-  const ctx = ctxOf(buf);
   ctx.save();
   if (p.vectorMask && p.layerType !== 'fill') {
     applyLayerTransform(ctx, p, scale);
@@ -179,13 +205,21 @@ export function renderLayerBuffer(env: Env, layer: SceneNode<'layer'>, p: LayerP
     case 'group': {
       ctx.setTransform(1, 0, 0, 1, 0, 0);
       const kids = childrenOf(env.state, layer.id).filter((n): n is SceneNode<'layer'> => n.type === 'layer');
-      compositeLayers(env, buf, kids);
+      compositeLayers(env, target, kids);
       break;
     }
     case 'adjustment':
       break;
   }
   ctx.restore();
+}
+
+/** Render one layer (content, smart filters, mask) into a full-size transparent buffer. */
+export function renderLayerBuffer(env: Env, layer: SceneNode<'layer'>, p: LayerProps = layer.props, skipMask = false): CanvasLike {
+  const { host, W, H, scale } = env;
+  const buf = host.createCanvas(W, H);
+  const ctx = ctxOf(buf);
+  drawLayerContent(env, ctx, buf, layer, p);
 
   const filters = (p.filters ?? []).filter((f) => f.enabled);
   if (filters.length) {

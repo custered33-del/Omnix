@@ -20,7 +20,8 @@
     "test:watch": "vitest",
     "test:e2e": "playwright test",
     "catalog": "tsx scripts/generate-tool-catalog.ts",
-    "check": "pnpm typecheck && pnpm test"
+    "check": "pnpm typecheck && pnpm test",
+    "bench": "tsx scripts/bench.ts"
   },
   "devDependencies": {
     "@playwright/test": "1.56.1",

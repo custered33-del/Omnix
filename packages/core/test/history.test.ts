@@ -145,6 +145,25 @@ describe('branching', () => {
     expect(diffStates(s.stateAt(null), base).empty).toBe(true);
     expect(s.head).toBe(head);
   });
+
+  it('rebuilds any version across branches exactly as it was committed', () => {
+    const { s, canvasId } = session();
+    const seen = new Map<string | null, ReturnType<typeof s.stateAt>>([[null, s.state]]);
+    s.subscribe((e) => {
+      if (e.type === 'commit') seen.set(e.commit.id, e.state);
+    });
+    const a = addLayer(s, canvasId, 'A', seb);
+    for (let i = 0; i < 40; i++) s.commit({ kind: 'update', id: a, set: { opacity: i / 40, name: `A${i}` } }, { author: seb });
+    const fork = s.log()[20]!.id;
+    const b = addLayer(s, canvasId, 'B', claude);
+    s.commit({ kind: 'delete', id: a }, { author: seb });
+    s.checkout(fork);
+    for (let i = 0; i < 10; i++) s.commit({ kind: 'update', id: a, set: { x: i } }, { author: claude });
+    expect(s.state.nodes[b]).toBeUndefined();
+    for (const [id, state] of seen) expect(diffStates(s.stateAt(id), state).empty, `version ${id}`).toBe(true);
+    // Recently viewed versions come back without being rebuilt.
+    expect(s.stateAt(fork)).toBe(s.stateAt(fork));
+  });
 });
 
 describe('proposals', () => {

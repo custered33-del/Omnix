@@ -86,6 +86,16 @@ export interface SerializedSession {
   headState?: ProjectState;
 }
 
+const RECENT_STATES = 8;
+
+/**
+ * Apply a run of recorded operations in one go. A batch shares one working copy of the project,
+ * so replaying a thousand commits copies the node map once instead of a thousand times.
+ */
+function replay(state: ProjectState, ops: Operation[]): ProjectState {
+  return ops.length ? applyOp(state, { kind: 'batch', ops }).state : state;
+}
+
 /**
  * The live editing session for one project: current state, the commit tree,
  * proposals and snapshots. Every change goes through `commit`.
@@ -99,6 +109,8 @@ export class ProjectSession {
   private readonly snapshots: Snapshot[] = [];
   private seq = 0;
   private readonly listeners = new Set<(e: SessionEvent) => void>();
+  /** States of recently viewed versions (history thumbnails, comparisons). States are immutable, so these never go stale. */
+  private readonly recent = new Map<string, ProjectState>();
 
   constructor(private readonly baseState: ProjectState) {
     this._state = baseState;
@@ -282,11 +294,19 @@ export class ProjectSession {
   stateAt(commitId: string | null): ProjectState {
     if (commitId !== null && !this.commits.has(commitId)) throw new OpError(`Unknown commit: ${commitId}`);
     if (commitId === this._head) return this._state;
+    if (commitId === null) return this.baseState;
+    const cached = this.recent.get(commitId);
+    if (cached) {
+      // Most recently used goes last.
+      this.recent.delete(commitId);
+      this.recent.set(commitId, cached);
+      return cached;
+    }
     const { up, down } = this.pathBetween(this._head, commitId);
-    let s = this._state;
-    for (const c of up) s = applyOp(s, c.inverse).state;
-    for (const c of down) s = applyOp(s, c.op).state;
-    return s;
+    const state = replay(this._state, [...up.map((c) => c.inverse), ...down.map((c) => c.op)]);
+    this.recent.set(commitId, state);
+    if (this.recent.size > RECENT_STATES) this.recent.delete(this.recent.keys().next().value!);
+    return state;
   }
 
   /**
@@ -461,9 +481,7 @@ export class ProjectSession {
     if (data.headState) {
       s._state = data.headState;
     } else {
-      let st = data.baseState;
-      for (const c of s.log()) st = applyOp(st, c.op).state;
-      s._state = st;
+      s._state = replay(data.baseState, s.log().map((c) => c.op));
     }
     return s;
   }

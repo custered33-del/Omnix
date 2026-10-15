@@ -14,6 +14,7 @@ import {
 } from '@omnix/core';
 import {
   renderCanvasDocument,
+  renderSingleLayer,
   renderSequenceFrame,
   renderSlide,
   renderProjectThumbnail,
@@ -181,6 +182,37 @@ describe('image compositor', () => {
     state = commit(state, { kind: 'create', parentId: canvasId, nodes: [group, inner] });
     expect(px(renderCanvasDocument(host(), state, canvasId), 5, 5)[0]).toBe(64);
     expect(px(renderCanvasDocument(host(), state, canvasId, { hiddenLayers: new Set([group.id]) }), 5, 5)[0]).toBe(128);
+  });
+
+  it('draws simple layers directly with the same pixels as compositing each layer buffer', () => {
+    let { state, canvasId } = canvasProject(160, 120);
+    const shapes = [
+      { id: 'a', kind: 'rect' as const, x: 10, y: 10, width: 60, height: 40, fill: '#3366cc', stroke: '#000000', strokeWidth: 4, radius: 6 },
+      { id: 'b', kind: 'ellipse' as const, x: 40, y: 30, width: 50, height: 50, fill: '#cc3366', stroke: null, strokeWidth: 0 },
+    ];
+    const layers = [
+      makeNode('layer', layerProps('raster', { assetId: 'img1', x: 90, y: 5, rotation: 12, opacity: 0.6 })),
+      makeNode('layer', layerProps('vector', { shapes, x: 5, y: 20, rotation: -8, scaleX: 1.2 })),
+      makeNode('layer', layerProps('vector', { shapes, x: 60, y: 50, opacity: 0.5 })), // overlapping marks at half opacity: buffered
+      makeNode('layer', layerProps('text', { text: 'Omnix', x: 20, y: 80, fontSize: 24, color: '#ffffff' })),
+      makeNode('layer', layerProps('vector', { shapes, x: 80, y: 40, vectorMask: { closed: true, anchors: [{ x: 0, y: 0 }, { x: 40, y: 0 }, { x: 40, y: 40 }, { x: 0, y: 40 }] } })),
+    ];
+    for (const l of layers) state = commit(state, { kind: 'create', parentId: canvasId, nodes: [l] });
+    const h = host({ img1: solid(30, 30, '#ffaa00') });
+    const direct = renderCanvasDocument(h, state, canvasId, { scale: 1.5 });
+    // The reference: every layer rendered into its own buffer, then composited.
+    const ref = createCanvas(direct.width, direct.height);
+    const ctx = ref.getContext('2d');
+    for (const l of childrenOf(state, canvasId)) {
+      const buf = renderSingleLayer(h, state, l.id, { scale: 1.5 });
+      ctx.globalAlpha = (l as SceneNode<'layer'>).props.opacity;
+      ctx.drawImage(buf as never, 0, 0);
+    }
+    const a = readRaster(direct).data;
+    const b = readRaster(ref as unknown as CanvasLike).data;
+    let worst = 0;
+    for (let i = 0; i < a.length; i++) worst = Math.max(worst, Math.abs(a[i]! - b[i]!));
+    expect(worst).toBeLessThanOrEqual(1);
   });
 });
 
