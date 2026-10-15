@@ -27,7 +27,7 @@ export class NotesService {
     if (recent.some((n) => n.props.kind === note.kind && n.props.text === text)) return null;
     const state = await this.services.projects.state(projectId);
     const node = makeNode('note', { kind: note.kind, text, author: note.author, createdAt: new Date().toISOString(), auto: true, ...(note.ref ? { ref: note.ref } : {}) });
-    await this.services.projects.commit(projectId, { kind: 'create', parentId: notesContainer(state).id, nodes: [node] }, MEMORY_AUTHOR, { label: `Session memory: ${text.slice(0, 60)}`, trusted: true, quiet: true });
+    await this.services.projects.commit(projectId, { kind: 'create', parentId: notesContainer(state).id, nodes: [node] }, MEMORY_AUTHOR, { label: text.length > 60 ? `${text.slice(0, 59)}…` : text, trusted: true, quiet: true });
     return node.id;
   }
 

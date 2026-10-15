@@ -152,7 +152,9 @@ export const projectReadTools = [
       await ctx.requireProject(args.projectId, 'read');
       const state = await ctx.state(args.projectId);
       const img = await renderNode(ctx.services, state, { nodeId: args.nodeId ?? null, ...(args.time !== undefined ? { time: args.time } : {}), maxSize: args.maxSize ?? 1024, format: 'png' });
-      return { text: `Rendered ${args.nodeId ?? 'project'} at ${img.width}x${img.height}.`, data: { width: img.width, height: img.height, mimeType: img.mime }, images: [{ data: img.data, mimeType: img.mime }] };
+      const target = args.nodeId ? state.nodes[args.nodeId] : undefined;
+      const what = target ? `"${String((target.props as { name?: string }).name ?? target.type)}" (${target.type})` : 'the project';
+      return { text: `Rendered ${what}${args.time !== undefined ? ` at ${args.time} s` : ''}, ${img.width}×${img.height}.`, data: { width: img.width, height: img.height, mimeType: img.mime }, images: [{ data: img.data, mimeType: img.mime }] };
     },
   }),
 ];

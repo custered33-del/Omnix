@@ -49,7 +49,7 @@ function statusOf(agent: AgentService, job: JobRecord, decision?: AgentRunData['
 function statusText(s: ReturnType<typeof statusOf>): string {
   if (s.status === 'awaiting_approval') return `Paused for the user's approval: ${s.pendingGate?.title}. Call agent_wait with runId ${s.runId} to get their answer before doing anything else on this project.`;
   if (s.decision?.decision === 'approve') return `Approved${s.decision.feedback ? ` with a note: ${s.decision.feedback}` : ''}. Continue${s.stage ? ` with: ${s.stage}` : ''}.`;
-  if (s.decision?.decision === 'changes') return `The user asked for changes: ${s.decision.feedback ?? '(no details)'}. Address them, then checkpoint again.`;
+  if (s.decision?.decision === 'changes') return `The user asked for changes: ${sentence(s.decision.feedback ?? '(no details)')} Address them, then checkpoint again.`;
   if (s.status === 'cancelled') return 'The user stopped this run. Do not make further changes for it.';
   if (s.status === 'done') return 'The run is finished.';
   return `Running${s.stage ? `. Current stage: ${s.stage}` : ''}.`;
@@ -287,3 +287,9 @@ useModule(({ services, router }) => {
 
   router.use(r);
 });
+
+/** End a person's note with exactly one full stop (or their own ? or !). */
+function sentence(text: string): string {
+  const t = text.trim();
+  return /[.!?…]$/.test(t) ? t : `${t}.`;
+}
