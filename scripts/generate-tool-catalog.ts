@@ -5,6 +5,7 @@
  */
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import os from 'node:os';
 import { z } from 'zod';
 import { createOmnix } from '../packages/server/src/app.js';
@@ -42,7 +43,7 @@ function outputSchemaOf(tool: ToolDef) {
 const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), 'omnix-catalog-'));
 const omnix = await createOmnix({ memory: true, dataDir, webDist: null });
 const tools = allTools(omnix.services);
-const root = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
 const json = tools.map((t) => ({ name: t.name, title: t.title, category: t.category, access: t.access, ...(t.destructive ? { destructive: true } : {}), description: t.description, inputSchema: schemaOf(t), outputSchema: outputSchemaOf(t), example: t.example }));
 await fs.writeFile(path.join(root, 'docs/mcp-tools.json'), JSON.stringify(json, null, 2) + '\n');

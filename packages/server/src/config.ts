@@ -1,4 +1,5 @@
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 /** Runtime configuration, from environment variables with local-first defaults. */
 export interface OmnixConfig {
@@ -66,7 +67,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): OmnixConfig {
           forcePathStyle: env.OMNIX_S3_FORCE_PATH_STYLE !== 'false',
         }
       : null;
-  const defaultDist = path.resolve(path.dirname(new URL(import.meta.url).pathname), '../../web/dist');
+  // fileURLToPath, not URL.pathname: on Windows the pathname is /C:/..., which is not a path.
+  const defaultDist = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../web/dist');
   return {
     port,
     host,
