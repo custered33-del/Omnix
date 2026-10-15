@@ -7,6 +7,7 @@ import { useProject } from '../../state/project.js';
 import { useHostVersion } from '../../render/context.js';
 import { IconButton, MenuButton, NumberField, type MenuItemDef } from '../../ui/primitives.js';
 import { AssetPicker } from '../../components/AssetPicker.js';
+import { AiMarker } from '../../components/AiMarker.js';
 import { t } from '../../i18n/index.js';
 import * as A from './actions.js';
 
@@ -198,6 +199,7 @@ export function LayersPanel({ ctx }: { ctx: A.ImageCtx }) {
               )}
               <LayerThumb ctx={ctx} node={node} />
               <LayerName ctx={ctx} node={node} canEdit={canEdit} />
+              <AiMarker nodeId={node.id} />
               {p.mask && (
                 <span className={`mask-chip${p.mask.enabled ? '' : ' off'}`} title={p.mask.enabled ? t('image.mask') : `${t('image.mask')} (disabled)`} aria-label={t('image.mask')}>
                   <Scan size={13} />

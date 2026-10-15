@@ -1,4 +1,5 @@
 import { cloneRaster, clamp255, type Raster } from './raster.js';
+import { lutFromFunction, type Lut3D } from './lut.js';
 import { addNoise, gaussianBlur } from './filters.js';
 
 /**
@@ -33,12 +34,15 @@ function labToRgb(L: number, a: number, b: number): [number, number, number] {
   return [R * 255, G * 255, B * 255];
 }
 
-interface Stats {
+export interface StyleStats {
   mean: [number, number, number];
   std: [number, number, number];
 }
 
-function labStats(r: Raster): Stats {
+type Stats = StyleStats;
+
+/** Color statistics of an image in the decorrelated lαβ space (what style transfer matches). */
+export function labStats(r: Raster): Stats {
   const sum = [0, 0, 0];
   const sq = [0, 0, 0];
   let n = 0;
@@ -103,4 +107,73 @@ export function transferStyle(target: Raster, reference: Raster, options: StyleT
     if (want > have + 0.5) out = addNoise(out, (want - have) * 2.2 * strength, 11);
   }
   return out;
+}
+
+/**
+ * The color and tone part of a style transfer as a 3D LUT, so it can be applied non-destructively
+ * (an adjustment layer in the image editor, a color grade on a video clip) and tuned or removed later.
+ */
+export function styleLut(target: Raster | StyleStats, reference: Raster | StyleStats, options: { color?: boolean; tone?: boolean; strength?: number; size?: number } = {}): Lut3D {
+  const { color = true, tone = true, strength = 1, size = 33 } = options;
+  const ts = 'mean' in target ? target : labStats(target);
+  const rs = 'mean' in reference ? reference : labStats(reference);
+  return lutFromFunction(
+    size,
+    (r, g, b) => {
+      const lab = rgbToLab(r * 255, g * 255, b * 255);
+      const res: [number, number, number] = [...lab];
+      if (tone) res[0] = ((lab[0] - ts.mean[0]) * rs.std[0]) / ts.std[0] + rs.mean[0];
+      if (color) {
+        res[1] = ((lab[1] - ts.mean[1]) * rs.std[1]) / ts.std[1] + rs.mean[1];
+        res[2] = ((lab[2] - ts.mean[2]) * rs.std[2]) / ts.std[2] + rs.mean[2];
+      }
+      const out = labToRgb(res[0], res[1], res[2]);
+      const mix = (v: number, i: number) => Math.max(0, Math.min(1, (v * 255 + (out[i]! - v * 255) * strength) / 255));
+      return [mix(r, 0), mix(g, 1), mix(b, 2)];
+    },
+    'Style reference',
+  );
+}
+
+/** Dominant colors of an image, most common first (for palettes from a reference). */
+export function dominantColors(r: Raster, k = 5): { color: [number, number, number]; share: number }[] {
+  const pts: number[][] = [];
+  const step = Math.max(1, Math.floor((r.width * r.height) / 6000));
+  for (let p = 0; p < r.width * r.height; p += step) {
+    const i = p * 4;
+    if (r.data[i + 3]! < 128) continue;
+    pts.push([r.data[i]!, r.data[i + 1]!, r.data[i + 2]!]);
+  }
+  if (!pts.length) return [];
+  const centers: number[][] = [];
+  for (let i = 0; i < k; i++) centers.push([...pts[Math.floor(((i + 0.5) * pts.length) / k)]!]);
+  const counts = new Array(k).fill(0);
+  for (let it = 0; it < 12; it++) {
+    const sums = centers.map(() => [0, 0, 0, 0]);
+    counts.fill(0);
+    for (const c of pts) {
+      let bi = 0;
+      let bd = Infinity;
+      centers.forEach((ctr, j) => {
+        const d = (c[0]! - ctr[0]!) ** 2 + (c[1]! - ctr[1]!) ** 2 + (c[2]! - ctr[2]!) ** 2;
+        if (d < bd) {
+          bd = d;
+          bi = j;
+        }
+      });
+      const s = sums[bi]!;
+      s[0]! += c[0]!;
+      s[1]! += c[1]!;
+      s[2]! += c[2]!;
+      s[3]!++;
+      counts[bi]++;
+    }
+    sums.forEach((s, j) => {
+      if (s[3]! > 0) centers[j] = [s[0]! / s[3]!, s[1]! / s[3]!, s[2]! / s[3]!];
+    });
+  }
+  return centers
+    .map((c, j) => ({ color: [Math.round(c[0]!), Math.round(c[1]!), Math.round(c[2]!)] as [number, number, number], share: counts[j] / pts.length }))
+    .filter((c) => c.share > 0)
+    .sort((a, b) => b.share - a.share);
 }

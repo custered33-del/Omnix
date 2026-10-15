@@ -54,6 +54,11 @@ export class JobQueue extends EventEmitter {
 
   private async load(): Promise<void> {
     for (const j of await this.store.list<JobRecord>(C.jobs)) {
+      // Externally driven work (Claude running an agent over MCP) is not tied to this process.
+      if (j.data?.external === true && j.status === 'running') {
+        this.records.set(j.id, j);
+        continue;
+      }
       if (j.status === 'running' || j.status === 'queued') {
         j.status = 'failed';
         j.error = 'Omnix restarted while this job was running. Start it again.';
@@ -95,6 +100,35 @@ export class JobQueue extends EventEmitter {
     return job;
   }
 
+  /**
+   * Record a job that something outside the queue drives (for example Claude running an agent
+   * through MCP). It shows up in job lists and updates like any other job but has no handler.
+   */
+  async track<I>(kind: string, input: I, meta: { title: string; ownerId: string; projectId?: string | null; data?: Record<string, unknown> }): Promise<JobRecord<I>> {
+    await this.loaded;
+    const now = new Date().toISOString();
+    const job: JobRecord<I> = {
+      id: newId('job'),
+      kind,
+      title: meta.title,
+      status: 'running',
+      progress: 0,
+      message: 'Running',
+      ownerId: meta.ownerId,
+      projectId: meta.projectId ?? null,
+      input,
+      result: null,
+      error: null,
+      createdAt: now,
+      startedAt: now,
+      finishedAt: null,
+      data: { ...(meta.data ?? {}), external: true },
+    };
+    this.records.set(job.id, job as JobRecord);
+    await this.persist(job as JobRecord);
+    return job;
+  }
+
   /** Run and wait (convenience for tests and synchronous API paths). */
   async run<I, R>(kind: string, input: I, meta: { title: string; ownerId: string; projectId?: string | null }): Promise<JobRecord<I, R>> {
     const job = await this.enqueue(kind, input, meta);
@@ -122,6 +156,11 @@ export class JobQueue extends EventEmitter {
 
   get(id: string): JobRecord | undefined {
     return this.records.get(id);
+  }
+
+  /** Jobs already loaded in memory, newest first (synchronous; for hot paths like tool gating). */
+  snapshot(filter: { kind?: string; status?: JobStatus[] } = {}): JobRecord[] {
+    return [...this.records.values()].filter((j) => (!filter.kind || j.kind === filter.kind) && (!filter.status || filter.status.includes(j.status))).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   }
 
   async list(filter: { ownerId?: string; projectId?: string; status?: JobStatus[] } = {}): Promise<JobRecord[]> {

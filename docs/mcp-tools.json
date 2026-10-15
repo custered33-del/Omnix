@@ -7676,5 +7676,1946 @@
         "nodeId": "el_7..."
       }
     }
+  },
+  {
+    "name": "agent_start_run",
+    "title": "Start an autonomous run",
+    "category": "agent",
+    "access": "write",
+    "description": "Start an autonomous run toward a goal in one project (needs an autonomous connection). Give a short plan of stages; work through them with the normal tools, call agent_checkpoint after each stage, and agent_finish at the end. The user chooses approval gates (approve the plan, review each stage, before exporting, before deleting); when one applies the run pauses, write tools are held, and you call agent_wait for their answer.",
+    "inputSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Project id (from list_projects)."
+        },
+        "goal": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4000
+        },
+        "plan": {
+          "description": "Stages in order, for example [\"Script\", \"Visuals\", \"Slides\", \"Video\"].",
+          "maxItems": 20,
+          "type": "array",
+          "items": {
+            "type": "string",
+            "maxLength": 200
+          }
+        },
+        "gates": {
+          "description": "Defaults to the user's usual gates: plan, each stage, before export, before delete.",
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "plan",
+                  "stage",
+                  "export",
+                  "delete",
+                  "custom"
+                ]
+              },
+              "label": {
+                "type": "string",
+                "maxLength": 200
+              }
+            },
+            "required": [
+              "kind"
+            ]
+          }
+        }
+      },
+      "required": [
+        "projectId",
+        "goal"
+      ]
+    },
+    "outputSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "runId": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string"
+        },
+        "stage": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "pendingGate": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "title": {
+                  "type": "string"
+                },
+                "summary": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id",
+                "title",
+                "summary"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "decision": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "decision": {
+                  "type": "string"
+                },
+                "feedback": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "decision"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "runId",
+        "status",
+        "stage",
+        "pendingGate"
+      ],
+      "additionalProperties": false
+    },
+    "example": {
+      "input": {
+        "projectId": "prj_8Kq2...",
+        "goal": "Make a 30-second product teaser from the uploaded clips",
+        "plan": [
+          "Pick and trim the best shots",
+          "Add titles and music",
+          "Color and pacing pass",
+          "Export"
+        ]
+      },
+      "output": {
+        "runId": "job_7f...",
+        "status": "awaiting_approval",
+        "stage": "Pick and trim the best shots",
+        "pendingGate": {
+          "id": "gate_1",
+          "title": "Approve the plan",
+          "summary": "1. Pick and trim..."
+        }
+      }
+    }
+  },
+  {
+    "name": "agent_set_plan",
+    "title": "Set or revise a run's plan",
+    "category": "agent",
+    "access": "write",
+    "description": "Replace the plan of an autonomous run (for example after the user asked for changes). May pause for the user to approve the plan.",
+    "inputSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "runId": {
+          "type": "string"
+        },
+        "stages": {
+          "minItems": 1,
+          "maxItems": 20,
+          "type": "array",
+          "items": {
+            "type": "string",
+            "maxLength": 200
+          }
+        }
+      },
+      "required": [
+        "runId",
+        "stages"
+      ]
+    },
+    "outputSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "runId": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string"
+        },
+        "stage": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "pendingGate": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "title": {
+                  "type": "string"
+                },
+                "summary": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id",
+                "title",
+                "summary"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "decision": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "decision": {
+                  "type": "string"
+                },
+                "feedback": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "decision"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "runId",
+        "status",
+        "stage",
+        "pendingGate"
+      ],
+      "additionalProperties": false
+    },
+    "example": {
+      "input": {
+        "runId": "job_7f...",
+        "stages": [
+          "Script",
+          "Storyboard",
+          "Edit",
+          "Export"
+        ]
+      },
+      "output": {
+        "runId": "job_7f...",
+        "status": "awaiting_approval",
+        "stage": "Script",
+        "pendingGate": {
+          "id": "gate_2",
+          "title": "Approve the plan",
+          "summary": "1. Script..."
+        }
+      }
+    }
+  },
+  {
+    "name": "agent_checkpoint",
+    "title": "Checkpoint a finished stage",
+    "category": "agent",
+    "access": "write",
+    "description": "Mark the current stage done: saves a named version of the project (the user can roll back to it) with your summary, then moves to the next stage. Pauses when the user reviews each stage.",
+    "inputSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "runId": {
+          "type": "string"
+        },
+        "summary": {
+          "type": "string",
+          "maxLength": 2000,
+          "description": "What this stage did, for the person reviewing it."
+        }
+      },
+      "required": [
+        "runId",
+        "summary"
+      ]
+    },
+    "outputSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "runId": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string"
+        },
+        "stage": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "pendingGate": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "title": {
+                  "type": "string"
+                },
+                "summary": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id",
+                "title",
+                "summary"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "decision": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "decision": {
+                  "type": "string"
+                },
+                "feedback": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "decision"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "runId",
+        "status",
+        "stage",
+        "pendingGate"
+      ],
+      "additionalProperties": false
+    },
+    "example": {
+      "input": {
+        "runId": "job_7f...",
+        "summary": "Trimmed the five strongest shots to 26 s and ordered them wide to close."
+      },
+      "output": {
+        "runId": "job_7f...",
+        "status": "awaiting_approval",
+        "stage": "Add titles and music",
+        "pendingGate": {
+          "id": "gate_3",
+          "title": "Stage finished: Pick and trim the best shots",
+          "summary": "Trimmed the five..."
+        }
+      }
+    }
+  },
+  {
+    "name": "agent_request_approval",
+    "title": "Ask the user to approve",
+    "category": "agent",
+    "access": "write",
+    "description": "Pause the run and ask the user for a decision or approval. Put the question and options in the summary, then call agent_wait.",
+    "inputSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "runId": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "summary": {
+          "type": "string",
+          "maxLength": 4000
+        }
+      },
+      "required": [
+        "runId",
+        "title",
+        "summary"
+      ]
+    },
+    "outputSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "runId": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string"
+        },
+        "stage": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "pendingGate": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "title": {
+                  "type": "string"
+                },
+                "summary": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id",
+                "title",
+                "summary"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "decision": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "decision": {
+                  "type": "string"
+                },
+                "feedback": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "decision"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "runId",
+        "status",
+        "stage",
+        "pendingGate"
+      ],
+      "additionalProperties": false
+    },
+    "example": {
+      "input": {
+        "runId": "job_7f...",
+        "title": "Pick a music track",
+        "summary": "Option A: upbeat synth. Option B: acoustic guitar. I suggest A for the product focus."
+      },
+      "output": {
+        "runId": "job_7f...",
+        "status": "awaiting_approval",
+        "stage": "Add titles and music",
+        "pendingGate": {
+          "id": "gate_4",
+          "title": "Pick a music track",
+          "summary": "Option A..."
+        }
+      }
+    }
+  },
+  {
+    "name": "agent_wait",
+    "title": "Wait for the user's answer",
+    "category": "agent",
+    "access": "read",
+    "description": "Wait (up to about 50 seconds) for the user to answer the current approval gate. If it returns still waiting, call it again. The answer is approve (continue), changes (with feedback to address), or stopped.",
+    "inputSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "runId": {
+          "type": "string"
+        },
+        "timeoutSeconds": {
+          "default": 50,
+          "type": "number",
+          "minimum": 1,
+          "maximum": 55
+        }
+      },
+      "required": [
+        "runId"
+      ]
+    },
+    "outputSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "runId": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string"
+        },
+        "stage": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "pendingGate": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "title": {
+                  "type": "string"
+                },
+                "summary": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id",
+                "title",
+                "summary"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "decision": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "decision": {
+                  "type": "string"
+                },
+                "feedback": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "decision"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "runId",
+        "status",
+        "stage",
+        "pendingGate"
+      ],
+      "additionalProperties": false
+    },
+    "example": {
+      "input": {
+        "runId": "job_7f..."
+      },
+      "output": {
+        "runId": "job_7f...",
+        "status": "running",
+        "stage": "Add titles and music",
+        "pendingGate": null,
+        "decision": {
+          "decision": "approve",
+          "feedback": "Keep the titles short."
+        }
+      }
+    }
+  },
+  {
+    "name": "agent_status",
+    "title": "Check a run",
+    "category": "agent",
+    "access": "read",
+    "description": "Status of an autonomous run: current stage, any pending approval, and the user's latest decision. Without runId, lists this connection's runs on a project.",
+    "inputSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "runId": {
+          "type": "string"
+        },
+        "projectId": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Project id (from list_projects)."
+        }
+      }
+    },
+    "outputSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "runs": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "runId": {
+                "type": "string"
+              },
+              "status": {
+                "type": "string"
+              },
+              "stage": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "pendingGate": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string"
+                      },
+                      "title": {
+                        "type": "string"
+                      },
+                      "summary": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "title",
+                      "summary"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "decision": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "decision": {
+                        "type": "string"
+                      },
+                      "feedback": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "decision"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "runId",
+              "status",
+              "stage",
+              "pendingGate"
+            ],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": [
+        "runs"
+      ],
+      "additionalProperties": false
+    },
+    "example": {
+      "input": {
+        "runId": "job_7f..."
+      },
+      "output": {
+        "runs": [
+          {
+            "runId": "job_7f...",
+            "status": "running",
+            "stage": "Color and pacing pass",
+            "pendingGate": null
+          }
+        ]
+      }
+    }
+  },
+  {
+    "name": "agent_finish",
+    "title": "Finish a run",
+    "category": "agent",
+    "access": "write",
+    "description": "End an autonomous run with a short summary for the user: what you made, where it is, and anything they should check.",
+    "inputSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "runId": {
+          "type": "string"
+        },
+        "summary": {
+          "type": "string",
+          "maxLength": 4000
+        }
+      },
+      "required": [
+        "runId",
+        "summary"
+      ]
+    },
+    "outputSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "runId": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string"
+        },
+        "stage": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "pendingGate": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "title": {
+                  "type": "string"
+                },
+                "summary": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id",
+                "title",
+                "summary"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "decision": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "decision": {
+                  "type": "string"
+                },
+                "feedback": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "decision"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "runId",
+        "status",
+        "stage",
+        "pendingGate"
+      ],
+      "additionalProperties": false
+    },
+    "example": {
+      "input": {
+        "runId": "job_7f...",
+        "summary": "The teaser is in \"Teaser v1\" (28 s) and exported to MP4; titles use the launch copy from the brief."
+      },
+      "output": {
+        "runId": "job_7f...",
+        "status": "done",
+        "stage": null,
+        "pendingGate": null
+      }
+    }
+  },
+  {
+    "name": "run_command",
+    "title": "Run a natural-language command",
+    "category": "ai",
+    "access": "write",
+    "description": "Turn a plain-language edit into operations with Omnix's command parser, for example \"make the sky warmer and move the title to the lower third\". The steps follow the connection's permission mode like any change. Phrases the parser does not understand are returned so you can do them with the specific tools. Examples: Make the sky warmer and move the title to the lower third; Remove the background; Make the background navy; Add a title \"Spring sale\"; Blur the photo a little; Make clip 2 warmer; Add a title \"Coming soon\" and move it to the lower third; Add crossfades between all clips.",
+    "inputSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Project id (from list_projects)."
+        },
+        "text": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2000
+        },
+        "documentId": {
+          "description": "The image, sequence, deck or document to edit (default: the first one).",
+          "type": "string"
+        },
+        "slideId": {
+          "type": "string"
+        },
+        "selection": {
+          "maxItems": 50,
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "projectId",
+        "text"
+      ]
+    },
+    "outputSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "status": {
+          "type": "string",
+          "enum": [
+            "committed",
+            "proposed"
+          ]
+        },
+        "commitId": {
+          "type": "string"
+        },
+        "proposalId": {
+          "type": "string"
+        },
+        "changes": {
+          "description": "How many changes the proposal now holds",
+          "type": "number"
+        },
+        "steps": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "unmatched": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "clause": {
+                "type": "string"
+              },
+              "reason": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "clause",
+              "reason"
+            ],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": [
+        "status",
+        "steps",
+        "unmatched"
+      ],
+      "additionalProperties": false
+    },
+    "example": {
+      "input": {
+        "projectId": "prj_8Kq2...",
+        "documentId": "cnv_1",
+        "text": "Make the sky warmer and move the title to the lower third"
+      },
+      "output": {
+        "status": "proposed",
+        "proposalId": "prop_1c...",
+        "steps": [
+          "Warmer: the sky",
+          "Move the title to the lower third"
+        ],
+        "unmatched": []
+      }
+    }
+  },
+  {
+    "name": "image_generative_fill",
+    "title": "Generative fill (image)",
+    "category": "ai",
+    "access": "write",
+    "description": "Fill an area of the image from a prompt: remove an object, replace a sky, patch a gap. The result is a new layer masked to the area, so the generated region stays visible and editable. With no image model configured, Omnix synthesizes the area from its surroundings (best for removing things); a color in the prompt tints it.",
+    "inputSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Project id (from list_projects)."
+        },
+        "canvasId": {
+          "type": "string"
+        },
+        "prompt": {
+          "default": "",
+          "type": "string",
+          "maxLength": 2000
+        },
+        "selection": {
+          "description": "Area to fill (default: the current selection).",
+          "oneOf": [
+            {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "type": "string",
+                  "const": "rect"
+                },
+                "x": {
+                  "type": "number"
+                },
+                "y": {
+                  "type": "number"
+                },
+                "width": {
+                  "type": "number"
+                },
+                "height": {
+                  "type": "number"
+                },
+                "feather": {
+                  "type": "number"
+                }
+              },
+              "required": [
+                "kind",
+                "x",
+                "y",
+                "width",
+                "height"
+              ]
+            },
+            {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "type": "string",
+                  "const": "ellipse"
+                },
+                "x": {
+                  "type": "number"
+                },
+                "y": {
+                  "type": "number"
+                },
+                "width": {
+                  "type": "number"
+                },
+                "height": {
+                  "type": "number"
+                },
+                "feather": {
+                  "type": "number"
+                }
+              },
+              "required": [
+                "kind",
+                "x",
+                "y",
+                "width",
+                "height"
+              ]
+            },
+            {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "type": "string",
+                  "const": "polygon"
+                },
+                "points": {
+                  "minItems": 3,
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "x": {
+                        "type": "number"
+                      },
+                      "y": {
+                        "type": "number"
+                      }
+                    },
+                    "required": [
+                      "x",
+                      "y"
+                    ]
+                  }
+                },
+                "feather": {
+                  "type": "number"
+                }
+              },
+              "required": [
+                "kind",
+                "points"
+              ]
+            },
+            {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "type": "string",
+                  "const": "mask"
+                },
+                "assetId": {
+                  "type": "string"
+                },
+                "feather": {
+                  "type": "number"
+                }
+              },
+              "required": [
+                "kind",
+                "assetId"
+              ]
+            }
+          ]
+        },
+        "provider": {
+          "description": "Image provider id (see get_ai_capabilities).",
+          "type": "string"
+        }
+      },
+      "required": [
+        "projectId",
+        "canvasId"
+      ]
+    },
+    "outputSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "status": {
+          "type": "string",
+          "enum": [
+            "committed",
+            "proposed"
+          ]
+        },
+        "commitId": {
+          "type": "string"
+        },
+        "proposalId": {
+          "type": "string"
+        },
+        "changes": {
+          "description": "How many changes the proposal now holds",
+          "type": "number"
+        },
+        "layerId": {
+          "type": "string"
+        },
+        "provider": {
+          "type": "string"
+        },
+        "maskAssetId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "status",
+        "layerId",
+        "provider",
+        "maskAssetId"
+      ],
+      "additionalProperties": false
+    },
+    "example": {
+      "input": {
+        "projectId": "prj_8Kq2...",
+        "canvasId": "cnv_1",
+        "prompt": "clear evening sky",
+        "selection": {
+          "kind": "rect",
+          "x": 0,
+          "y": 0,
+          "width": 1920,
+          "height": 400
+        }
+      },
+      "output": {
+        "status": "proposed",
+        "proposalId": "prop_4d...",
+        "layerId": "lyr_gen...",
+        "provider": "builtin",
+        "maskAssetId": "a9f..."
+      }
+    }
+  },
+  {
+    "name": "image_generative_extend",
+    "title": "Generative extend (image)",
+    "category": "ai",
+    "access": "write",
+    "description": "Grow the canvas and fill the new margins so the picture continues past its edges (outpainting), for example to turn a square photo into a wide banner. Existing layers keep their place; the new area is a masked layer you can see and adjust.",
+    "inputSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Project id (from list_projects)."
+        },
+        "canvasId": {
+          "type": "string"
+        },
+        "top": {
+          "default": 0,
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 4096
+        },
+        "right": {
+          "default": 0,
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 4096
+        },
+        "bottom": {
+          "default": 0,
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 4096
+        },
+        "left": {
+          "default": 0,
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 4096
+        },
+        "prompt": {
+          "default": "",
+          "type": "string",
+          "maxLength": 2000
+        },
+        "provider": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "projectId",
+        "canvasId"
+      ]
+    },
+    "outputSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "status": {
+          "type": "string",
+          "enum": [
+            "committed",
+            "proposed"
+          ]
+        },
+        "commitId": {
+          "type": "string"
+        },
+        "proposalId": {
+          "type": "string"
+        },
+        "changes": {
+          "description": "How many changes the proposal now holds",
+          "type": "number"
+        },
+        "layerId": {
+          "type": "string"
+        },
+        "width": {
+          "type": "number"
+        },
+        "height": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "status",
+        "layerId",
+        "width",
+        "height"
+      ],
+      "additionalProperties": false
+    },
+    "example": {
+      "input": {
+        "projectId": "prj_8Kq2...",
+        "canvasId": "cnv_1",
+        "left": 420,
+        "right": 420,
+        "prompt": "more of the beach"
+      },
+      "output": {
+        "status": "committed",
+        "commitId": "c_8e...",
+        "layerId": "lyr_ext...",
+        "width": 1920,
+        "height": 1080
+      }
+    }
+  },
+  {
+    "name": "video_generative_fill",
+    "title": "Generative fill (video region)",
+    "category": "ai",
+    "access": "write",
+    "description": "Fill a region of a video clip across its frames (remove a logo, watermark or passer-by) from a prompt. Region is in sequence pixels as seen on the stage. Runs as a background job; the clip then plays the new render, and the original media and the region are kept with the clip. Check progress with get_job.",
+    "inputSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Project id (from list_projects)."
+        },
+        "clipId": {
+          "type": "string"
+        },
+        "region": {
+          "type": "object",
+          "properties": {
+            "x": {
+              "type": "number"
+            },
+            "y": {
+              "type": "number"
+            },
+            "width": {
+              "type": "number",
+              "exclusiveMinimum": 0
+            },
+            "height": {
+              "type": "number",
+              "exclusiveMinimum": 0
+            },
+            "shape": {
+              "default": "rect",
+              "type": "string",
+              "enum": [
+                "rect",
+                "ellipse"
+              ]
+            }
+          },
+          "required": [
+            "x",
+            "y",
+            "width",
+            "height"
+          ]
+        },
+        "prompt": {
+          "default": "",
+          "type": "string",
+          "maxLength": 2000
+        },
+        "provider": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "projectId",
+        "clipId",
+        "region"
+      ]
+    },
+    "outputSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "jobId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "jobId"
+      ],
+      "additionalProperties": false
+    },
+    "example": {
+      "input": {
+        "projectId": "prj_8Kq2...",
+        "clipId": "clp_2",
+        "region": {
+          "x": 1620,
+          "y": 40,
+          "width": 240,
+          "height": 90,
+          "shape": "rect"
+        },
+        "prompt": "remove the watermark"
+      },
+      "output": {
+        "jobId": "job_9c..."
+      }
+    }
+  },
+  {
+    "name": "video_extend_frame",
+    "title": "Extend the video frame",
+    "category": "video",
+    "access": "write",
+    "description": "Change a sequence to a new frame size (for example 16:9 to 9:16) and fill the space around each shot with a blurred, darkened copy of the same shot, a common way to extend footage without black bars. The fill clips sit on their own track and can be adjusted or removed.",
+    "inputSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Project id (from list_projects)."
+        },
+        "sequenceId": {
+          "type": "string"
+        },
+        "width": {
+          "type": "integer",
+          "minimum": 16,
+          "maximum": 8192
+        },
+        "height": {
+          "type": "integer",
+          "minimum": 16,
+          "maximum": 8192
+        },
+        "fill": {
+          "default": "blur",
+          "type": "string",
+          "enum": [
+            "blur",
+            "none"
+          ]
+        }
+      },
+      "required": [
+        "projectId",
+        "sequenceId",
+        "width",
+        "height"
+      ]
+    },
+    "outputSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "status": {
+          "type": "string",
+          "enum": [
+            "committed",
+            "proposed"
+          ]
+        },
+        "commitId": {
+          "type": "string"
+        },
+        "proposalId": {
+          "type": "string"
+        },
+        "changes": {
+          "description": "How many changes the proposal now holds",
+          "type": "number"
+        },
+        "fillClips": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "status",
+        "fillClips"
+      ],
+      "additionalProperties": false
+    },
+    "example": {
+      "input": {
+        "projectId": "prj_8Kq2...",
+        "sequenceId": "seq_main",
+        "width": 1080,
+        "height": 1920
+      },
+      "output": {
+        "status": "proposed",
+        "proposalId": "prop_2f...",
+        "fillClips": 6
+      }
+    }
+  },
+  {
+    "name": "style_match",
+    "title": "Match a style reference",
+    "category": "ai",
+    "access": "write",
+    "description": "Apply the look of a reference (an image or video asset, or a canvas, layer, clip, sequence, slideshow, slide or document in the project) to a target in any editor. Aspects: color, tone, texture (grain), typography (fonts) and motion (easing, transitions, timing). Results are ordinary editable settings: a look adjustment layer or color grade, a grain filter, theme or text styles, easing.",
+    "inputSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Project id (from list_projects)."
+        },
+        "targetId": {
+          "type": "string"
+        },
+        "reference": {
+          "type": "object",
+          "properties": {
+            "assetId": {
+              "type": "string"
+            },
+            "nodeId": {
+              "type": "string"
+            }
+          }
+        },
+        "aspects": {
+          "description": "Default: everything that applies.",
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "color",
+              "tone",
+              "texture",
+              "typography",
+              "motion"
+            ]
+          }
+        },
+        "strength": {
+          "default": 0.8,
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        }
+      },
+      "required": [
+        "projectId",
+        "targetId",
+        "reference"
+      ]
+    },
+    "outputSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "status": {
+          "type": "string",
+          "enum": [
+            "committed",
+            "proposed"
+          ]
+        },
+        "commitId": {
+          "type": "string"
+        },
+        "proposalId": {
+          "type": "string"
+        },
+        "changes": {
+          "description": "How many changes the proposal now holds",
+          "type": "number"
+        },
+        "applied": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "skipped": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "status",
+        "applied",
+        "skipped"
+      ],
+      "additionalProperties": false
+    },
+    "example": {
+      "input": {
+        "projectId": "prj_8Kq2...",
+        "targetId": "seq_main",
+        "reference": {
+          "assetId": "a7c..."
+        },
+        "aspects": [
+          "color",
+          "tone"
+        ],
+        "strength": 0.7
+      },
+      "output": {
+        "status": "proposed",
+        "proposalId": "prop_5b...",
+        "applied": [
+          "color and tone (a color grade with the reference look)"
+        ],
+        "skipped": []
+      }
+    }
+  },
+  {
+    "name": "find_in_project",
+    "title": "Search the whole project",
+    "category": "project",
+    "access": "read",
+    "description": "Find text anywhere in a project, across all six tools: layer names and text, clip names and titles, document blocks, slide text and notes, code files and cells, session notes and comments. Use it to connect work across tools (for example find the tagline in the document to reuse in a title).",
+    "inputSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Project id (from list_projects)."
+        },
+        "query": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "limit": {
+          "default": 50,
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 200
+        }
+      },
+      "required": [
+        "projectId",
+        "query"
+      ]
+    },
+    "outputSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "hits": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "nodeId": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              },
+              "tool": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "documentId": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "label": {
+                "type": "string"
+              },
+              "snippet": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "nodeId",
+              "type",
+              "tool",
+              "documentId",
+              "label",
+              "snippet"
+            ],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": [
+        "hits"
+      ],
+      "additionalProperties": false
+    },
+    "example": {
+      "input": {
+        "projectId": "prj_8Kq2...",
+        "query": "launch date"
+      },
+      "output": {
+        "hits": [
+          {
+            "nodeId": "blk_4",
+            "type": "block",
+            "tool": "document",
+            "documentId": "doc_brief",
+            "label": "block",
+            "snippet": "…the launch date is 14 March…"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "name": "slides_from_document",
+    "title": "Make slides from a document",
+    "category": "slides",
+    "access": "write",
+    "description": "Turn a document into slides: one slide per heading with the text under it as short bullet points. Adds to an existing slideshow (deckId) or creates a new one.",
+    "inputSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Project id (from list_projects)."
+        },
+        "documentId": {
+          "type": "string"
+        },
+        "deckId": {
+          "type": "string"
+        },
+        "maxSlides": {
+          "default": 20,
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 60
+        }
+      },
+      "required": [
+        "projectId",
+        "documentId"
+      ]
+    },
+    "outputSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "status": {
+          "type": "string",
+          "enum": [
+            "committed",
+            "proposed"
+          ]
+        },
+        "commitId": {
+          "type": "string"
+        },
+        "proposalId": {
+          "type": "string"
+        },
+        "changes": {
+          "description": "How many changes the proposal now holds",
+          "type": "number"
+        },
+        "deckId": {
+          "type": "string"
+        },
+        "slides": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "status",
+        "deckId",
+        "slides"
+      ],
+      "additionalProperties": false
+    },
+    "example": {
+      "input": {
+        "projectId": "prj_8Kq2...",
+        "documentId": "doc_brief"
+      },
+      "output": {
+        "status": "proposed",
+        "proposalId": "prop_7a...",
+        "deckId": "dck_new...",
+        "slides": 6
+      }
+    }
+  },
+  {
+    "name": "get_job",
+    "title": "Check a background job",
+    "category": "project",
+    "access": "read",
+    "description": "Status, progress and result of a background job (exports, captions, video fill, agent runs).",
+    "inputSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "jobId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "jobId"
+      ]
+    },
+    "outputSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "kind": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string"
+        },
+        "progress": {
+          "type": "number"
+        },
+        "message": {
+          "type": "string"
+        },
+        "result": {},
+        "error": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "kind",
+        "status",
+        "progress",
+        "message",
+        "result",
+        "error"
+      ],
+      "additionalProperties": false
+    },
+    "example": {
+      "input": {
+        "jobId": "job_9c..."
+      },
+      "output": {
+        "id": "job_9c...",
+        "kind": "video-fill",
+        "status": "running",
+        "progress": 0.4,
+        "message": "Filling frame 120 of 300",
+        "result": null,
+        "error": null
+      }
+    }
+  },
+  {
+    "name": "get_ai_capabilities",
+    "title": "What AI features are available",
+    "category": "ai",
+    "access": "read",
+    "description": "Which image providers can do generative fill and extend here, whether the built-in agent runner is configured, and example natural-language commands per editor.",
+    "inputSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {}
+    },
+    "outputSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "imageProviders": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "label": {
+                "type": "string"
+              },
+              "generative": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "id",
+              "label",
+              "generative"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "agentRunner": {
+          "type": "boolean"
+        },
+        "commandExamples": {
+          "type": "object",
+          "propertyNames": {
+            "type": "string"
+          },
+          "additionalProperties": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "required": [
+        "imageProviders",
+        "agentRunner",
+        "commandExamples"
+      ],
+      "additionalProperties": false
+    },
+    "example": {
+      "input": {},
+      "output": {
+        "imageProviders": [
+          {
+            "id": "builtin",
+            "label": "Built-in (fills from the surroundings)",
+            "generative": false
+          }
+        ],
+        "agentRunner": false,
+        "commandExamples": {
+          "image": [
+            "Make the sky warmer"
+          ]
+        }
+      }
+    }
   }
 ]

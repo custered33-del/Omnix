@@ -99,6 +99,18 @@ function ProposalCard({ p, focused }: { p: Proposal; focused: boolean }) {
         </div>
       </div>
       {p.description && <p className="text-2" style={{ fontSize: 'var(--fs-sm)' }}>{p.description}</p>}
+      {p.steps && p.steps.length > 1 && (
+        <details open={p.steps.length <= 6}>
+          <summary className="label" style={{ cursor: 'pointer' }}>
+            {t('ai.steps')} ({p.steps.length})
+          </summary>
+          <ol className="proposal-steps">
+            {p.steps.map((s, i) => (
+              <li key={i}>{s}</li>
+            ))}
+          </ol>
+        </details>
+      )}
       {diff ? <DiffView diff={diff} /> : <Spinner />}
       <div className="row" style={{ flexWrap: 'wrap' }}>
         <button className="btn btn-sm" aria-pressed={previewing} onClick={() => void store.getState().previewProposal(previewing ? null : p.id)}>
@@ -145,7 +157,9 @@ function ProposalCard({ p, focused }: { p: Proposal; focused: boolean }) {
 function ModifyDialog({ proposal, onClose }: { proposal: Proposal; onClose: () => void }) {
   const store = useProjectStore();
   const state = useProject((s) => s.confirmed);
-  const flat = proposal.ops.flatMap((o) => (o.kind === 'batch' ? o.ops : [o]));
+  // Stacked AI changes and commands carry one named step per operation: review them step by step.
+  const bySteps = !!proposal.steps && proposal.steps.length === proposal.ops.length;
+  const flat = bySteps ? proposal.ops : proposal.ops.flatMap((o) => (o.kind === 'batch' ? o.ops : [o]));
   const [included, setIncluded] = useState(() => flat.map(() => true));
   const [edits, setEdits] = useState<Record<number, string>>({});
   const [error, setError] = useState<string | null>(null);
@@ -191,7 +205,7 @@ function ModifyDialog({ proposal, onClose }: { proposal: Proposal; onClose: () =
           <li key={i} className="card" style={{ padding: 12 }}>
             <label className="check">
               <input type="checkbox" checked={included[i]} onChange={(e) => setIncluded((cur) => cur.map((v, j) => (j === i ? e.target.checked : v)))} />
-              {describeOp(op, state ?? undefined)}
+              {bySteps ? proposal.steps![i] : describeOp(op, state ?? undefined)}
             </label>
             {op.kind === 'update' && included[i] && (
               <textarea

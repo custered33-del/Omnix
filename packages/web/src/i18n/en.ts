@@ -211,6 +211,11 @@ export const en = {
     hint: 'Decisions, prompts and rejected ideas, so anyone (human or AI) can pick up where you left off.',
     add: 'Add note',
     placeholder: 'Write a decision or note…',
+    filter: 'Show',
+    all: 'All',
+    empty: 'Nothing recorded yet. Rejected changes, commands and agent decisions are saved here automatically.',
+    auto: 'recorded automatically',
+    remove: 'Remove note',
     kinds: {
       decision: 'Decision',
       prompt: 'Prompt',
@@ -451,6 +456,15 @@ export const en = {
     colorGrade: 'Color grade',
   },
   video: {
+    gradeLook: 'Includes a look (LUT) from a style reference.',
+    grade: {
+      exposure: 'Exposure',
+      contrast: 'Contrast',
+      saturation: 'Saturation',
+      temperature: 'Temperature',
+      tint: 'Tint',
+      intensity: 'Look strength',
+    },
     tracks: 'Tracks',
     addTrack: 'Add track',
     trackTypes: {
@@ -865,6 +879,11 @@ export const en = {
     placeInSlides: 'Use in slides',
     commitBy: '{name} · {when}',
     filePath: 'File name',
+  },
+  ai: {
+    mark: 'Changed by {name} {when}',
+    markApproved: 'Changed by {name} {when}, approved by {approver}',
+    steps: 'Steps in this change',
   },
 };
 

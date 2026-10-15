@@ -55,3 +55,18 @@ export function clipToMask(r: Raster, m: Mask): Raster {
   for (let p = 0; p < m.data.length; p++) out[p * 4 + 3] = Math.round((out[p * 4 + 3]! * m.data[p]!) / 255);
   return { width: r.width, height: r.height, data: out };
 }
+
+/** A layer's shape (its alpha) as a canvas-sized mask asset: used to aim an adjustment at one layer. */
+export async function layerAlphaMaskAsset(services: Services, state: ProjectState, canvasId: string, layerId: string, projectId: string, ownerId: string, name = 'layer shape.png'): Promise<string> {
+  const r = await layerRaster(services.renderHost(), state, canvasId, layerId, true);
+  const m = { width: r.width, height: r.height, data: new Uint8ClampedArray(r.width * r.height) };
+  for (let p = 0; p < m.data.length; p++) m.data[p] = r.data[p * 4 + 3]!;
+  return uploadRaster(services, m, name, projectId, ownerId, { asMask: true });
+}
+
+/** The canvas a layer belongs to. */
+export function canvasIdOf(state: ProjectState, nodeId: string): string | null {
+  let cur: ProjectState['nodes'][string] | undefined = state.nodes[nodeId];
+  while (cur && cur.type !== 'canvas') cur = cur.parentId ? state.nodes[cur.parentId] : undefined;
+  return cur?.id ?? null;
+}

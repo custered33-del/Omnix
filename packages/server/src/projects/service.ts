@@ -75,6 +75,8 @@ export interface CommitOptions {
   baseHead?: string | null;
   /** Client-generated id echoed in the realtime broadcast so the sender can match its optimistic edit. */
   clientOpId?: string;
+  /** Leave it out of the activity feed (bookkeeping such as session-memory notes). */
+  quiet?: boolean;
 }
 
 export type ProjectEvent =
@@ -375,6 +377,7 @@ export class ProjectService extends EventEmitter {
     }
     await this.store.append(commitLog(projectId), commit);
     await this.touch(meta);
+    if (options.quiet) return commit;
     await this.activity.record({
       projectId,
       projectName: meta.name,
@@ -445,12 +448,33 @@ export class ProjectService extends EventEmitter {
 
   /* Proposals ------------------------------------------------------ */
 
-  async propose(projectId: string, ops: Operation[], meta: { author: Author; label: string; description?: string; jobId?: string; via?: Via; stack?: boolean }): Promise<Proposal> {
+  /** Validate operations in order, each against the state the previous ones leave behind. */
+  private validateSequence(base: ProjectState, ops: Operation[]): void {
+    let s = base;
+    for (const op of ops) {
+      this.validate(s, op);
+      try {
+        s = applyOp(s, op).state;
+      } catch (e) {
+        throw new ProjectError(`Invalid operation: ${(e as Error).message}`, 400);
+      }
+    }
+  }
+
+  async propose(projectId: string, ops: Operation[], meta: { author: Author; label: string; description?: string; jobId?: string; via?: Via; stack?: boolean; steps?: string[] }): Promise<Proposal> {
     const { session, meta: pm } = await this.guard(projectId, meta.author);
-    for (const op of ops) this.validate(session.state, op);
+    const recent = meta.stack ? stackTarget(session, meta.author, meta.jobId) : undefined;
+    let base = session.state;
+    if (recent) {
+      try {
+        base = applyOp(session.state, { kind: 'batch', ops: recent.ops }).state;
+      } catch {
+        base = session.state;
+      }
+    }
+    this.validateSequence(base, ops);
     if (meta.stack) {
       // Keep building the same author's open proposal while it is fresh, so related changes review together.
-      const recent = stackTarget(session, meta.author, meta.jobId);
       if (recent) {
         try {
           const p = session.extendProposal(recent.id, ops, meta.label);
@@ -464,7 +488,7 @@ export class ProjectService extends EventEmitter {
     }
     let p: Proposal;
     try {
-      p = session.propose(ops, { author: meta.author, label: meta.label, ...(meta.description ? { description: meta.description } : {}), ...(meta.jobId ? { jobId: meta.jobId } : {}) });
+      p = session.propose(ops, { author: meta.author, label: meta.label, ...(meta.description ? { description: meta.description } : {}), ...(meta.jobId ? { jobId: meta.jobId } : {}), ...(meta.steps ? { steps: meta.steps } : {}) });
     } catch (e) {
       throw new ProjectError(`Proposal does not apply: ${(e as Error).message}`, 400);
     }
@@ -500,7 +524,7 @@ export class ProjectService extends EventEmitter {
     if (approver.type !== 'human') throw new ProjectError('Only a person can approve proposed changes', 403);
     const session = await this.session(projectId);
     const meta = await this.getMeta(projectId);
-    if (modifiedOps) for (const op of modifiedOps) this.validate(session.state, op);
+    if (modifiedOps) this.validateSequence(session.state, modifiedOps);
     let commit: Commit;
     try {
       commit = session.acceptProposal(proposalId, approver, modifiedOps);

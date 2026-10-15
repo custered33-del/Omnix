@@ -2,7 +2,7 @@ import { useStore } from 'zustand';
 import { Diamond, ChevronLeft, ChevronRight, Plus, Trash2, Eye, EyeOff } from 'lucide-react';
 import type { AnimatableProp, ClipEffect, ClipProps, Easing, FilterKind, Keyframe, SceneNode, Transition, TransitionKind } from '@omnix/core';
 import { clipPropsAt, setSpeedOp, tracksOf, upsertKeyframe } from '@omnix/core';
-import { FILTER_DEFAULTS } from '@omnix/imaging';
+import { COLOR_GRADE_DEFAULTS, FILTER_DEFAULTS } from '@omnix/imaging';
 import { animLayerTransform } from '@omnix/render';
 import { useProject } from '../../state/project.js';
 import { ColorField, IconButton, MenuButton, NumberField, Select, Switch } from '../../ui/primitives.js';
@@ -281,6 +281,15 @@ function TitleSection({ ctx, clip }: { ctx: TimelineCtx; clip: SceneNode<'clip'>
   );
 }
 
+function effectRange(effect: ClipEffect['effect'], k: string): { min: number; max: number; step: number } {
+  if (effect === 'colorGrade') {
+    if (k === 'exposure') return { min: -3, max: 3, step: 0.05 };
+    if (k === 'intensity') return { min: 0, max: 1, step: 0.05 };
+    return { min: -100, max: 100, step: 1 };
+  }
+  return k === 'amount' ? { min: 0, max: 2, step: 0.05 } : { min: 0, max: 60, step: 0.5 };
+}
+
 function EffectsSection({ ctx, clip }: { ctx: TimelineCtx; clip: SceneNode<'clip'> }) {
   const s = ctx.store.getState();
   const effects = clip.props.effects;
@@ -295,7 +304,10 @@ function EffectsSection({ ctx, clip }: { ctx: TimelineCtx; clip: SceneNode<'clip
         <MenuButton
           className="icon-btn sm"
           label="Add effect"
-          items={FILTERS.map((f) => ({ label: t(`filters.${f}`), onSelect: () => s.commit({ kind: 'listInsert', id: clip.id, prop: 'effects', items: [{ id: `fx_${Math.random().toString(36).slice(2, 10)}`, effect: f, params: { ...FILTER_DEFAULTS[f] }, enabled: true }] }, `Add ${t(`filters.${f}`)}`) }))}
+          items={[
+            { label: t('filters.colorGrade'), onSelect: () => s.commit({ kind: 'listInsert', id: clip.id, prop: 'effects', items: [{ id: `fx_${Math.random().toString(36).slice(2, 10)}`, effect: 'colorGrade', params: { ...COLOR_GRADE_DEFAULTS }, enabled: true }] }, `Add ${t('filters.colorGrade')}`) },
+            ...FILTERS.map((f) => ({ label: t(`filters.${f}`), onSelect: () => s.commit({ kind: 'listInsert', id: clip.id, prop: 'effects', items: [{ id: `fx_${Math.random().toString(36).slice(2, 10)}`, effect: f, params: { ...FILTER_DEFAULTS[f] }, enabled: true }] }, `Add ${t(`filters.${f}`)}`) })),
+          ]}
         >
           <Plus />
         </MenuButton>
@@ -313,17 +325,16 @@ function EffectsSection({ ctx, clip }: { ctx: TimelineCtx; clip: SceneNode<'clip
               <Trash2 />
             </IconButton>
           </div>
+          {fx.effect === 'colorGrade' && fx.assetId && <p className="muted" style={{ fontSize: 'var(--fs-xs)' }}>{t('video.gradeLook')}</p>}
           {Object.entries(fx.params)
-            .filter(([k]) => k !== 'seed')
+            .filter(([k]) => k !== 'seed' && (k !== 'intensity' || (fx.effect === 'colorGrade' && fx.assetId)))
             .map(([k, val]) => (
               <NumberField
                 key={k}
                 compact
-                label={k === 'amount' ? t('adjust.amount') : k === 'radius' ? 'Radius' : k === 'size' ? t('image.size') : k}
+                label={fx.effect === 'colorGrade' ? t(`video.grade.${k as 'exposure'}`) : k === 'amount' ? t('adjust.amount') : k === 'radius' ? 'Radius' : k === 'size' ? t('image.size') : k}
                 value={val}
-                min={0}
-                max={k === 'amount' ? 2 : 60}
-                step={k === 'amount' ? 0.05 : 0.5}
+                {...effectRange(fx.effect, k)}
                 onInput={(x) => s.setTransient(clip.id, { effects: effects.map((e) => (e.id === fx.id ? { ...e, params: { ...e.params, [k]: x } } : e)) })}
                 onCommit={(x) => commitFx(fx, { params: { ...fx.params, [k]: x } }, 'Adjust effect')}
               />

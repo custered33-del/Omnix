@@ -23,6 +23,7 @@ import {
   type SceneNode,
   type TrackType,
 } from '@omnix/core';
+import { COLOR_GRADE_DEFAULTS, FILTER_DEFAULTS } from '@omnix/imaging';
 import { defineTool, ToolError, zProjectId } from '../registry.js';
 import { edit, need, writeResult, zWriteResult } from './helpers.js';
 import { captionClipOps, captionSegments } from '../../captions/core.js';
@@ -290,7 +291,7 @@ export const timelineTools = [
       const effectId = newId('fx');
       const out = await edit(ctx, args.projectId, `Add ${args.effect}`, (state) => {
         need(state, args.clipId, 'clip', 'clip');
-        return [{ kind: 'listInsert', id: args.clipId, prop: 'effects', items: [{ id: effectId, effect: args.effect, params: args.params, enabled: true }] }];
+        return [{ kind: 'listInsert', id: args.clipId, prop: 'effects', items: [{ id: effectId, effect: args.effect, params: { ...(args.effect === 'colorGrade' ? COLOR_GRADE_DEFAULTS : FILTER_DEFAULTS[args.effect]), ...args.params }, enabled: true }] }];
       });
       return writeResult(out, { effectId });
     },

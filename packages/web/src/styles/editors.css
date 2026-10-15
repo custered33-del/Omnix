@@ -959,3 +959,39 @@
 .kf-on {
   color: var(--accent);
 }
+
+/* AI attribution marker: what an AI collaborator changed last. */
+.ai-mark {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--ai-soft);
+  color: var(--ai);
+  cursor: help;
+}
+.ai-mark.on-clip {
+  position: absolute;
+  top: 2px;
+  right: 8px;
+  width: 15px;
+  height: 15px;
+  background: rgba(255, 255, 255, 0.92);
+  color: #6a48d7;
+}
+.ai-mark.blk-ai {
+  position: absolute;
+  right: -26px;
+  top: 0.2em;
+}
+.proposal-steps {
+  margin: 0;
+  padding-left: 18px;
+  font-size: var(--fs-sm);
+  color: var(--text-2);
+}
+.proposal-steps li + li {
+  margin-top: 2px;
+}

@@ -189,3 +189,39 @@ export function temperature(r: Raster, amount: number): Raster {
   }
   return out;
 }
+
+/** Parameters of the video "color grade" effect (all 0 = unchanged). */
+export const COLOR_GRADE_DEFAULTS: Record<string, number> = { exposure: 0, contrast: 0, saturation: 0, temperature: 0, tint: 0, intensity: 1 };
+
+/**
+ * One-pass color grade for clips: exposure (stops, -3..3), contrast, saturation, temperature and
+ * tint (-100..100), then an optional 3D LUT (a look from a style reference) at `intensity`.
+ */
+export function colorGrade(r: Raster, params: Record<string, number>, lut?: Lut3D): Raster {
+  const exposure = Math.pow(2, params.exposure ?? 0);
+  const c = (params.contrast ?? 0) / 100;
+  const contrast = c >= 0 ? 1 + c * 1.5 : 1 + c * 0.9;
+  const sat = 1 + (params.saturation ?? 0) / 100;
+  const temp = (params.temperature ?? 0) / 100;
+  const tint = (params.tint ?? 0) / 100;
+  const intensity = Math.max(0, Math.min(1, params.intensity ?? 1));
+  const out = cloneRaster(r);
+  const d = out.data;
+  const plain = exposure === 1 && contrast === 1 && sat === 1 && !temp && !tint;
+  if (!plain) {
+    for (let i = 0; i < d.length; i += 4) {
+      if (d[i + 3] === 0) continue;
+      let R = d[i]! * exposure + 40 * temp;
+      let G = d[i + 1]! * exposure + 8 * temp - 30 * tint;
+      let B = d[i + 2]! * exposure - 40 * temp;
+      R = (R - 128) * contrast + 128;
+      G = (G - 128) * contrast + 128;
+      B = (B - 128) * contrast + 128;
+      const L = 0.2126 * R + 0.7152 * G + 0.0722 * B;
+      d[i] = clamp255(L + (R - L) * sat);
+      d[i + 1] = clamp255(L + (G - L) * sat);
+      d[i + 2] = clamp255(L + (B - L) * sat);
+    }
+  }
+  return lut && intensity > 0 ? applyLut3D(out, lut, intensity) : out;
+}

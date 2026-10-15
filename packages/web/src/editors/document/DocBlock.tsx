@@ -4,6 +4,7 @@ import type { SceneNode, TextStyle } from '@omnix/core';
 import { inlineToHtml } from '@omnix/core';
 import { assetUrl } from '../../lib/api.js';
 import { EmbedView } from '../../components/EmbedView.js';
+import { AiMarker } from '../../components/AiMarker.js';
 import { CodeMirror } from '../code/CodeMirror.js';
 import { caretOffset, caretOnEdgeLine, domToInline, setCaret, splitAtCaret } from './inline.js';
 import { indent, LIST_BLOCKS, mergeNext, mergeWithPrevious, moveBlock, pasteMarkdown, shortcutFor, splitBlock, suggestEdit, suggestInsert, turnInto, type DocCtx } from './docOps.js';
@@ -85,6 +86,7 @@ export const DocBlock = memo(function DocBlock({ block, env, style, number, disp
           </button>
         </div>
       )}
+      <AiMarker nodeId={block.id} className="blk-ai" />
       {p.blockType === 'bullet' && <span className="blk-marker" aria-hidden="true">{['•', '◦', '▪', '•', '◦'][p.level ?? 0]}</span>}
       {p.blockType === 'numbered' && <span className="blk-marker" aria-hidden="true">{number}.</span>}
       {p.blockType === 'todo' && (

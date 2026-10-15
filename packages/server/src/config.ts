@@ -12,11 +12,19 @@ export interface OmnixConfig {
   /** S3-compatible blob storage (optional; local content-addressed storage otherwise). */
   s3: { endpoint: string; region: string; bucket: string; accessKeyId: string; secretAccessKey: string; forcePathStyle: boolean } | null;
   anthropicApiKey: string | null;
+  /** Anthropic API base URL (ANTHROPIC_BASE_URL), for proxies and gateways. */
+  anthropicBaseUrl: string;
   /**
    * Model for the built-in agent runner and natural-language commands. When unset, the newest
    * model the API key can use is looked up from the Models API at runtime.
    */
   agentModel: string | null;
+  /**
+   * Optional image generation provider for generative fill and extend: any server speaking the
+   * OpenAI images edit API (OMNIX_IMAGE_GEN_URL, OMNIX_IMAGE_GEN_API_KEY, OMNIX_IMAGE_GEN_MODEL).
+   * Without one, Omnix synthesizes fills from the surrounding image.
+   */
+  imageGen: { url: string; apiKey: string | null; model: string | null } | null;
   /** Directory with the built web app to serve (packages/web/dist). */
   webDist: string | null;
   /** Dev mode: relaxed cookies, verbose logs. */
@@ -57,6 +65,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): OmnixConfig {
     databaseUrl: env.OMNIX_DATABASE_URL ?? env.DATABASE_URL ?? null,
     s3,
     anthropicApiKey: env.ANTHROPIC_API_KEY ?? null,
+    anthropicBaseUrl: (env.ANTHROPIC_BASE_URL ?? 'https://api.anthropic.com').replace(/\/$/, ''),
+    imageGen: env.OMNIX_IMAGE_GEN_URL ? { url: env.OMNIX_IMAGE_GEN_URL.replace(/\/$/, ''), apiKey: env.OMNIX_IMAGE_GEN_API_KEY ?? null, model: env.OMNIX_IMAGE_GEN_MODEL ?? null } : null,
     agentModel: env.OMNIX_AGENT_MODEL ?? null,
     webDist: env.OMNIX_WEB_DIST ?? defaultDist,
     dev: env.NODE_ENV !== 'production',

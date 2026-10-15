@@ -8,6 +8,7 @@ import { useProject } from '../../state/project.js';
 import { useHostVersion, useRenderHost } from '../../render/context.js';
 import { Menu, MenuButton, type MenuItemDef } from '../../ui/primitives.js';
 import type { SlidesCtx } from './SlideStage.js';
+import { AiMarker } from '../../components/AiMarker.js';
 
 const LAYOUTS = Object.keys(LAYOUT_LABELS) as SlideLayout[];
 
@@ -98,6 +99,7 @@ export function SlideSorter({ ctx }: { ctx: SlidesCtx }) {
             <span className="sorter-num">{i + 1}</span>
             <Thumb state={state} slide={sl} />
             <span className="sorter-flags">
+              <AiMarker ids={[sl.id, ...sl.children]} />
               {sl.props.hidden && <EyeOff size={12} aria-label="Hidden" />}
               {sl.props.rehearsalSeconds !== null && (
                 <span title="Rehearsed time">

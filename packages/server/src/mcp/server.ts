@@ -88,6 +88,13 @@ export function createMcpServer(services: Services, principal: Principal): McpSe
         annotations: { title: tool.title, readOnlyHint: tool.access === 'read', destructiveHint: false, openWorldHint: false },
       },
       async (args: unknown) => {
+        // A connection driving an autonomous run: hold writes while it waits for approval, gate exports and deletions.
+        const gate = services.ext.agentGate as ((p: Principal, projectId: string, t: ToolDef, a: unknown) => Promise<string | null>) | undefined;
+        const projectId = (args as { projectId?: unknown } | undefined)?.projectId;
+        if (gate && typeof projectId === 'string') {
+          const refusal = await gate(ctx.principal, projectId, tool, args);
+          if (refusal) return { isError: true, content: [{ type: 'text', text: refusal }] };
+        }
         const r = await runTool(tool, args, ctx);
         if (!r.ok) return { isError: true, content: [{ type: 'text', text: r.error ?? 'Tool failed' }] };
         return toContent(r.result!);

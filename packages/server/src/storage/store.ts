@@ -37,6 +37,7 @@ export const C = {
   plugins: 'plugins',
   shares: 'shares',
   meta: 'meta',
+  agentTranscripts: 'agent_transcripts',
 } as const;
 
 export const commitLog = (projectId: string) => `commits/${projectId}`;

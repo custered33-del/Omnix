@@ -1,6 +1,6 @@
 import express from 'express';
 import { z } from 'zod';
-import { TOOL_KINDS, diffStates, outlineProject, summarizeDiff, zOperation, type ToolKind } from '@omnix/core';
+import { TOOL_KINDS, aiMarks, diffStates, outlineProject, summarizeDiff, zOperation, type ToolKind } from '@omnix/core';
 import type { Services } from '../services.js';
 import { author, h, requireUser } from './middleware.js';
 import { renderNode } from '../render/renderNode.js';
@@ -62,6 +62,7 @@ export function projectRoutes(services: Services): express.Router {
         head: session.head,
         proposals: session.listProposals('open'),
         snapshots: session.listSnapshots(),
+        aiMarks: Object.fromEntries(Object.entries(aiMarks(session.log())).filter(([nodeId]) => session.state.nodes[nodeId])),
       });
     }),
   );
@@ -282,8 +283,8 @@ export function projectRoutes(services: Services): express.Router {
       await P.requireAccess(id, user.id, 'write');
       const body = z.object({ reason: z.string().max(1000).optional() }).parse(req.body ?? {});
       const proposal = await P.rejectProposal(id, String(req.params.pid), author(req), body.reason);
-      const notes = services.ext.notes as { recordRejection(projectId: string, label: string, reason: string | undefined, by: import('@omnix/core').Author): Promise<void> } | undefined;
-      await notes?.recordRejection(id, proposal.label, body.reason, author(req));
+      const notes = services.ext.notes as { recordRejection(projectId: string, label: string, reason: string | undefined, by: import('@omnix/core').Author, proposalId?: string): Promise<unknown> } | undefined;
+      await notes?.recordRejection(id, proposal.label, body.reason, author(req), proposal.id);
       res.json({ proposal });
     }),
   );

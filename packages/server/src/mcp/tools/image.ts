@@ -367,34 +367,45 @@ export const imageTools = [
         const ay = args.anchor?.y ?? 0.5;
         const dx = Math.round(args.offsetX ?? (args.width - cp.width) * ax);
         const dy = Math.round(args.offsetY ?? (args.height - cp.height) * ay);
-        const ops: Operation[] = [{ kind: 'update', id: canvas.id, set: { width: args.width, height: args.height, selection: null } }];
-        const shiftMask = async (sel: Selection): Promise<Selection> => {
-          if (sel.kind === 'rect' || sel.kind === 'ellipse') return { ...sel, x: sel.x + dx, y: sel.y + dy };
-          if (sel.kind === 'polygon') return { ...sel, points: sel.points.map((p) => ({ x: p.x + dx, y: p.y + dy })) };
-          const m = await selectionToMask(ctx.services.renderHost(), sel, cp.width, cp.height);
-          const moved = await sharp(Buffer.from(m.data), { raw: { width: m.width, height: m.height, channels: 1 } })
-            .extend({ top: Math.max(0, dy), left: Math.max(0, dx), bottom: Math.max(0, args.height - m.height - dy), right: Math.max(0, args.width - m.width - dx), background: { r: 0, g: 0, b: 0, alpha: 1 } })
-            .extract({ left: Math.max(0, -dx), top: Math.max(0, -dy), width: args.width, height: args.height })
-            .raw()
-            .toBuffer();
-          const id = await uploadRaster(ctx.services, { width: args.width, height: args.height, data: new Uint8ClampedArray(moved) }, 'mask.png', args.projectId, ctx.principal.user.id, { asMask: true });
-          return { kind: 'mask', assetId: id };
-        };
-        const visit = async (parentId: string) => {
-          for (const n of childrenOf(state, parentId)) {
-            if (n.type !== 'layer') continue;
-            const p = (n as SceneNode<'layer'>).props;
-            const set: Record<string, unknown> = {};
-            if (!['fill', 'adjustment', 'group'].includes(p.layerType)) Object.assign(set, { x: p.x + dx, y: p.y + dy });
-            if (p.mask) set.mask = { ...p.mask, source: await shiftMask(p.mask.source) };
-            if (Object.keys(set).length) ops.push({ kind: 'update', id: n.id, set });
-            if (p.layerType === 'group') await visit(n.id);
-          }
-        };
-        await visit(canvas.id);
+        const ops = await canvasResizeOps(ctx.services, state, canvas.id, args.width, args.height, dx, dy, args.projectId, ctx.principal.user.id);
         const out = await ctx.apply(args.projectId, ops, `Resize canvas to ${args.width}×${args.height}`);
         return writeResult(out);
       });
     },
   }),
 ];
+
+/**
+ * Operations that resize a canvas and move every layer (and its mask) by (dx, dy), so content keeps its
+ * place relative to the anchor. Shared by the resize tool and generative extend.
+ */
+export async function canvasResizeOps(services: ToolContext['services'], state: ProjectState, canvasId: string, width: number, height: number, dx: number, dy: number, projectId: string, ownerId: string): Promise<Operation[]> {
+  const canvas = state.nodes[canvasId] as SceneNode<'canvas'>;
+  const cp = canvas.props;
+  const ops: Operation[] = [{ kind: 'update', id: canvas.id, set: { width, height, selection: null } }];
+  const shiftMask = async (sel: Selection): Promise<Selection> => {
+    if (sel.kind === 'rect' || sel.kind === 'ellipse') return { ...sel, x: sel.x + dx, y: sel.y + dy };
+    if (sel.kind === 'polygon') return { ...sel, points: sel.points.map((p) => ({ x: p.x + dx, y: p.y + dy })) };
+    const m = await selectionToMask(services.renderHost(), sel, cp.width, cp.height);
+    const moved = await sharp(Buffer.from(m.data), { raw: { width: m.width, height: m.height, channels: 1 } })
+      .extend({ top: Math.max(0, dy), left: Math.max(0, dx), bottom: Math.max(0, height - m.height - dy), right: Math.max(0, width - m.width - dx), background: { r: 0, g: 0, b: 0, alpha: 1 } })
+      .extract({ left: Math.max(0, -dx), top: Math.max(0, -dy), width, height })
+      .raw()
+      .toBuffer();
+    const id = await uploadRaster(services, { width, height, data: new Uint8ClampedArray(moved) }, 'mask.png', projectId, ownerId, { asMask: true });
+    return { kind: 'mask', assetId: id };
+  };
+  const visit = async (parentId: string) => {
+    for (const n of childrenOf(state, parentId)) {
+      if (n.type !== 'layer') continue;
+      const p = (n as SceneNode<'layer'>).props;
+      const set: Record<string, unknown> = {};
+      if (!['fill', 'adjustment', 'group'].includes(p.layerType)) Object.assign(set, { x: p.x + dx, y: p.y + dy });
+      if (p.mask) set.mask = { ...p.mask, source: await shiftMask(p.mask.source) };
+      if (Object.keys(set).length) ops.push({ kind: 'update', id: n.id, set });
+      if (p.layerType === 'group') await visit(n.id);
+    }
+  };
+  await visit(canvas.id);
+  return ops;
+}

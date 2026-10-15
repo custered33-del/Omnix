@@ -1,7 +1,7 @@
 import { createStore, type StoreApi } from 'zustand/vanilla';
 import { useStore } from 'zustand';
 import { createContext, useContext } from 'react';
-import { applyOp, newId, type Operation, type ProjectState, type Proposal, type Snapshot, type ToolKind, type Commit, type SceneNode } from '@omnix/core';
+import { applyCommitMarks, applyOp, newId, type AiMark, type Operation, type ProjectState, type Proposal, type Snapshot, type ToolKind, type Commit, type SceneNode } from '@omnix/core';
 import { api, post, ApiError } from '../lib/api.js';
 import { realtime } from './realtime.js';
 import { toast } from '../ui/toast.js';
@@ -68,6 +68,8 @@ export interface ProjectStoreState {
   codeStreams: Record<string, CodeStream>;
   /** Monotonic counter bumped on every state change (cheap change detection for canvases). */
   version: number;
+  /** Nodes last changed by an AI collaborator (cleared when a person edits them). */
+  aiMarks: Record<string, AiMark>;
 
   load(): Promise<void>;
   commit(op: Operation, label?: string): string | null;
@@ -170,16 +172,17 @@ export function createProjectStore(projectId: string): ProjectStore {
       preview: null,
       codeStreams: {},
       version: 0,
+      aiMarks: {},
 
       async load() {
         try {
-          const r = await api<{ project: ProjectMeta; state: ProjectState; head: string | null; proposals: Proposal[]; snapshots: Snapshot[] }>(`/api/projects/${projectId}`);
+          const r = await api<{ project: ProjectMeta; state: ProjectState; head: string | null; proposals: Proposal[]; snapshots: Snapshot[]; aiMarks?: Record<string, AiMark> }>(`/api/projects/${projectId}`);
           const recovered = loadPending(projectId).filter((p) => !get().pending.some((q) => q.clientOpId === p.clientOpId));
           const pending = [...get().pending, ...recovered];
           const current = get().activeDocId;
           const docs = r.state.nodes[r.state.rootId]!.children.filter((id) => !['notes', 'comments'].includes(r.state.nodes[id]!.type));
           const activeDocId = current && r.state.nodes[current] ? current : docs[0] ?? null;
-          recompute({ status: 'ready', error: null, meta: r.project, confirmed: r.state, head: r.head, proposals: r.proposals, snapshots: r.snapshots, pending, activeDocId });
+          recompute({ status: 'ready', error: null, meta: r.project, confirmed: r.state, head: r.head, proposals: r.proposals, snapshots: r.snapshots, pending, activeDocId, aiMarks: r.aiMarks ?? {} });
           if (recovered.length) {
             toast.info(plural('app.unsavedRecovered', recovered.length));
             for (const p of recovered) sendPending(p);
@@ -359,7 +362,7 @@ export function createProjectStore(projectId: string): ProjectStore {
       }
       const pending = msg.clientOpId ? st.pending.filter((p) => p.clientOpId !== msg.clientOpId) : st.pending;
       if (pending.length !== st.pending.length) savePending(projectId, pending);
-      recomputeFromOutside({ confirmed, head: msg.commit.id, pending });
+      recomputeFromOutside({ confirmed, head: msg.commit.id, pending, aiMarks: applyCommitMarks(st.aiMarks, msg.commit) });
     }),
     realtime.on('ack', (msg) => {
       const st = s();

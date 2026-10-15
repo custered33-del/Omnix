@@ -8,6 +8,7 @@ import { useRenderHost } from '../../render/context.js';
 import { thumbUrl, type AssetSummary } from '../../lib/api.js';
 import { Menu, MenuButton, type MenuItemDef } from '../../ui/primitives.js';
 import { t } from '../../i18n/index.js';
+import { AiMarker } from '../../components/AiMarker.js';
 import { toFrame } from './timelineState.js';
 import { addAssetClip, addTrack, commitOp, deleteSelected, duplicateSelected, previewOp, snap, snapPoints, splitAtPlayhead, TRACK_COLORS, TRACK_HEIGHT, tryOp, type TimelineCtx } from './timelineOps.js';
 
@@ -499,6 +500,7 @@ function ClipView({ clip, track, pps, selected, host, onDown, onMenu, onSelect }
       {p.transitionIn && <div className="trans" style={{ left: 0, width: p.transitionIn.duration * pps }} />}
       {p.transitionOut && <div className="trans out" style={{ width: p.transitionOut.duration * pps }} />}
       <span className="clip-label">{label}</span>
+      <AiMarker nodeId={clip.id} className="on-clip" />
       {(p.speed !== 1 || p.reverse || p.speedRamp) && <span className="speed">{p.speedRamp ? 'ramp' : `${p.reverse ? '◀ ' : ''}${p.speed}×`}</span>}
       {kfTimes.map((k) => (
         <span key={k} className="kf" style={{ left: k * pps }} />
@@ -551,6 +553,7 @@ function LayerBar({ layer, pps, selected, onDown }: { layer: SceneNode<'animLaye
         {p.rig && ' · rig'}
         {p.motionPath && ' · path'}
       </span>
+      <AiMarker nodeId={layer.id} className="on-clip" />
       {kfTimes.map((k) => (
         <span key={k} className="kf" style={{ left: k * pps }} />
       ))}

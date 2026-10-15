@@ -306,7 +306,7 @@ export class ProjectSession {
   /* -------------------------------------------------------------- */
 
   /** Record a proposed change. It must apply cleanly to the current state. */
-  propose(ops: Operation[], meta: { author: Author; label: string; description?: string; jobId?: string }): Proposal {
+  propose(ops: Operation[], meta: { author: Author; label: string; description?: string; jobId?: string; steps?: string[] }): Proposal {
     applyOp(this._state, { kind: 'batch', ops }); // validates; throws on failure
     const p: Proposal = {
       id: newId('prop'),
@@ -319,6 +319,8 @@ export class ProjectSession {
       createdAt: new Date().toISOString(),
     };
     if (meta.jobId) p.jobId = meta.jobId;
+    // Named steps pair one-to-one with operations (each step usually a batch), so reviewers can keep or drop each.
+    if (meta.steps && meta.steps.length === ops.length && ops.length > 1) p.steps = [...meta.steps];
     this.proposals.set(p.id, p);
     this.emit({ type: 'proposal', proposal: p });
     return p;
@@ -331,9 +333,12 @@ export class ProjectSession {
   extendProposal(id: string, ops: Operation[], label: string): Proposal {
     const p = this.requireOpenProposal(id);
     if (p.sealed) throw new OpError(`Proposal ${id} is sealed`);
-    const combined = [...p.ops, ...ops];
+    // Keep one operation per step so each step can be kept or dropped on review.
+    const asOne = (list: Operation[]): Operation => (list.length === 1 ? list[0]! : { kind: 'batch', ops: list });
+    const base = p.steps && p.steps.length === p.ops.length ? p.ops : [asOne(p.ops)];
+    const combined = [...base, asOne(ops)];
     applyOp(this._state, { kind: 'batch', ops: combined }); // validates; throws on failure
-    const steps = [...(p.steps ?? [p.label]), label];
+    const steps = [...(p.steps && p.steps.length === p.ops.length ? p.steps : [p.label]), label];
     Object.assign(p, { ops: combined, steps, label: `${steps[0]} and ${steps.length - 1} more ${steps.length === 2 ? 'change' : 'changes'}`, updatedAt: new Date().toISOString() });
     this.emit({ type: 'proposal', proposal: p });
     return p;

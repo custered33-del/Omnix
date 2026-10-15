@@ -21,6 +21,10 @@ export interface NoteProps {
   text: string;
   author: Author;
   createdAt: string;
+  /** Recorded by Omnix from something that happened (a rejection, an approved command, a gate). */
+  auto?: boolean;
+  /** What the note is about, so the panel can link to it. */
+  ref?: { proposalId?: string; jobId?: string; commitId?: string };
 }
 
 /** Where a comment is pinned. Exactly one tool-specific locator is normally set. */
@@ -162,6 +166,26 @@ export interface SmartFilter {
   opacity: number;
 }
 
+/** How generated content was made, so the editor can show the prompt and mask and offer to redo it. */
+export interface GenerationInfo {
+  kind: 'fill' | 'extend' | 'style';
+  prompt: string;
+  /** Which provider produced it ("builtin" or the configured image model). */
+  provider: string;
+  /** The area that was generated (a grayscale mask asset), shown to the user. */
+  maskAssetId?: string | null;
+  createdAt: string;
+}
+
+/** Generated video: the clip now plays a new render; the original is kept for comparison and undo. */
+export interface ClipGeneration extends GenerationInfo {
+  /** The generated area in source-video pixels. */
+  region?: { x: number; y: number; width: number; height: number } | null;
+  sourceAssetId: string;
+  sourceIn: number;
+  sourceOut: number;
+}
+
 export interface LayerProps {
   name: string;
   layerType: LayerType;
@@ -202,6 +226,8 @@ export interface LayerProps {
   adjustment?: Adjustment;
   /** fill */
   fillColor?: Color;
+  /** Set on layers made by generative fill or extend. */
+  generation?: GenerationInfo | null;
 }
 
 /* ------------------------------------------------------------------ */
@@ -258,6 +284,8 @@ export interface ClipEffect {
   effect: FilterKind | 'colorGrade';
   params: Record<string, number>;
   enabled: boolean;
+  /** colorGrade: an optional .cube LUT asset (a look, for example from a style reference). */
+  assetId?: string | null;
 }
 
 export interface TitleSpec {
@@ -312,6 +340,8 @@ export interface ClipProps {
   transitionOut: Transition | null;
   title: TitleSpec | null;
   backgroundRemoval: BackgroundRemoval | null;
+  /** Set when the clip's media was regenerated (generative fill on video). */
+  generation?: ClipGeneration | null;
 }
 
 /* Animation */

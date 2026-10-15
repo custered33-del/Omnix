@@ -1,6 +1,6 @@
 import type { ClipProps, ProjectState, SceneNode, Transition } from '@omnix/core';
 import { clipEnd, clipPropsAt, clipsOf, childrenOf, ease, requireNodeOfType, sourceTimeAt, tracksOf, playbackTime } from '@omnix/core';
-import { applyFilter, removeBackground, gaussianBlur } from '@omnix/imaging';
+import { applyFilter, colorGrade, removeBackground, gaussianBlur } from '@omnix/imaging';
 import { ctxOf, drawable, fontStack, readRaster, writeRaster, type CanvasLike, type Ctx2D, type Drawable, type RenderHost } from './host.js';
 import { drawAnimLayer } from './animation.js';
 import { drawRichText } from './text.js';
@@ -55,8 +55,7 @@ export function renderSequenceFrame(host: RenderHost, state: ProjectState, seque
           if (t < p.start || t >= clipEnd(p) || options.draft) continue;
           let r = readRaster(out);
           for (const fx of p.effects.filter((e) => e.enabled)) {
-            if (fx.effect === 'colorGrade') continue;
-            r = applyFilter(r, fx.effect, scaleParams(fx.params, scale));
+            r = fx.effect === 'colorGrade' ? colorGrade(r, fx.params, fx.assetId ? env.host.lut?.(fx.assetId) : undefined) : applyFilter(r, fx.effect, scaleParams(fx.params, scale));
           }
           writeRaster(out, r);
         }
@@ -224,8 +223,7 @@ function drawClip(env: SeqEnv, ctx: Ctx2D, p: ClipProps, t: number, extended = f
       }).raster;
     }
     for (const fx of p.effects.filter((e) => e.enabled)) {
-      if (fx.effect === 'colorGrade') continue;
-      r = applyFilter(r, fx.effect, scaleParams(fx.params, scale));
+      r = fx.effect === 'colorGrade' ? colorGrade(r, fx.params, fx.assetId ? host.lut?.(fx.assetId) : undefined) : applyFilter(r, fx.effect, scaleParams(fx.params, scale));
     }
     if (props.blur > 0.25) r = gaussianBlur(r, props.blur * scale);
     writeRaster(target, r);

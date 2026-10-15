@@ -8,6 +8,9 @@ import {
   setDeterministicIds,
   diffStates,
   OpError,
+  aiMarks,
+  applyCommitMarks,
+  changedNodeIds,
   type Author,
   type SessionEvent,
 } from '../src/index.js';
@@ -229,5 +232,38 @@ describe('snapshots and persistence', () => {
     addLayer(s, canvasId, 'A', seb);
     replica.ingest(s.log()[0]!);
     expect(diffStates(replica.state, s.state).empty).toBe(true);
+  });
+});
+
+describe('AI attribution', () => {
+  it('marks what the AI changed last and clears it when a person edits the node', () => {
+    const { s, canvasId } = session();
+    const a = addLayer(s, canvasId, 'A', claude);
+    const b = addLayer(s, canvasId, 'B', seb);
+    let marks = aiMarks(s.log());
+    expect(Object.keys(marks)).toEqual([a]);
+    expect(marks[a]).toMatchObject({ by: 'Claude', authorId: 'ai_claude' });
+    // Creating a layer does not mark the canvas it went into.
+    expect(marks[canvasId]).toBeUndefined();
+    s.commit({ kind: 'update', id: b, set: { opacity: 0.5 } }, { author: claude, label: 'Fade B' });
+    marks = aiMarks(s.log());
+    expect(marks[b]!.label).toBe('Fade B');
+    s.commit({ kind: 'update', id: a, set: { name: 'Mine now' } }, { author: seb });
+    marks = aiMarks(s.log());
+    expect(marks[a]).toBeUndefined();
+    expect(marks[b]).toBeDefined();
+    // Incremental folding gives the same answer as a full replay.
+    let inc = {};
+    for (const c of s.log()) inc = applyCommitMarks(inc, c);
+    expect(inc).toEqual(marks);
+  });
+
+  it('credits approved proposals to the AI and names the approver', () => {
+    const { s, canvasId } = session();
+    const l = makeNode('layer', layerProps('fill', { name: 'Glow' }));
+    const p = s.propose([{ kind: 'create', parentId: canvasId, nodes: [l] }], { author: claude, label: 'Add glow' });
+    s.acceptProposal(p.id, seb);
+    expect(aiMarks(s.log())[l.id]).toMatchObject({ by: 'Claude', approvedBy: 'Seb' });
+    expect(changedNodeIds({ kind: 'move', id: l.id, parentId: canvasId, index: 0 })).toEqual([l.id]);
   });
 });

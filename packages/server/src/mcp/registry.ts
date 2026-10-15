@@ -135,7 +135,8 @@ export function makeToolContext(services: Services, principal: Principal, via: '
         throw new ToolError('This connection is view-only. Ask the user to switch Claude to "edit with approval" or "autonomous" in Omnix to make changes.');
       }
       await ctx.requireProject(projectId, 'write');
-      const job = jobId ?? undefined;
+      // Changes made while a connection drives an autonomous run are attributed to that run.
+      const job = jobId ?? (services.ext.agentRunFor as ((p: Principal, projectId: string) => string | undefined) | undefined)?.(principal, projectId);
       // Comments and suggested edits are already things people review, so they apply directly.
       if (principal.mode === 'autonomous' || options?.reviewable) {
         const op: Operation = ops.length === 1 ? ops[0]! : { kind: 'batch', ops };

@@ -60,6 +60,8 @@ export const zVectorShape = z.object({
   strokeWidth: z.number().min(0),
 });
 
+export const zGeneration = z.object({ kind: z.enum(['fill', 'extend', 'style']), prompt: z.string().max(2000), provider: z.string().max(200), maskAssetId: z.string().nullable().optional(), createdAt: z.string() });
+
 export const zAdjustment = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('curves'), channel: z.enum(['rgb', 'r', 'g', 'b']), points: z.array(z.tuple([z.number(), z.number()])).min(2) }),
   z.object({
@@ -173,7 +175,7 @@ const zBone = z.object({
 export const PROP_SCHEMAS: Record<NodeType, z.ZodObject> = {
   project: z.object({ name: z.string().max(200), primaryTool: z.enum(TOOL_KINDS as [string, ...string[]]), aiConsent: z.boolean(), description: z.string() }),
   notes: z.object({ name: z.string() }),
-  note: z.object({ kind: z.enum(['decision', 'prompt', 'rejected', 'note']), text: z.string().max(20000), author: zAuthor, createdAt: z.string() }),
+  note: z.object({ kind: z.enum(['decision', 'prompt', 'rejected', 'note']), text: z.string().max(20000), author: zAuthor, createdAt: z.string(), auto: z.boolean().optional(), ref: z.object({ proposalId: z.string().optional(), jobId: z.string().optional(), commitId: z.string().optional() }).optional() }),
   comments: z.object({ name: z.string() }),
   comment: z.object({
     anchor: z.object({
@@ -234,6 +236,7 @@ export const PROP_SCHEMAS: Record<NodeType, z.ZodObject> = {
     boxWidth: z.number().nullable().optional(),
     adjustment: zAdjustment.optional(),
     fillColor: zColor.optional(),
+    generation: zGeneration.nullable().optional(),
   }),
   sequence: z.object({
     name: z.string(),
@@ -272,13 +275,17 @@ export const PROP_SCHEMAS: Record<NodeType, z.ZodObject> = {
     opacity: z.number().min(0).max(1),
     volume: z.number().min(-60).max(24),
     keyframes: zKeyframes,
-    effects: z.array(z.object({ id: z.string(), effect: z.union([zFilterKind, z.literal('colorGrade')]), params: z.record(z.string(), z.number()), enabled: z.boolean() })),
+    effects: z.array(z.object({ id: z.string(), effect: z.union([zFilterKind, z.literal('colorGrade')]), params: z.record(z.string(), z.number()), enabled: z.boolean(), assetId: z.string().nullable().optional() })),
     transitionIn: zTransition.nullable(),
     transitionOut: zTransition.nullable(),
     title: zTitleSpec.nullable(),
     backgroundRemoval: z
       .object({ enabled: z.boolean(), method: z.enum(['chroma', 'auto', 'provider']), keyColor: zColor, tolerance: z.number().min(0).max(1), softness: z.number().min(0).max(1) })
       .nullable(),
+    generation: zGeneration
+      .extend({ region: z.object({ x: z.number(), y: z.number(), width: z.number(), height: z.number() }).nullable().optional(), sourceAssetId: z.string(), sourceIn: z.number(), sourceOut: z.number() })
+      .nullable()
+      .optional(),
   }),
   animLayer: z.object({
     name: z.string(),
