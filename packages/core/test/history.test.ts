@@ -286,3 +286,73 @@ describe('AI attribution', () => {
     expect(changedNodeIds({ kind: 'move', id: l.id, parentId: canvasId, index: 0 })).toEqual([l.id]);
   });
 });
+
+describe('undo and redo with collaborators', () => {
+  const filter = (id: string) => ({ id, filter: 'grayscale' as const, params: {}, enabled: true, opacity: 1 });
+  const filters = (s: ProjectSession, layer: string) => ((s.state.nodes[layer]!.props as { filters: { id: string }[] }).filters ?? []).map((f) => f.id);
+
+  it('undo removes the item it added, even after others changed the list', () => {
+    const { s, canvasId } = session();
+    const layer = addLayer(s, canvasId, 'L', seb);
+    s.commit({ kind: 'listInsert', id: layer, prop: 'filters', items: [filter('f0'), filter('f1')] }, { author: claude });
+    s.commit({ kind: 'listInsert', id: layer, prop: 'filters', items: [filter('fa')] }, { author: seb });
+    s.commit({ kind: 'listRemove', id: layer, prop: 'filters', index: 0, count: 1 }, { author: claude });
+    s.commit({ kind: 'listInsert', id: layer, prop: 'filters', items: [filter('fb')] }, { author: claude });
+    expect(filters(s, layer)).toEqual(['f1', 'fa', 'fb']);
+    s.undo(seb);
+    expect(filters(s, layer)).toEqual(['f1', 'fb']);
+  });
+
+  it('redo brings back what collaborators added to the change', () => {
+    const { s, canvasId } = session();
+    const group = makeNode('layer', layerProps('group', { name: 'Group' }));
+    s.commit({ kind: 'create', parentId: canvasId, nodes: [group] }, { author: seb });
+    const child = makeNode('layer', layerProps('fill', { name: 'Child' }));
+    s.commit({ kind: 'create', parentId: group.id, nodes: [child] }, { author: claude });
+    s.commit({ kind: 'update', id: group.id, set: { name: 'Renamed' } }, { author: claude });
+    s.undo(seb);
+    expect(s.state.nodes[group.id]).toBeUndefined();
+    s.redo(seb);
+    expect(s.state.nodes[child.id]).toBeDefined();
+    expect((s.state.nodes[group.id]!.props as { name: string }).name).toBe('Renamed');
+  });
+
+  it('undo passes over a change whose target a collaborator deleted', () => {
+    const { s, canvasId } = session();
+    const a = addLayer(s, canvasId, 'A', seb);
+    const b = addLayer(s, canvasId, 'B', seb);
+    s.commit({ kind: 'update', id: b, set: { opacity: 0.5 } }, { author: seb });
+    s.commit({ kind: 'delete', id: b }, { author: claude });
+    // Seb's latest change touched B, which is gone; undo moves on to the one before (creating B... also gone), then A.
+    const c = s.undo(seb);
+    expect(c).not.toBeNull();
+    expect(s.state.nodes[a]).toBeUndefined();
+  });
+
+  it('a list update that added a field is undone after a save and reload too', () => {
+    const { s, canvasId } = session();
+    const layer = addLayer(s, canvasId, 'L', seb);
+    s.commit({ kind: 'listInsert', id: layer, prop: 'filters', items: [filter('f')] }, { author: seb });
+    s.commit({ kind: 'listUpdate', id: layer, prop: 'filters', itemId: 'f', set: { note: 'added' } }, { author: seb });
+    const reloaded = ProjectSession.fromJSON(JSON.parse(JSON.stringify(s.toJSON(false))));
+    reloaded.undo(seb);
+    const f = (reloaded.state.nodes[layer]!.props as unknown as { filters: Record<string, unknown>[] }).filters[0]!;
+    expect('note' in f).toBe(false);
+  });
+});
+
+describe('malformed changes', () => {
+  it('refuses a create whose nodes form a loop instead of a tree', () => {
+    const { s, canvasId } = session();
+    const r = makeNode('layer', layerProps('group', { name: 'R' }));
+    const a = makeNode('layer', layerProps('group', { name: 'A' }));
+    const b = makeNode('layer', layerProps('group', { name: 'B' }));
+    r.children = [a.id];
+    a.parentId = r.id;
+    a.children = [b.id];
+    b.parentId = a.id;
+    b.children = [a.id];
+    expect(() => s.commit({ kind: 'create', parentId: canvasId, nodes: [r, a, b] }, { author: seb })).toThrow(OpError);
+    expect(s.state.nodes[r.id]).toBeUndefined();
+  });
+});

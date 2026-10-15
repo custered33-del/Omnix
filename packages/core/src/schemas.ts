@@ -419,8 +419,8 @@ export const zOperation: z.ZodType<Operation> = z.lazy(() =>
     z.object({ kind: z.literal('update'), id: z.string(), set: z.record(z.string(), z.unknown()), unset: z.array(z.string()).optional() }),
     z.object({ kind: z.literal('move'), id: z.string(), parentId: z.string(), index: z.number().int().optional() }),
     z.object({ kind: z.literal('listInsert'), id: z.string(), prop: z.string(), index: z.number().int().optional(), items: z.array(z.unknown()).max(100000) }),
-    z.object({ kind: z.literal('listRemove'), id: z.string(), prop: z.string(), index: z.number().int().min(0), count: z.number().int().min(1) }),
-    z.object({ kind: z.literal('listUpdate'), id: z.string(), prop: z.string(), itemId: z.string(), set: z.record(z.string(), z.unknown()) }),
+    z.object({ kind: z.literal('listRemove'), id: z.string(), prop: z.string(), index: z.number().int().min(0), count: z.number().int().min(1), expect: z.array(z.unknown()).max(100000).optional() }),
+    z.object({ kind: z.literal('listUpdate'), id: z.string(), prop: z.string(), itemId: z.string(), set: z.record(z.string(), z.unknown()), unset: z.array(z.string()).max(1000).optional() }),
     z.object({ kind: z.literal('batch'), ops: z.array(zOperation).max(5000) }),
   ]),
 ) as z.ZodType<Operation>;

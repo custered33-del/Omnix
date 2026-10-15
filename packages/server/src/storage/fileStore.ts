@@ -16,7 +16,7 @@ export function safeName(s: string): string {
  */
 export class FileStore implements DocStore {
   readonly kind = 'file' as const;
-  private cache = new Map<string, Map<string, unknown>>();
+  private cache = new Map<string, Promise<Map<string, unknown>>>();
   private chains = new Map<string, Promise<void>>();
 
   constructor(private readonly root: string) {}
@@ -36,9 +36,18 @@ export class FileStore implements DocStore {
     return next;
   }
 
-  private async loadCollection(collection: string): Promise<Map<string, unknown>> {
-    const cached = this.cache.get(collection);
-    if (cached) return cached;
+  /** The collection's documents, read from disk once. Concurrent first reads share one load, so no write lands in a map that is then replaced. */
+  private loadCollection(collection: string): Promise<Map<string, unknown>> {
+    let loading = this.cache.get(collection);
+    if (!loading) {
+      loading = this.readCollection(collection);
+      this.cache.set(collection, loading);
+      loading.catch(() => this.cache.delete(collection));
+    }
+    return loading;
+  }
+
+  private async readCollection(collection: string): Promise<Map<string, unknown>> {
     const map = new Map<string, unknown>();
     const dir = this.colDir(collection);
     let files: string[] = [];
@@ -56,7 +65,6 @@ export class FileStore implements DocStore {
         // A torn or corrupt file is skipped rather than taking the whole store down.
       }
     }
-    this.cache.set(collection, map);
     return map;
   }
 

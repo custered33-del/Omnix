@@ -1,5 +1,5 @@
 import sharp from 'sharp';
-import { assetRefs, replaceAssetOps, type Operation } from '@omnix/core';
+import { assetIdsIn, assetRefs, replaceAssetOps, type Operation } from '@omnix/core';
 import { colorWord, differenceHash, dominantColors, hammingDistance } from '@omnix/imaging';
 import type { Services } from '../services.js';
 import type { BlobStore } from '../storage/blobs.js';
@@ -92,14 +92,41 @@ export async function assetUsage(services: Services, projects: { id: string; nam
   return out;
 }
 
-/** Whether any project at all (anyone's) still uses an asset. */
+const historyCache = new Map<string, { key: string; ids: Set<string> }>();
+
+/** Every asset a project's history could bring back: its first state, every change and its undo, and proposals still open. */
+async function historyAssetIds(services: Services, projectId: string): Promise<Set<string>> {
+  const session = await services.projects.session(projectId);
+  const commits = session.allCommits();
+  const open = session.listProposals().filter((p) => p.status === 'open' || p.status === 'conflict');
+  const key = `${commits.length}|${open.map((p) => `${p.id}:${p.ops.length}`).join(',')}`;
+  const hit = historyCache.get(projectId);
+  if (hit?.key === key) return hit.ids;
+  const ids = assetIdsIn(session.stateAt(null).nodes);
+  for (const c of commits) {
+    assetIdsIn(c.op, ids);
+    assetIdsIn(c.inverse, ids);
+  }
+  for (const p of open) assetIdsIn(p.ops, ids);
+  historyCache.set(projectId, { key, ids });
+  return ids;
+}
+
+/**
+ * Whether any project at all (anyone's) still uses an asset, or could use it again: undoing a
+ * change, going back to a saved version or accepting an open proposal must not find its file gone.
+ */
 export async function usedAnywhere(services: Services, assetId: string): Promise<boolean> {
-  return (await assetUsage(services, await services.projects.listMeta())).has(assetId);
+  const projects = await services.projects.listMeta();
+  if ((await assetUsage(services, projects)).has(assetId)) return true;
+  for (const p of projects) if ((await historyAssetIds(services, p.id)).has(assetId)) return true;
+  return false;
 }
 
 /**
  * Take an asset out of one person's library. The bytes are deleted only when nobody else owns
- * it and no project uses it; otherwise the record stays for the projects that need it.
+ * it and no project uses it or could again (its history and open proposals count); otherwise the
+ * record stays for the projects that need it.
  */
 export async function releaseAsset(services: Services, a: AssetRecord, userId: string, projectIds = a.projectIds): Promise<'deleted' | 'kept'> {
   const owners = a.owners.filter((o) => o !== userId);

@@ -43,6 +43,8 @@ interface Client {
   ws: WebSocket;
   user: User;
   projects: Set<string>;
+  /** Messages from one client are handled one at a time, in the order sent. */
+  queue: Promise<void>;
 }
 
 function parseCookies(header: string | undefined): Record<string, string> {
@@ -58,7 +60,7 @@ export class RealtimeHub {
   private wss: WebSocketServer;
   private clients = new Map<string, Client>();
   /** Recently applied client op ids -> commit id, so retried sends are acknowledged, not re-applied. */
-  private seenOps = new Map<string, string>();
+  private seenOps = new Map<string, Promise<{ id: string; existed: boolean }>>();
 
   constructor(
     private readonly services: Services,
@@ -99,10 +101,13 @@ export class RealtimeHub {
   }
 
   private onConnection(ws: WebSocket, user: User): void {
-    const client: Client = { id: newId('ws'), ws, user, projects: new Set() };
+    const client: Client = { id: newId('ws'), ws, user, projects: new Set(), queue: Promise.resolve() };
     this.clients.set(client.id, client);
     this.send(client, { type: 'hello', clientId: client.id, userId: user.id });
-    ws.on('message', (raw) => void this.onMessage(client, raw.toString()));
+    ws.on('message', (raw) => {
+      const text = raw.toString();
+      client.queue = client.queue.then(() => this.onMessage(client, text)).catch(() => {});
+    });
     ws.on('close', () => {
       this.clients.delete(client.id);
       this.services.presence.leave(client.id);
@@ -155,22 +160,30 @@ export class RealtimeHub {
           break;
         case 'commit': {
           await this.services.projects.requireAccess(msg.projectId, c.user.id, 'write');
+          // A client resends what it has not seen acknowledged (after a reconnect, say). The same
+          // edit is committed once: while the first copy is still committing, later copies wait
+          // for it; afterwards (even after a restart) the commit carries the client's id for it.
           const dedupeKey = `${c.user.id}:${msg.clientOpId}`;
-          const already = this.seenOps.get(dedupeKey);
-          if (already) {
-            this.send(c, { type: 'ack', clientOpId: msg.clientOpId, commitId: already, duplicate: true });
-            break;
+          let pending = this.seenOps.get(dedupeKey);
+          const waited = !!pending;
+          if (!pending) {
+            // Registered before anything is awaited, so a copy arriving meanwhile finds it.
+            const projectId = msg.projectId;
+            const op = msg.op;
+            const options = { ...(msg.label ? { label: msg.label } : {}), via: 'ui' as const, clientOpId: msg.clientOpId, ...(msg.baseHead !== undefined ? { baseHead: msg.baseHead } : {}) };
+            pending = (async () => {
+              const prior = (await this.services.projects.session(projectId)).findClientOp(c.user.id, msg.clientOpId);
+              if (prior) return { id: prior.id, existed: true };
+              return { id: (await this.services.projects.commit(projectId, op, authorOf(c.user), options)).id, existed: false };
+            })();
+            this.seenOps.set(dedupeKey, pending);
+            // A failed commit may be sent again; only successes are remembered.
+            pending.catch(() => this.seenOps.delete(dedupeKey));
+            if (this.seenOps.size > 5000) this.seenOps.delete(this.seenOps.keys().next().value!);
           }
           try {
-            const commit = await this.services.projects.commit(msg.projectId, msg.op, authorOf(c.user), {
-              ...(msg.label ? { label: msg.label } : {}),
-              via: 'ui',
-              clientOpId: msg.clientOpId,
-              ...(msg.baseHead !== undefined ? { baseHead: msg.baseHead } : {}),
-            });
-            this.seenOps.set(dedupeKey, commit.id);
-            if (this.seenOps.size > 5000) this.seenOps.delete(this.seenOps.keys().next().value!);
-            this.send(c, { type: 'ack', clientOpId: msg.clientOpId, commitId: commit.id });
+            const r = await pending;
+            this.send(c, { type: 'ack', clientOpId: msg.clientOpId, commitId: r.id, ...(waited || r.existed ? { duplicate: true } : {}) });
           } catch (e) {
             this.send(c, { type: 'nack', clientOpId: msg.clientOpId, error: e instanceof Error ? e.message : String(e) });
           }

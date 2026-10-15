@@ -214,6 +214,38 @@ describe('persistence and crash recovery', () => {
       await fs.rm(dataDir, { recursive: true, force: true });
     }
   });
+
+  it('keeps a proposal accepted just before a crash accepted, so it cannot be applied twice', async () => {
+    const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), 'omnix-persist-'));
+    try {
+      const a = await createOmnix({ dataDir, webDist: null, port: 0, host: '127.0.0.1' });
+      const seb = await a.services.users.signup({ email: 'a@b.co', name: 'A', password: 'password123' });
+      const author = { type: 'human' as const, id: seb.id, name: 'A' };
+      const ai = { type: 'ai' as const, id: 'claude', name: 'Claude' };
+      const meta = await a.services.projects.create({ name: 'Durable', primaryTool: 'image', ownerId: seb.id, author, aiConsent: true });
+      const state = await a.services.projects.state(meta.id);
+      const canvas = nodesOfType(state, 'canvas')[0]!;
+      const l = makeNode('layer', layerProps('fill', { name: 'Proposed' }));
+      const p = await a.services.projects.propose(meta.id, [{ kind: 'create', parentId: canvas.id, nodes: [l] }], { author: ai, label: 'Add a layer' });
+      // Simulate a crash: the accepted commit reaches the log, but the checkpoint that marks the proposal accepted is never written.
+      const projects = a.services.projects as unknown as { flush: (id: string) => Promise<void>; dirty: Map<string, NodeJS.Timeout> };
+      projects.flush = async () => {};
+      const commit = await a.services.projects.acceptProposal(meta.id, p.id, author);
+      await a.services.store.close();
+      projects.dirty.forEach((t) => clearTimeout(t));
+      a.server.close();
+
+      const b = await createOmnix({ dataDir, webDist: null, port: 0, host: '127.0.0.1' });
+      const session = await b.services.projects.session(meta.id);
+      expect(session.state.nodes[l.id]).toBeDefined();
+      expect(session.getProposal(p.id)).toMatchObject({ status: 'accepted', commitId: commit.id });
+      await expect(b.services.projects.acceptProposal(meta.id, p.id, author)).rejects.toThrow();
+      expect(session.log()).toHaveLength(1);
+      await b.close();
+    } finally {
+      await fs.rm(dataDir, { recursive: true, force: true });
+    }
+  });
 });
 
 const hasFfmpeg = spawnSync('ffmpeg', ['-version']).status === 0;
@@ -299,6 +331,35 @@ describe('realtime', () => {
     ws.send(JSON.stringify({ type: 'commit', projectId: p.id, clientOpId: 'op2', op: { kind: 'delete', id: 'missing' } }));
     await waitFor(() => messages.some((m) => m.type === 'nack' && m.clientOpId === 'op2'));
     ws.close();
+  });
+
+  it('applies one client\'s edits in order, and a resent edit once, even from a second connection', async () => {
+    const p = await newProject('image', 'Ordered');
+    const canvas = nodesOfType((await getState(p.id)).state, 'canvas')[0]!;
+    const open = async () => {
+      const ws = new WebSocket(ts.url.replace('http', 'ws') + '/ws', { headers: { cookie: ts.cookie } });
+      const messages: any[] = [];
+      ws.on('message', (m) => messages.push(JSON.parse(m.toString())));
+      await new Promise((r) => ws.on('open', r));
+      ws.send(JSON.stringify({ type: 'join', projectId: p.id }));
+      await waitFor(() => messages.some((m) => m.type === 'joined'));
+      return { ws, messages };
+    };
+    const a = await open();
+    const layer = makeNode('layer', layerProps('fill'));
+    a.ws.send(JSON.stringify({ type: 'commit', projectId: p.id, clientOpId: 'mk', op: { kind: 'create', parentId: canvas.id, nodes: [layer] } }));
+    for (let i = 1; i <= 8; i++) a.ws.send(JSON.stringify({ type: 'commit', projectId: p.id, clientOpId: `x${i}`, op: { kind: 'update', id: layer.id, set: { x: i } } }));
+    // After a reconnect the client resends, in order, every edit it has not seen acknowledged.
+    const b = await open();
+    for (let i = 1; i <= 8; i++) b.ws.send(JSON.stringify({ type: 'commit', projectId: p.id, clientOpId: `x${i}`, op: { kind: 'update', id: layer.id, set: { x: i } } }));
+    await waitFor(() => a.messages.some((m) => m.type === 'ack' && m.clientOpId === 'x8') && b.messages.some((m) => m.type === 'ack' && m.clientOpId === 'x8'));
+    const s = (await getState(p.id)).state;
+    expect((s.nodes[layer.id]!.props as { x: number }).x).toBe(8);
+    // Each edit was committed once.
+    const session = await ts.omnix.services.projects.session(p.id);
+    for (let i = 1; i <= 8; i++) expect(session.log().filter((c) => c.clientOpId === `x${i}`)).toHaveLength(1);
+    a.ws.close();
+    b.ws.close();
   });
 });
 

@@ -59,6 +59,12 @@ export interface ListRemoveOp {
   prop: string;
   index: number;
   count: number;
+  /**
+   * The items meant, so a removal never takes whatever happens to sit at `index` now: an undo after
+   * collaborators changed the list, or a proposal accepted later. Items with an `id` are named by
+   * it, others by their exact content. If they moved, they are found; if they are gone, it fails.
+   */
+  expect?: unknown[];
 }
 
 /** Shallow-merge into one item of an array-valued prop, located by its `id` field. */
@@ -68,6 +74,8 @@ export interface ListUpdateOp {
   prop: string;
   itemId: string;
   set: Record<string, unknown>;
+  /** Fields to remove from the item (how an update that added a field is undone). */
+  unset?: string[];
 }
 
 /** An atomic group of operations. Either all apply or none do. */
@@ -213,6 +221,19 @@ function applyCreate(d: Draft, op: CreateOp): Operation {
     if (!p || !p.children.includes(n.id)) throw new OpError(`Subtree node ${n.id} is not linked to a parent inside the subtree`);
     assertChildAllowed(p, n.type);
   }
+  // It must be a real tree: from the root, every node is reached exactly once, by way of the parent
+  // it names. A loop or a node listed twice would later make deleting it fail for good.
+  const seen = new Set<string>();
+  const walk = (id: string, parentId: string | null) => {
+    if (seen.has(id)) throw new OpError(`Subtree node ${id} appears more than once`);
+    seen.add(id);
+    const n = incoming.get(id);
+    if (!n) throw new OpError(`Subtree references missing child ${id}`);
+    if (parentId !== null && n.parentId !== parentId) throw new OpError(`Subtree node ${id} names ${String(n.parentId)} as its parent, but is a child of ${parentId}`);
+    for (const c of n.children) walk(c, id);
+  };
+  walk(root.id, null);
+  if (seen.size !== op.nodes.length) throw new OpError('Subtree has nodes that are not reachable from its root');
   for (const n of op.nodes) {
     for (const c of n.children) if (!incoming.has(c)) throw new OpError(`Subtree node ${n.id} references missing child ${c}`);
     const copy: SceneNode = {
@@ -317,17 +338,37 @@ function listProp(d: Draft, id: string, prop: string): unknown[] {
 function applyListInsert(d: Draft, op: ListInsertOp): Operation {
   const list = listProp(d, op.id, op.prop);
   const idx = clampIndex(op.index, list.length);
-  list.splice(idx, 0, ...structuredClone(op.items));
-  return { kind: 'listRemove', id: op.id, prop: op.prop, index: idx, count: op.items.length };
+  const items = structuredClone(op.items);
+  list.splice(idx, 0, ...items);
+  // Items with an id are recognised by it alone, so undo does not keep a second copy of, say, a long brush stroke.
+  const expect = items.map((x) => (x && typeof x === 'object' && typeof (x as { id?: unknown }).id === 'string' ? { id: (x as { id: string }).id } : structuredClone(x)));
+  return { kind: 'listRemove', id: op.id, prop: op.prop, index: idx, count: op.items.length, expect };
+}
+
+/** How a list item is recognised: its id when it has one, otherwise its content. */
+function itemKey(x: unknown): string {
+  const id = x && typeof x === 'object' ? (x as { id?: unknown }).id : undefined;
+  return typeof id === 'string' ? `id:${id}` : `json:${JSON.stringify(x)}`;
 }
 
 function applyListRemove(d: Draft, op: ListRemoveOp): Operation {
   const list = listProp(d, op.id, op.prop);
-  if (op.index < 0 || op.index + op.count > list.length) {
+  let index = op.index;
+  if (op.expect) {
+    if (op.expect.length !== op.count) throw new OpError(`listRemove on ${op.id}.${op.prop}: expect must list ${op.count} item(s)`);
+    const want = op.expect.map(itemKey);
+    const at = (i: number) => want.every((k, j) => i + j < list.length && itemKey(list[i + j]) === k);
+    if (!at(index)) {
+      // The items moved (others were added or removed around them): find them where they are now.
+      const found = list.findIndex((_, i) => at(i));
+      if (found < 0) throw new OpError(`The items to remove from ${op.id}.${op.prop} are no longer there`);
+      index = found;
+    }
+  } else if (index < 0 || index + op.count > list.length) {
     throw new OpError(`listRemove out of range on ${op.id}.${op.prop}`);
   }
-  const removed = list.splice(op.index, op.count);
-  return { kind: 'listInsert', id: op.id, prop: op.prop, index: op.index, items: removed };
+  const removed = list.splice(index, op.count);
+  return { kind: 'listInsert', id: op.id, prop: op.prop, index, items: removed };
 }
 
 function applyListUpdate(d: Draft, op: ListUpdateOp): Operation {
@@ -336,12 +377,24 @@ function applyListUpdate(d: Draft, op: ListUpdateOp): Operation {
   if (i < 0) throw new OpError(`Item ${op.itemId} not found in ${op.id}.${op.prop}`);
   const item = { ...(list[i] as Record<string, unknown>) };
   const prev: Record<string, unknown> = {};
+  const added: string[] = [];
+  const remember = (k: string) => {
+    if (k in prev || added.includes(k)) return;
+    if (Object.prototype.hasOwnProperty.call(item, k)) prev[k] = item[k];
+    else added.push(k);
+  };
   for (const [k, v] of Object.entries(op.set)) {
-    prev[k] = item[k];
+    if (k === '__proto__' || k === 'constructor') throw new OpError(`Illegal prop name: ${k}`);
+    remember(k);
     item[k] = structuredClone(v);
   }
+  for (const k of op.unset ?? []) {
+    remember(k);
+    delete item[k];
+  }
   list[i] = item;
-  return { kind: 'listUpdate', id: op.id, prop: op.prop, itemId: op.itemId, set: prev };
+  // A field the update added is removed on undo; "set it to undefined" would not survive saving.
+  return { kind: 'listUpdate', id: op.id, prop: op.prop, itemId: op.itemId, set: prev, ...(added.length ? { unset: added } : {}) };
 }
 
 /** Node ids an operation touches (for conflict detection, activity feeds and highlighting). */

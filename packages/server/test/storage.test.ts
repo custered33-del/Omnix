@@ -51,6 +51,11 @@ describe('document stores', () => {
       // A torn last line is ignored
       await fs.appendFile(path.join(dir, 'logs', 'log.jsonl'), '{"i": 5');
       expect((await new FileStore(dir).readLog('log')).length).toBe(50);
+      // Writes made while a collection is first being read are not lost from memory.
+      await s2.put('cold', 'a', { v: 1 });
+      const s3 = new FileStore(dir);
+      await Promise.all([s3.list('cold'), s3.put('cold', 'b', { v: 2 }), s3.get('cold', 'a'), s3.put('cold', 'c', { v: 3 })]);
+      expect((await s3.list<{ v: number }>('cold')).map((d) => d.v).sort()).toEqual([1, 2, 3]);
     } finally {
       await fs.rm(dir, { recursive: true, force: true });
     }

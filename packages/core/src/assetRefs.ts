@@ -11,6 +11,12 @@ function visit(value: unknown, fn: (s: string) => void): void {
   else if (value && typeof value === 'object') for (const v of Object.values(value)) visit(v, fn);
 }
 
+/** Every asset id that appears anywhere in a value (a state, an operation, a proposal). */
+export function assetIdsIn(value: unknown, into = new Set<string>()): Set<string> {
+  visit(value, (id) => into.add(id));
+  return into;
+}
+
 /** Every asset a project uses, with the nodes that use it (layers, clips, slide elements, LUTs, masks, embeds...). */
 export function assetRefs(state: ProjectState): Map<string, string[]> {
   const out = new Map<string, string[]>();

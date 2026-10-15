@@ -1,5 +1,5 @@
 import { newId } from './ids.js';
-import { applyOp, describeOp, OpError, type Operation } from './ops.js';
+import { applyOp, canApply, describeOp, OpError, type Operation } from './ops.js';
 import type { ProjectState } from './state.js';
 import type { Author } from './types.js';
 import { diffStates, type StateDiff } from './diff.js';
@@ -24,6 +24,8 @@ export interface Commit {
   approvedBy?: Author;
   /** Autonomous job that produced this commit. */
   jobId?: string;
+  /** The editing client's own id for this change, so a resent edit is recognised and not applied twice. */
+  clientOpId?: string;
 }
 
 export type ProposalStatus = 'open' | 'accepted' | 'rejected' | 'conflict';
@@ -67,6 +69,7 @@ export interface CommitMeta {
   approvedBy?: Author;
   jobId?: string;
   timestamp?: string;
+  clientOpId?: string;
 }
 
 export type SessionEvent =
@@ -165,6 +168,7 @@ export class ProjectSession {
     if (meta.proposalId) commit.proposalId = meta.proposalId;
     if (meta.approvedBy) commit.approvedBy = meta.approvedBy;
     if (meta.jobId) commit.jobId = meta.jobId;
+    if (meta.clientOpId) commit.clientOpId = meta.clientOpId;
     this.commits.set(commit.id, commit);
     this.order.push(commit.id);
     this._head = commit.id;
@@ -175,6 +179,15 @@ export class ProjectSession {
 
   getCommit(id: string): Commit | undefined {
     return this.commits.get(id);
+  }
+
+  /** A recent commit made from this author's edit with this client id, if it was already applied. */
+  findClientOp(authorId: string, clientOpId: string): Commit | undefined {
+    for (let i = this.order.length - 1; i >= Math.max(0, this.order.length - 2000); i--) {
+      const c = this.commits.get(this.order[i]!)!;
+      if (c.clientOpId === clientOpId && c.author.id === authorId) return c;
+    }
+    return undefined;
   }
 
   /** Commits from the root to `head` (oldest first). */
@@ -204,7 +217,10 @@ export class ProjectSession {
   /* Undo / redo (selective, per author)                             */
   /* -------------------------------------------------------------- */
 
-  /** The commit `undo(author)` would reverse, if any. */
+  /**
+   * The commit `undo(author)` would reverse, if any. A change that can no longer be reversed (a
+   * collaborator has since deleted what it touched) is passed over, so undo never gets stuck on it.
+   */
   undoTarget(authorId: string): Commit | undefined {
     const undone = new Set<string>();
     for (const c of this.log().reverse()) {
@@ -214,6 +230,7 @@ export class ProjectSession {
       }
       if (c.author.id !== authorId) continue;
       if (undone.has(c.id)) continue;
+      if (!canApply(this._state, c.inverse).ok) continue;
       return c;
     }
     return undefined;
@@ -248,12 +265,17 @@ export class ProjectSession {
     return this.commit(target.inverse, { author, label: `Undo: ${target.label}` }, { undoOf: target.id });
   }
 
+  /**
+   * Re-apply what an undo reversed. Redo reverses the undo itself rather than replaying the
+   * original change, so whatever collaborators had added to it (a layer in a group the author
+   * made, a rename) comes back too.
+   */
   redo(author: Author): Commit | null {
     const undoCommit = this.redoTarget(author.id);
     if (!undoCommit) return null;
     const original = this.commits.get(undoCommit.undoOf!);
     if (!original) return null;
-    return this.commit(original.op, { author, label: `Redo: ${original.label}` }, { redoOf: undoCommit.id });
+    return this.commit(undoCommit.inverse, { author, label: `Redo: ${original.label}` }, { redoOf: undoCommit.id });
   }
 
   /* -------------------------------------------------------------- */

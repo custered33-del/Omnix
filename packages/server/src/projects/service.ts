@@ -77,6 +77,8 @@ export interface CommitOptions {
   clientOpId?: string;
   /** Leave it out of the activity feed (bookkeeping such as session-memory notes). */
   quiet?: boolean;
+  /** This commit reverses that one (an undo or a revert), so nothing reverses it a second time. */
+  undoOf?: string;
 }
 
 export type ProjectEvent =
@@ -248,7 +250,14 @@ export class ProjectService extends EventEmitter {
     if (!cp) throw new ProjectError(`Project not found: ${projectId}`, 404);
     const commits = await this.store.readLog<Commit>(commitLog(projectId));
     const maxSeq = commits.reduce((m, c) => Math.max(m, c.seq), 0);
-    const data: SerializedSession = { version: 1, baseState: cp.baseState, commits, head: cp.head, proposals: cp.proposals, snapshots: cp.snapshots };
+    // A proposal accepted just before a crash has its commit logged but may still be open in the
+    // checkpoint: it was accepted, and must not be accepted (applied) a second time.
+    const acceptedBy = new Map(commits.filter((c) => c.proposalId).map((c) => [c.proposalId!, c]));
+    const proposals = cp.proposals.map((p) => {
+      const c = p.status === 'open' || p.status === 'conflict' ? acceptedBy.get(p.id) : undefined;
+      return c ? { ...p, status: 'accepted' as const, commitId: c.id, resolvedAt: c.timestamp, ...(c.approvedBy ? { resolvedBy: c.approvedBy } : {}) } : p;
+    });
+    const data: SerializedSession = { version: 1, baseState: cp.baseState, commits, head: cp.head, proposals, snapshots: cp.snapshots };
     let session: ProjectSession;
     if (maxSeq > cp.seq) {
       // The process stopped after commits were logged but before the checkpoint was saved:
@@ -368,7 +377,7 @@ export class ProjectService extends EventEmitter {
     let commit: Commit;
     this.emittingClientOpId = options.clientOpId;
     try {
-      commit = session.commit(op, { author, ...(options.label ? { label: options.label } : {}), ...(options.jobId ? { jobId: options.jobId } : {}) });
+      commit = session.commit(op, { author, ...(options.label ? { label: options.label } : {}), ...(options.jobId ? { jobId: options.jobId } : {}), ...(options.clientOpId ? { clientOpId: options.clientOpId } : {}) }, options.undoOf ? { undoOf: options.undoOf } : {});
     } catch (e) {
       if (e instanceof OpError) throw new ProjectError(e.message, 400);
       throw e;
@@ -392,9 +401,13 @@ export class ProjectService extends EventEmitter {
     return commit;
   }
 
+  /**
+   * Mark the project changed. The details are read again here rather than written back from a copy
+   * read before the commit, which could undo a change made meanwhile (a member removed, a rename).
+   */
   private async touch(meta: ProjectMeta): Promise<void> {
-    const next = { ...meta, updatedAt: new Date().toISOString(), thumbnailVersion: meta.thumbnailVersion + 1 };
-    await this.store.put(C.projects, meta.id, next);
+    const current = (await this.store.get<ProjectMeta>(C.projects, meta.id)) ?? meta;
+    await this.store.put(C.projects, meta.id, { ...current, updatedAt: new Date().toISOString(), thumbnailVersion: current.thumbnailVersion + 1 });
   }
 
   async undo(projectId: string, author: Author, via: Via = 'ui'): Promise<Commit | null> {
@@ -422,7 +435,8 @@ export class ProjectService extends EventEmitter {
     const { session } = await this.guard(projectId, author);
     const target = session.getCommit(commitId);
     if (!target) throw new ProjectError(`Unknown commit ${commitId}`, 404);
-    return this.commit(projectId, target.inverse, author, { label: `Revert: ${target.label}`, via, trusted: true });
+    if (session.log().some((c) => c.undoOf === commitId)) throw new ProjectError(`"${target.label}" has already been undone`, 409);
+    return this.commit(projectId, target.inverse, author, { label: `Revert: ${target.label}`, via, trusted: true, undoOf: target.id });
   }
 
   async checkout(projectId: string, commitId: string | null, author: Author): Promise<ProjectState> {

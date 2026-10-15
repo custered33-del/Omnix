@@ -217,6 +217,11 @@ describe('asset library (53)', () => {
     const kept = await json(await ts.api(`/api/assets/${big.asset.id}`));
     expect(kept.asset.usedIn.map((u: { projectId: string }) => u.projectId)).toEqual([p.projectId]);
     expect((await json(await ts.api('/api/assets/similar'))).groups).toEqual([]);
+    // Undoing the merge brings the copy back on the canvas, so its file is still there.
+    expect((await ts.api(`/api/projects/${p.projectId}/undo`, { method: 'POST' })).status).toBe(200);
+    expect(assetRefs(await state(p.projectId)).get(small.asset.id)).toHaveLength(1);
+    expect(await ts.omnix.services.blobs.get(small.asset.id)).toBeTruthy();
+    expect((await ts.api(`/api/projects/${p.projectId}/render-at?node=${canvas.id}&size=64`)).status).toBe(200);
   });
 
   it('tags and removes many files at once, keeping files a project still uses', async () => {
