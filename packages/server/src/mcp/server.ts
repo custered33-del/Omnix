@@ -17,6 +17,8 @@ How to work in Omnix:
 3. Check your work visually with render_preview before handing back.
 4. Record important decisions with add_note so collaborators (human or AI) can pick up later.
 
+Shortcuts: run_command turns plain-language edits into operations ("make the sky warmer and move the title to the lower third"); find_in_project searches every tool at once; slides_from_document and code_place_output carry work across tools; image_generative_fill, image_generative_extend and video_generative_fill fill or extend areas from a prompt; style_match applies the look of a reference. For a long goal in an autonomous connection, call agent_start_run with a plan, agent_checkpoint after each stage and agent_finish at the end; when the run pauses for the user's approval, call agent_wait and follow their answer.
+
 Permission modes: in "view only" you can read but not change anything. In "edit with approval" each change becomes a proposal the user previews and accepts, modifies or rejects in Omnix; the tool result says "Proposed". In "autonomous" changes apply directly inside the projects the user allowed, and long jobs pause at the user's approval gates. AI also needs per-project consent ("Allow AI"); if a tool says consent is missing, ask the user to turn it on.
 
 Coordinates: canvases, slides and sequences use pixels with the origin at the top-left (sequence clip x/y are offsets from the frame center). Times are in seconds. Layers stack bottom-to-top in child order; timeline tracks are listed top-first.`;

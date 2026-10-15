@@ -25,12 +25,15 @@ import {
   ScanSearch,
   ArrowLeftRight,
   Highlighter,
+  Expand,
+  Palette,
 } from 'lucide-react';
 import type { SceneNode, ShapeKind } from '@omnix/core';
 import { useProject, useProjectStore } from '../../state/project.js';
 import { useRenderHost } from '../../render/context.js';
 import { useShortcuts, formatShortcut } from '../../ui/shortcuts.js';
 import { useCommands } from '../../state/commands.js';
+import { useDialogs } from '../../state/dialogs.js';
 import { ColorField, IconButton, MenuButton, NumberField, Spinner, Switch } from '../../ui/primitives.js';
 import { t } from '../../i18n/index.js';
 import { createImageEditorStore, TOOL_KEYS, type ImageEditorStore, type ImageTool } from './editorState.js';
@@ -75,6 +78,8 @@ export function ImageEditor({ canvasId }: { canvasId: string }) {
   const canvas = useProject((s) => s.state?.nodes[canvasId]) as SceneNode<'canvas'> | undefined;
   const canEdit = useProject((s) => s.meta?.role !== 'viewer' && !s.preview);
   const hasSelection = !!canvas?.props.selection;
+  const openGenerative = useDialogs((d) => d.openGenerative);
+  const openStyle = useDialogs((d) => d.openStyle);
 
   // Keep the editor's selected layer in sync with the project selection (e.g. picked in history or by Claude).
   const projectSelection = useProject((s) => s.selection);
@@ -163,6 +168,8 @@ export function ImageEditor({ canvasId }: { canvasId: string }) {
       { id: 'img.deselect', label: t('image.deselect'), section: t('tools.imageLong'), shortcut: 'mod+d', run: () => A.deselect(ctx) },
       { id: 'img.invert', label: t('image.invertSelection'), section: t('tools.imageLong'), shortcut: 'mod+shift+i', run: () => void A.invertSelection(ctx) },
       { id: 'img.caf', label: t('image.contentAwareFill'), section: t('tools.imageLong'), run: () => void A.contentAwareFill(ctx) },
+      { id: 'img.genfill', label: `${t('generative.fillTitle')}…`, section: t('tools.imageLong'), keywords: 'ai prompt generate', run: () => openGenerative({ mode: 'fill', canvasId }) },
+      { id: 'img.genextend', label: `${t('generative.extendTitle')}…`, section: t('tools.imageLong'), keywords: 'ai outpaint expand', run: () => openGenerative({ mode: 'extend', canvasId }) },
       { id: 'img.fill', label: t('image.fillSelection'), section: t('tools.imageLong'), run: () => A.fillSelection(ctx) },
       { id: 'img.crop', label: 'Crop to selection', section: t('tools.imageLong'), run: () => void A.cropToSelection(ctx) },
       { id: 'img.removebg', label: t('video.removeBackground'), section: t('tools.imageLong'), run: () => void A.removeLayerBackground(ctx) },
@@ -183,10 +190,25 @@ export function ImageEditor({ canvasId }: { canvasId: string }) {
             <Spinner /> {busy}
           </span>
         )}
+        {canEdit && (
+          <div className="row" style={{ gap: 2 }}>
+            {hasSelection && (
+              <button className="btn btn-sm btn-ai" onClick={() => openGenerative({ mode: 'fill', canvasId })}>
+                <Sparkles /> {t('generative.fillShort')}
+              </button>
+            )}
+            <IconButton label={t('generative.extendTitle')} onClick={() => openGenerative({ mode: 'extend', canvasId })}>
+              <Expand />
+            </IconButton>
+            <IconButton label={t('style.title')} onClick={() => openStyle(ed.getState().selectedLayerId ?? canvasId)}>
+              <Palette />
+            </IconButton>
+          </div>
+        )}
         {hasSelection && canEdit && (
           <div className="row" style={{ gap: 2 }}>
             <IconButton label={t('image.contentAwareFill')} onClick={() => void A.contentAwareFill(ctx)}>
-              <Sparkles />
+              <WandSparkles />
             </IconButton>
             <IconButton label={t('image.fillSelection')} shortcut={formatShortcut('shift+F5')} onClick={() => A.fillSelection(ctx)}>
               <PaintBucket />

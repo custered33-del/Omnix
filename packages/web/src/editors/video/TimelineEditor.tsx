@@ -1,13 +1,16 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useStore } from 'zustand';
-import { Play, Pause, SkipBack, SkipForward, Scissors, Magnet, ZoomIn, ZoomOut, MousePointer2, ArrowLeftRight, Columns2, MoveHorizontal, Slice, StepBack, StepForward, SlidersVertical, GanttChart, Repeat } from 'lucide-react';
+import { Play, Pause, SkipBack, SkipForward, Scissors, Magnet, ZoomIn, ZoomOut, MousePointer2, ArrowLeftRight, Columns2, MoveHorizontal, Slice, StepBack, StepForward, SlidersVertical, GanttChart, Repeat, Palette, Crop } from 'lucide-react';
 import type { SceneNode } from '@omnix/core';
 import { clipEnd, clipPropsAt, contentDuration, tracksOf, clipsOf } from '@omnix/core';
 import { useProject, useProjectStore } from '../../state/project.js';
 import { useRenderHost } from '../../render/context.js';
 import { useShortcuts, formatShortcut } from '../../ui/shortcuts.js';
 import { useCommands } from '../../state/commands.js';
-import { IconButton } from '../../ui/primitives.js';
+import { IconButton, MenuButton } from '../../ui/primitives.js';
+import { useDialogs } from '../../state/dialogs.js';
+import { post } from '../../lib/api.js';
+import { toast } from '../../ui/toast.js';
 import { t } from '../../i18n/index.js';
 import { createTimelineStore, timecode, toFrame, type EditMode, type TimelineEditorStore } from './timelineState.js';
 import { PlaybackEngine } from './playback.js';
@@ -69,6 +72,7 @@ export function TimelineEditor({ sequenceId }: { sequenceId: string }) {
     if (now - lastReport.current < 250) return;
     lastReport.current = now;
     store.getState().reportLocation({ tool: purpose, nodeId: sequenceId, time: Math.round(time * 100) / 100 });
+    store.getState().setEditorContext({ time: Math.round(time * 100) / 100 });
   }, [time, purpose, sequenceId, store]);
 
   useEditorShortcuts(ctx);
@@ -233,8 +237,26 @@ function Transport({ ctx }: { ctx: TimelineCtx }) {
   );
 }
 
+const REFRAMES = [
+  { label: '9:16 vertical (1080×1920)', w: 1080, h: 1920 },
+  { label: '1:1 square (1080×1080)', w: 1080, h: 1080 },
+  { label: '4:5 portrait (1080×1350)', w: 1080, h: 1350 },
+  { label: '16:9 landscape (1920×1080)', w: 1920, h: 1080 },
+];
+
+/** Change the frame size and fill around each shot with a blurred copy (no black bars). */
+async function reframe(ctx: TimelineCtx, width: number, height: number): Promise<void> {
+  try {
+    await post(`/api/projects/${ctx.store.getState().projectId}/video/reframe`, { sequenceId: ctx.sequenceId, width, height });
+    toast.success(t('video.reframed', { w: width, h: height }));
+  } catch (e) {
+    toast.error((e as Error).message);
+  }
+}
+
 function TimelineToolbar({ ctx, onCaptions }: { ctx: TimelineCtx; onCaptions: () => void }) {
   const { ed } = ctx;
+  const openStyle = useDialogs((d) => d.openStyle);
   const mode = useStore(ed, (s) => s.mode);
   const snapping = useStore(ed, (s) => s.snapping);
   const pps = useStore(ed, (s) => s.pxPerSec);
@@ -266,6 +288,23 @@ function TimelineToolbar({ ctx, onCaptions }: { ctx: TimelineCtx; onCaptions: ()
         <Magnet />
       </IconButton>
       <span className="spacer" />
+      {canEdit && (
+        <button className="btn btn-sm btn-ghost" onClick={() => openStyle(ed.getState().selectedClips.length === 1 ? ed.getState().selectedClips[0]! : ctx.sequenceId)}>
+          <Palette size={15} /> {t('style.short')}
+        </button>
+      )}
+      {purpose === 'video' && canEdit && (
+        <MenuButton
+          className="btn btn-sm btn-ghost"
+          label={t('video.reframe')}
+          items={[
+            { label: t('video.reframe'), heading: true },
+            ...REFRAMES.map((r) => ({ label: r.label, onSelect: () => void reframe(ctx, r.w, r.h) })),
+          ]}
+        >
+          <Crop size={15} /> {t('video.reframe')}
+        </MenuButton>
+      )}
       {purpose === 'video' && canEdit && (
         <button className="btn btn-sm btn-ghost" onClick={onCaptions}>
           {t('video.captions')}
@@ -300,6 +339,60 @@ function VideoStage({ ctx }: { ctx: TimelineCtx }) {
   const movable = !!clip && !!track && track.props.trackType !== 'audio' && canEdit && !track.props.locked && time >= clip.props.start && time < clipEnd(clip.props);
   const anim = useAnimated(ctx, clip?.id ?? '', clip?.props.start ?? 0, clip?.props.keyframes ?? {});
   const drag = useRef<{ x: number; y: number; ox: number; oy: number } | null>(null);
+  const host = useRenderHost();
+  const drawingRegion = useStore(ctx.ed, (s) => s.drawingRegion);
+  const regionStart = useRef<{ x: number; y: number } | null>(null);
+  // The generated area of a clip stays visible on the stage (its mask), and so does a region being drawn.
+  const regionOverlay = (g: CanvasRenderingContext2D) => {
+    const st = ctx.store.getState().state!;
+    const sp = (st.nodes[ctx.sequenceId] as SceneNode<'sequence'>).props;
+    const lw = 2 / Math.max(0.01, g.getTransform().a / (window.devicePixelRatio || 1));
+    const draft = ctx.ed.getState().regionDraft;
+    const c = clip ? (st.nodes[clip.id] as SceneNode<'clip'> | undefined) : undefined;
+    const gen = c?.props.generation;
+    const rects: { r: { x: number; y: number; width: number; height: number }; dashed: boolean }[] = [];
+    if (draft) rects.push({ r: draft, dashed: true });
+    if (gen?.region && c) {
+      const meta = host.assetMeta(gen.sourceAssetId) ?? (c.props.assetId ? host.assetMeta(c.props.assetId) : null);
+      if (meta?.width && meta.height) {
+        const s = Math.min(sp.width / meta.width, sp.height / meta.height) * c.props.scale;
+        const left = sp.width / 2 + c.props.x - (meta.width * s) / 2;
+        const top = sp.height / 2 + c.props.y - (meta.height * s) / 2;
+        rects.push({ r: { x: left + gen.region.x * s, y: top + gen.region.y * s, width: gen.region.width * s, height: gen.region.height * s }, dashed: false });
+      }
+    }
+    for (const { r, dashed } of rects) {
+      g.save();
+      g.fillStyle = 'rgba(106, 72, 215, 0.18)';
+      g.fillRect(r.x, r.y, r.width, r.height);
+      g.strokeStyle = '#6a48d7';
+      g.lineWidth = lw;
+      if (dashed) g.setLineDash([6 * lw, 4 * lw]);
+      g.strokeRect(r.x, r.y, r.width, r.height);
+      g.restore();
+    }
+  };
+  if (drawingRegion && clip) {
+    const regionHandlers: StageHandlers = {
+      cursor: 'crosshair',
+      onDown: (p) => {
+        regionStart.current = p;
+        ctx.ed.getState().set({ regionDraft: { x: p.x, y: p.y, width: 0, height: 0 } });
+      },
+      onMove: (p) => {
+        const a = regionStart.current;
+        if (!a) return;
+        ctx.ed.getState().set({ regionDraft: { x: Math.min(a.x, p.x), y: Math.min(a.y, p.y), width: Math.abs(p.x - a.x), height: Math.abs(p.y - a.y) } });
+      },
+      onUp: () => {
+        regionStart.current = null;
+        const d = ctx.ed.getState().regionDraft;
+        ctx.ed.getState().set({ drawingRegion: false, regionDraft: d && d.width > 4 && d.height > 4 ? { x: Math.round(d.x), y: Math.round(d.y), width: Math.round(d.width), height: Math.round(d.height) } : null });
+      },
+      overlay: regionOverlay,
+    };
+    return <Stage ctx={ctx} handlers={regionHandlers} label="Video preview: drag to mark the area to fill" />;
+  }
   const handlers: StageHandlers | undefined = movable
     ? {
         cursor: 'move',
@@ -336,9 +429,12 @@ function VideoStage({ ctx }: { ctx: TimelineCtx }) {
           g.scale(v.scale, v.scale);
           g.strokeRect(-sp.width / 2, -sp.height / 2, sp.width, sp.height);
           g.restore();
+          regionOverlay(g);
         },
       }
-    : undefined;
+    : clip
+      ? { overlay: regionOverlay }
+      : undefined;
   return <Stage ctx={ctx} handlers={handlers} label="Video preview" />;
 }
 

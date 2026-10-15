@@ -28,6 +28,9 @@ export interface TimelineEditorState {
   activeBone: string | null;
   /** Points collected while drawing a motion path. */
   pathDraft: { x: number; y: number }[] | null;
+  /** Generative fill: drawing a region on the stage, and the region drawn (sequence pixels). */
+  drawingRegion: boolean;
+  regionDraft: { x: number; y: number; width: number; height: number } | null;
   set(patch: Partial<TimelineEditorState>): void;
 }
 
@@ -52,6 +55,8 @@ export function createTimelineStore(purpose: 'video' | 'animation'): TimelineEdi
     showBones: true,
     activeBone: null,
     pathDraft: null,
+    drawingRegion: false,
+    regionDraft: null,
     set: (patch) => set(patch),
   }));
 }

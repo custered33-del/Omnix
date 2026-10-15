@@ -190,7 +190,9 @@ function OpenStep({ info }: { info: SetupInfo | null }) {
         {other && (
           <div className="disclosure-body">
             <p>{t('setup.open.codeBody')}</p>
-            <CopyField label="Claude Code" value={`claude mcp add --transport http omnix ${mcpUrl} --header "Authorization: Bearer omx_…"`} />
+            <CopyField label="Claude Code" value={`claude mcp add --transport http omnix ${mcpUrl}`} />
+            <p>{t('setup.open.codeTokenBody')}</p>
+            <CopyField label={t('setup.open.codeTokenLabel')} value={`claude mcp add --transport http omnix ${mcpUrl} --header "Authorization: Bearer omx_…"`} />
             <p>{t('setup.open.desktopBody')}</p>
             <CopyField label="claude_desktop_config.json" value={desktop} multiline />
             <p>

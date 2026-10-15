@@ -253,6 +253,9 @@
   border: 1px solid var(--border);
 }
 .segmented button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   border: none;
   background: transparent;
   padding: 4px 12px;

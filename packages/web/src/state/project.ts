@@ -70,6 +70,9 @@ export interface ProjectStoreState {
   version: number;
   /** Nodes last changed by an AI collaborator (cleared when a person edits them). */
   aiMarks: Record<string, AiMark>;
+  /** Where the person is inside the open editor (current slide, playhead), for commands and Claude. */
+  editorContext: { slideId: string | null; time: number | null };
+  setEditorContext(patch: Partial<ProjectStoreState['editorContext']>): void;
 
   load(): Promise<void>;
   commit(op: Operation, label?: string): string | null;
@@ -173,6 +176,13 @@ export function createProjectStore(projectId: string): ProjectStore {
       codeStreams: {},
       version: 0,
       aiMarks: {},
+      editorContext: { slideId: null, time: null },
+
+      setEditorContext(patch) {
+        const cur = get().editorContext;
+        if (Object.entries(patch).every(([k, v]) => cur[k as keyof typeof cur] === v)) return;
+        set({ editorContext: { ...cur, ...patch } });
+      },
 
       async load() {
         try {
@@ -262,7 +272,7 @@ export function createProjectStore(projectId: string): ProjectStore {
       },
 
       setActiveDoc(id) {
-        set({ activeDocId: id, selection: [] });
+        set({ activeDocId: id, selection: [], editorContext: { slideId: null, time: null } });
       },
 
       reportLocation(location) {

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Search } from 'lucide-react';
+import { Search, Wand2 } from 'lucide-react';
 import { useCommandStore, type Command } from '../state/commands.js';
 import { formatShortcut } from '../ui/shortcuts.js';
 import { t } from '../i18n/index.js';
@@ -22,19 +22,27 @@ export function CommandPalette() {
   const open = useCommandStore((s) => s.paletteOpen);
   const setOpen = useCommandStore((s) => s.openPalette);
   const scopes = useCommandStore((s) => s.scopes);
+  const freeText = useCommandStore((s) => s.freeText);
   const [q, setQ] = useState('');
   const [active, setActive] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const results = useMemo(() => {
     const all = Object.values(scopes).flat();
-    return all
+    const found = all
       .map((c) => ({ c, s: score(c, q) }))
       .filter((x) => x.s > 0)
       .sort((a, b) => b.s - a.s)
       .slice(0, 50)
       .map((x) => x.c);
-  }, [scopes, q]);
+    // Words that are not a command can be a request ("make the title bigger"): offer to run it.
+    const text = q.trim();
+    if (freeText && text.split(/\s+/).length >= 2) {
+      const ask: Command = { id: 'free-text', label: freeText.label(text), section: t('palette.askSection'), icon: <Wand2 size={16} className="ai-ink" />, run: () => freeText.run(text) };
+      return found.length ? [...found, ask] : [ask];
+    }
+    return found;
+  }, [scopes, q, freeText]);
 
   useEffect(() => {
     if (open) {
@@ -62,6 +70,7 @@ export function CommandPalette() {
           <Search size={18} className="muted" aria-hidden="true" />
           <input
             ref={inputRef}
+            autoFocus
             className="grow"
             style={{ border: 'none', outline: 'none', background: 'transparent', fontSize: 'var(--fs-lg)' }}
             placeholder={t('palette.placeholder')}

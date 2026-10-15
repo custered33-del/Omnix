@@ -1,16 +1,19 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactElement } from 'react';
-import { Bold, Italic, Strikethrough, Code2, Link2, List, ListOrdered, ListChecks, Quote, Table2, ImagePlus, Minus, MessageSquarePlus, ListTree, Type, Pencil, Eye, Plus, Sparkles, Heading1, Heading2, Heading3, Pilcrow, Link as LinkIcon } from 'lucide-react';
+import { Bold, Italic, Strikethrough, Code2, Link2, List, ListOrdered, ListChecks, Quote, Table2, ImagePlus, Minus, MessageSquarePlus, ListTree, Type, Pencil, Eye, Plus, Sparkles, Heading1, Heading2, Heading3, Pilcrow, Link as LinkIcon, Presentation, Palette } from 'lucide-react';
 import type { BlockProps, BlockType, EmbedRef, SceneNode, TextStyle } from '@omnix/core';
 import { DEFAULT_DOC_STYLES, defaultStyleFor, documentBlocks, documentOutline, documentPlainText, documentSuggestions, inlineToPlain, listNumber, wordCount } from '@omnix/core';
 import { useProject, useProjectStore } from '../../state/project.js';
 import { makeTextCommitter } from '../../state/textCommitter.js';
 import { useCommands } from '../../state/commands.js';
+import { useDialogs } from '../../state/dialogs.js';
+import { post } from '../../lib/api.js';
+import { toast } from '../../ui/toast.js';
 import { ColorField, Dialog, IconButton, Menu, MenuButton, NumberField, Select, type MenuItemDef } from '../../ui/primitives.js';
 import { AssetPicker } from '../../components/AssetPicker.js';
 import { EmbedPicker } from '../../components/EmbedView.js';
 import { addComment, CommentThread, commentsFor, currentAuthor, NewComment } from '../../components/Comments.js';
 import { FontSelect } from '../shared/FontSelect.js';
-import { t } from '../../i18n/index.js';
+import { plural, t } from '../../i18n/index.js';
 import { DocBlock, type BlockEnv } from './DocBlock.js';
 import { SuggestionCard } from './SuggestionCard.js';
 import { insertAfter, mySuggestion, suggestDelete, TEXT_BLOCKS, turnInto, type DocCtx, type TurnInto } from './docOps.js';
@@ -267,9 +270,22 @@ export function DocumentEditor({ documentId }: { documentId: string }) {
     ];
   };
 
+  const openStyle = useDialogs((d) => d.openStyle);
+  const makeSlides = async () => {
+    try {
+      const r = await post<{ deckId: string; slides: number }>(`/api/projects/${store.getState().projectId}/slides-from-document`, { documentId });
+      toast.success(plural('crossTool.slidesMade', r.slides));
+      for (let i = 0; i < 60 && !store.getState().state?.nodes[r.deckId]; i++) await new Promise((res) => setTimeout(res, 50));
+      if (store.getState().state?.nodes[r.deckId]) store.getState().setActiveDoc(r.deckId);
+    } catch (e) {
+      toast.error((e as Error).message);
+    }
+  };
+
   useCommands(
     'document',
     [
+      { id: 'doc.makeSlides', label: t('crossTool.makeSlides'), section: t('tools.documentLong'), keywords: 'deck presentation', run: () => void makeSlides() },
       { id: 'doc.suggest', label: suggesting ? 'Switch to editing' : 'Switch to suggesting', section: t('tools.documentLong'), run: () => setSuggesting(!suggesting) },
       { id: 'doc.outline', label: 'Show outline', section: t('tools.documentLong'), run: () => setPanel('outline') },
       { id: 'doc.styles', label: 'Edit styles', section: t('tools.documentLong'), run: () => setPanel('styles') },
@@ -340,6 +356,14 @@ export function DocumentEditor({ documentId }: { documentId: string }) {
           <Plus /> Insert
         </MenuButton>
         <span className="spacer" />
+        {canEdit && (
+          <button className="btn btn-sm btn-ghost" onClick={() => void makeSlides()} title={t('crossTool.makeSlidesHint')}>
+            <Presentation size={14} /> {t('crossTool.makeSlides')}
+          </button>
+        )}
+        <IconButton small label={t('style.title')} onClick={() => openStyle(documentId)} disabled={!canEdit}>
+          <Palette />
+        </IconButton>
         <div className="segmented" role="group" aria-label="Mode">
           <button aria-pressed={!suggesting} onClick={() => setSuggesting(false)} disabled={!canEdit}>
             <Pencil size={14} /> Editing

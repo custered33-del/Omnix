@@ -170,10 +170,16 @@ function currentSlide(c: Ctx): SceneNode<'slide'> | null {
 
 /* Pixels: masks for regions and layers ----------------------------------- */
 
+/**
+ * The picture itself, for finding regions like the sky: photos and fills only, so text, shapes and
+ * adjustments on top do not cut holes in the mask (which would show once they move).
+ */
 async function composite(c: Ctx, canvasId: string) {
   c.pixels.composite ??= (async () => {
     const host = c.env.services.renderHost();
-    return compositeRaster(host, c.state, canvasId);
+    const nodes = { ...c.state.nodes };
+    for (const l of canvasLayers(c.state, canvasId)) if (['text', 'vector', 'adjustment'].includes(l.props.layerType) && l.props.visible) nodes[l.id] = { ...l, props: { ...l.props, visible: false } };
+    return compositeRaster(host, { ...c.state, nodes }, canvasId);
   })();
   return c.pixels.composite;
 }

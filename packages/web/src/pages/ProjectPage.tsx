@@ -1,13 +1,14 @@
 import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { useStore } from 'zustand';
-import { ArrowLeft, Undo2, Redo2, History, Sparkles, NotebookPen, Download, Settings2, Plus, Activity as ActivityIcon, Eye, X, Bookmark } from 'lucide-react';
+import { ArrowLeft, Undo2, Redo2, History, Sparkles, NotebookPen, Download, Settings2, Plus, Activity as ActivityIcon, Eye, X, Bookmark, Wand2, Bot } from 'lucide-react';
 import { primaryDocumentNodes, childrenOf, type SceneNode, type ToolKind } from '@omnix/core';
 import { createProjectStore, ProjectContext, useProject, type ProjectStore } from '../state/project.js';
 import { BrowserRenderHost } from '../render/browserHost.js';
 import { RenderHostContext } from '../render/context.js';
 import { useShortcuts, formatShortcut } from '../ui/shortcuts.js';
-import { useCommands } from '../state/commands.js';
+import { useCommands, useCommandStore } from '../state/commands.js';
+import { useDialogs } from '../state/dialogs.js';
 import { IconButton, MenuButton, Avatar, Spinner, Dialog, Switch } from '../ui/primitives.js';
 import { ToolIcon, TOOL_COLORS } from '../ui/icons.js';
 import { useGlobalCommands, useConnectionStatus } from '../shell/Shell.js';
@@ -16,6 +17,12 @@ import { HistoryPanel } from '../components/HistoryPanel.js';
 import { NotesPanel } from '../components/NotesPanel.js';
 import { ActivityFeed } from '../components/ActivityFeed.js';
 import { ExportDialog } from '../components/ExportDialog.js';
+import { CommandBar } from '../components/CommandBar.js';
+import { AgentRunsPanel, AgentStartDialog, useAgentRuns } from '../components/AgentRuns.js';
+import { StyleDialog } from '../components/StyleDialog.js';
+import { FindDialog } from '../components/FindDialog.js';
+import { GenerativeDialog } from '../components/GenerativeDialog.js';
+import '../styles/ai.css';
 import { toast } from '../ui/toast.js';
 import { t } from '../i18n/index.js';
 import { post } from '../lib/api.js';
@@ -26,7 +33,7 @@ const CodeEditor = lazy(() => import('../editors/code/CodeEditor.js').then((m) =
 const DocumentEditor = lazy(() => import('../editors/document/DocumentEditor.js').then((m) => ({ default: m.DocumentEditor })));
 const SlidesEditor = lazy(() => import('../editors/slides/SlidesEditor.js').then((m) => ({ default: m.SlidesEditor })));
 
-type Panel = 'proposals' | 'history' | 'notes' | 'activity' | null;
+type Panel = 'proposals' | 'history' | 'notes' | 'activity' | 'runs' | null;
 
 export function toolOfDoc(n: SceneNode): ToolKind | null {
   switch (n.type) {
@@ -85,7 +92,19 @@ function ProjectView({ store }: { store: ProjectStore }) {
   const presence = useStore(store, (s) => s.presence);
   const preview = useStore(store, (s) => s.preview);
   const [params, setParams] = useSearchParams();
-  const [panel, setPanel] = useState<Panel>(() => (params.get('panel') as Panel) ?? (params.get('proposal') ? 'proposals' : params.get('commit') ? 'history' : null));
+  const [panel, setPanel] = useState<Panel>(() => (params.get('panel') as Panel) ?? (params.get('proposal') ? 'proposals' : params.get('commit') ? 'history' : params.get('run') ? 'runs' : null));
+  const dialogs = useDialogs();
+  const runs = useAgentRuns(store.getState().projectId);
+  const waitingRuns = runs?.filter((r) => r.status === 'awaiting_approval').length ?? 0;
+  const activeRuns = runs?.filter((r) => r.status === 'running' || r.status === 'queued').length ?? 0;
+  // Project dialogs belong to this project: close them when leaving it.
+  useEffect(() => () => useDialogs.setState({ command: null, style: null, agent: null, find: false, generative: null }), []);
+  const review = (proposalId: string) => {
+    dialogs.close('command');
+    params.set('proposal', proposalId);
+    setParams(params, { replace: true });
+    setPanel('proposals');
+  };
   const [exportOpen, setExportOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const conn = useConnectionStatus();
@@ -101,10 +120,19 @@ function ProjectView({ store }: { store: ProjectStore }) {
         const name = new Date().toLocaleString();
         void api.snapshot(name).then(() => toast.success(`${t('project.snapshot')}: ${name}`));
       },
+      'mod+shift+k': () => dialogs.openCommand(),
+      'mod+shift+f': () => dialogs.openFind(true),
     },
     [api],
     { allowInInputs: ['mod+s'] },
   );
+  // Typing a request in the command palette runs it as a command here.
+  useEffect(() => {
+    if (meta?.role === 'viewer') return;
+    useCommandStore.getState().setFreeText({ label: (text) => t('commands.paletteAsk', { text }), run: (text) => dialogs.openCommand(text, true) });
+    return () => useCommandStore.getState().setFreeText(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [meta?.role]);
   useCommands(
     'project',
     [
@@ -114,6 +142,11 @@ function ProjectView({ store }: { store: ProjectStore }) {
       { id: 'proposals', label: t('project.proposals'), section: t('palette.actions'), run: () => setPanel('proposals') },
       { id: 'notes', label: t('project.notes'), section: t('palette.actions'), run: () => setPanel('notes') },
       { id: 'export', label: t('project.export'), section: t('palette.actions'), run: () => setExportOpen(true) },
+      { id: 'command', label: `${t('commands.title')}…`, section: t('palette.ai'), shortcut: 'mod+shift+k', keywords: 'ask natural language', run: () => dialogs.openCommand() },
+      { id: 'agent', label: `${t('agent.start')}…`, section: t('palette.ai'), keywords: 'autonomous goal claude', run: () => dialogs.openAgent() },
+      { id: 'runs', label: t('agent.runs'), section: t('palette.ai'), run: () => setPanel('runs') },
+      { id: 'style', label: `${t('style.title')}…`, section: t('palette.ai'), keywords: 'reference look grade theme', run: () => dialogs.openStyle(null) },
+      { id: 'find', label: t('find.title'), section: t('palette.actions'), shortcut: 'mod+shift+f', keywords: 'search', run: () => dialogs.openFind(true) },
     ],
     [api],
   );
@@ -219,9 +252,18 @@ function ProjectView({ store }: { store: ProjectStore }) {
         <IconButton label={t('project.redo')} shortcut={formatShortcut('mod+shift+z')} onClick={() => void api.redo()} disabled={meta.role === 'viewer'}>
           <Redo2 />
         </IconButton>
+        {meta.role !== 'viewer' && (
+          <button className="btn btn-sm btn-ghost command-trigger" onClick={() => dialogs.openCommand()} title={`${t('commands.title')} (${formatShortcut('mod+shift+k')})`}>
+            <Wand2 /> <span className="hide-narrow">{t('commands.open')}</span>
+          </button>
+        )}
         <button className={`btn btn-sm ${proposals.length ? 'btn-ai' : 'btn-ghost'}`} onClick={() => setPanel(panel === 'proposals' ? null : 'proposals')} aria-pressed={panel === 'proposals'} aria-label={`${t('project.proposals')} (${proposals.length})`}>
           <Sparkles />
           {proposals.length > 0 && <span className="tabular">{proposals.length}</span>}
+        </button>
+        <button className={`btn btn-sm ${waitingRuns ? 'btn-ai' : 'btn-ghost'}`} onClick={() => setPanel(panel === 'runs' ? null : 'runs')} aria-pressed={panel === 'runs'} aria-label={`${t('agent.runs')}${waitingRuns ? ` (${t('agent.waiting', { n: waitingRuns })})` : activeRuns ? ` (${t('agent.active', { n: activeRuns })})` : ''}`}>
+          <Bot />
+          {(waitingRuns > 0 || activeRuns > 0) && <span className="tabular">{waitingRuns || activeRuns}</span>}
         </button>
         <IconButton label={t('project.history')} pressed={panel === 'history'} onClick={() => setPanel(panel === 'history' ? null : 'history')}>
           <History />
@@ -279,7 +321,7 @@ function ProjectView({ store }: { store: ProjectStore }) {
           <aside className="drawer" aria-label={panel}>
             <div className="panel-header">
               <span className="grow">
-                {panel === 'proposals' ? t('proposals.title') : panel === 'history' ? t('history.title') : panel === 'notes' ? t('notes.title') : t('activity.title')}
+                {panel === 'proposals' ? t('proposals.title') : panel === 'history' ? t('history.title') : panel === 'notes' ? t('notes.title') : panel === 'runs' ? t('agent.runs') : t('activity.title')}
               </span>
               <IconButton
                 small
@@ -300,11 +342,29 @@ function ProjectView({ store }: { store: ProjectStore }) {
               {panel === 'history' && <HistoryPanel focusCommit={params.get('commit')} />}
               {panel === 'notes' && <NotesPanel />}
               {panel === 'activity' && <ActivityFeed projectId={meta.id} showProject={false} filter limit={100} />}
+              {panel === 'runs' && <AgentRunsPanel projectId={meta.id} projectName={meta.name} focusId={params.get('run')} onStart={() => dialogs.openAgent()} />}
             </div>
           </aside>
         )}
       </div>
       {exportOpen && active && <ExportDialog node={active} onClose={() => setExportOpen(false)} />}
+      {dialogs.command && <CommandBar key={dialogs.command.text} initialText={dialogs.command.text} autoRun={dialogs.command.autoRun} onClose={() => dialogs.close('command')} onReview={review} />}
+      {dialogs.style && <StyleDialog targetId={dialogs.style.targetId} onClose={() => dialogs.close('style')} />}
+      {dialogs.agent && (
+        <AgentStartDialog
+          projectId={meta.id}
+          projectName={meta.name}
+          initialGoal={dialogs.agent.goal}
+          onClose={() => dialogs.close('agent')}
+          onStarted={(id) => {
+            params.set('run', id);
+            setParams(params, { replace: true });
+            setPanel('runs');
+          }}
+        />
+      )}
+      {dialogs.find && <FindDialog onClose={() => dialogs.openFind(false)} />}
+      {dialogs.generative && <GenerativeDialog mode={dialogs.generative.mode} canvasId={dialogs.generative.canvasId} {...(dialogs.generative.replaceLayerId ? { replaceLayerId: dialogs.generative.replaceLayerId } : {})} {...(dialogs.generative.prompt !== undefined ? { initialPrompt: dialogs.generative.prompt } : {})} onClose={() => dialogs.close('generative')} />}
       {settingsOpen && <ProjectSettingsDialog onClose={() => setSettingsOpen(false)} />}
     </div>
   );

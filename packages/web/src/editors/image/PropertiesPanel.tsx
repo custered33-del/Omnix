@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
 import { useStore } from 'zustand';
-import { Trash2, Plus, Eye, EyeOff, Link2, Unlink2, AlignLeft, AlignCenter, AlignRight, Italic, Bold, Eraser } from 'lucide-react';
+import { Trash2, Plus, Eye, EyeOff, Link2, Unlink2, AlignLeft, AlignCenter, AlignRight, Italic, Bold, Eraser, Sparkles, RefreshCw } from 'lucide-react';
 import type { Adjustment, FilterKind, LayerProps, SceneNode, SmartFilter, VectorShape } from '@omnix/core';
 import { curveLut, FILTER_DEFAULTS } from '@omnix/imaging';
 import { useProject } from '../../state/project.js';
+import { useDialogs } from '../../state/dialogs.js';
 import { ColorField, Dialog, IconButton, MenuButton, NumberField, Select, Switch } from '../../ui/primitives.js';
 import { AssetPicker } from '../../components/AssetPicker.js';
 import { t } from '../../i18n/index.js';
@@ -43,6 +44,7 @@ export function PropertiesPanel({ ctx }: { ctx: A.ImageCtx }) {
     <fieldset disabled={!canEdit || p.locked} className="props-fieldset">
       <legend className="sr-only">{t('image.properties')}</legend>
       {p.locked && <p className="muted inspector-note">This layer is locked. Unlock it in the layers list to edit.</p>}
+      {p.generation && <GeneratedSection ctx={ctx} layer={layer} />}
       {!['adjustment', 'fill', 'group'].includes(p.layerType) && <TransformSection ctx={ctx} layer={layer} />}
       {p.layerType === 'text' && <TextSection ctx={ctx} layer={layer} />}
       {p.layerType === 'vector' && <ShapeSection ctx={ctx} layer={layer} />}
@@ -57,6 +59,33 @@ export function PropertiesPanel({ ctx }: { ctx: A.ImageCtx }) {
       <MaskSection ctx={ctx} layer={layer} />
       {!['adjustment', 'group'].includes(p.layerType) && <FiltersSection ctx={ctx} layer={layer} />}
     </fieldset>
+  );
+}
+
+/* ---------------- generated layers ---------------- */
+
+/** Where a generated layer came from: the prompt, the provider, its area (the mask), and a way to try again. */
+function GeneratedSection({ ctx, layer }: { ctx: A.ImageCtx; layer: SceneNode<'layer'> }) {
+  const g = layer.props.generation!;
+  const openGenerative = useDialogs((d) => d.openGenerative);
+  return (
+    <section className="inspector-section gen-info">
+      <h3>
+        <Sparkles size={14} className="ai-ink" aria-hidden="true" /> {g.kind === 'extend' ? t('generative.extendTitle') : t('generative.fillTitle')}
+      </h3>
+      <p style={{ fontSize: 'var(--fs-sm)' }}>{g.prompt ? t('generative.generatedFrom', { prompt: g.prompt }) : t('generative.generatedFromSurroundings')}</p>
+      <p className="muted" style={{ fontSize: 'var(--fs-xs)' }}>
+        {g.provider === 'builtin' ? t('generative.byBuiltin') : t('generative.byModel')}
+      </p>
+      {layer.props.mask && (
+        <Switch checked={layer.props.mask.enabled} onChange={(v) => A.updateLayer(ctx, layer.id, { mask: { ...layer.props.mask!, enabled: v } }, v ? 'Show only the generated area' : 'Show the whole generated layer')} label={t('generative.limitToArea')} />
+      )}
+      {g.kind === 'fill' && g.maskAssetId && (
+        <button className="btn btn-sm" onClick={() => openGenerative({ mode: 'fill', canvasId: ctx.canvasId, replaceLayerId: layer.id, prompt: g.prompt })}>
+          <RefreshCw size={14} /> {t('generative.regenerate')}
+        </button>
+      )}
+    </section>
   );
 }
 

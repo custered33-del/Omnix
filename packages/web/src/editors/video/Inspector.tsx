@@ -1,10 +1,14 @@
+import { useEffect, useState } from 'react';
 import { useStore } from 'zustand';
-import { Diamond, ChevronLeft, ChevronRight, Plus, Trash2, Eye, EyeOff } from 'lucide-react';
+import { Diamond, ChevronLeft, ChevronRight, Plus, Trash2, Eye, EyeOff, Sparkles, SquareDashed } from 'lucide-react';
 import type { AnimatableProp, ClipEffect, ClipProps, Easing, FilterKind, Keyframe, SceneNode, Transition, TransitionKind } from '@omnix/core';
 import { clipPropsAt, setSpeedOp, tracksOf, upsertKeyframe } from '@omnix/core';
 import { COLOR_GRADE_DEFAULTS, FILTER_DEFAULTS } from '@omnix/imaging';
 import { animLayerTransform } from '@omnix/render';
 import { useProject } from '../../state/project.js';
+import { realtime } from '../../state/realtime.js';
+import { post } from '../../lib/api.js';
+import { toast } from '../../ui/toast.js';
 import { ColorField, IconButton, MenuButton, NumberField, Select, Switch } from '../../ui/primitives.js';
 import { FontSelect } from '../shared/FontSelect.js';
 import { EasingEditor } from '../shared/EasingEditor.js';
@@ -226,7 +230,97 @@ function ClipInspector({ ctx, clip }: { ctx: TimelineCtx; clip: SceneNode<'clip'
       )}
       {isVisual && <EffectsSection ctx={ctx} clip={clip} />}
       {tt === 'video' && p.assetId && <BackgroundSection ctx={ctx} clip={clip} />}
+      {tt === 'video' && p.assetId && <GenerativeSection ctx={ctx} clip={clip} />}
     </>
+  );
+}
+
+/** Generative fill on video: mark an area on the preview, describe it, and Omnix fills it across the clip. */
+function GenerativeSection({ ctx, clip }: { ctx: TimelineCtx; clip: SceneNode<'clip'> }) {
+  const s = ctx.store.getState();
+  const drawing = useStore(ctx.ed, (st) => st.drawingRegion);
+  const region = useStore(ctx.ed, (st) => st.regionDraft);
+  const canEdit = useProject((st) => st.meta?.role !== 'viewer' && !st.preview);
+  const [prompt, setPrompt] = useState('');
+  const [job, setJob] = useState<{ id: string; progress: number; message: string } | null>(null);
+  const gen = clip.props.generation;
+  useEffect(() => {
+    if (!job) return;
+    return realtime.on('job', (m: { job: { id: string; status: string; progress: number; message: string; error: string | null } }) => {
+      if (m.job.id !== job.id) return;
+      if (m.job.status === 'done') {
+        setJob(null);
+        toast.success(t('generative.videoDone'));
+      } else if (m.job.status === 'failed' || m.job.status === 'cancelled') {
+        setJob(null);
+        if (m.job.error) toast.error(m.job.error);
+      } else setJob({ id: job.id, progress: m.job.progress, message: m.job.message });
+    });
+  }, [job?.id]);
+  useEffect(() => () => ctx.ed.getState().set({ drawingRegion: false, regionDraft: null }), [clip.id]);
+  const start = async () => {
+    if (!region) return;
+    try {
+      const r = await post<{ jobId: string }>(`/api/projects/${s.projectId}/generative/video-fill`, { clipId: clip.id, region, prompt });
+      setJob({ id: r.jobId, progress: 0, message: t('generative.queued') });
+      ctx.ed.getState().set({ regionDraft: null });
+    } catch (e) {
+      toast.error((e as Error).message);
+    }
+  };
+  return (
+    <section className="inspector-section">
+      <h3>
+        <Sparkles size={14} className="ai-ink" aria-hidden="true" /> {t('generative.videoTitle')}
+      </h3>
+      {gen && (
+        <div className="gen-info">
+          <p style={{ fontSize: 'var(--fs-sm)' }}>{gen.prompt ? t('generative.generatedFrom', { prompt: gen.prompt }) : t('generative.generatedFromSurroundings')}</p>
+          <button
+            className="btn btn-sm"
+            disabled={!canEdit}
+            onClick={() => s.commit({ kind: 'update', id: clip.id, set: { assetId: gen.sourceAssetId, in: gen.sourceIn, out: gen.sourceOut, sourceDuration: Math.max(gen.sourceOut, clip.props.sourceDuration), generation: null } }, 'Use the original clip')}
+          >
+            {t('generative.useOriginal')}
+          </button>
+        </div>
+      )}
+      {job ? (
+        <div className="col" style={{ gap: 6 }} role="status">
+          <div className="progress" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(job.progress * 100)} aria-label={t('generative.videoTitle')}>
+            <span style={{ width: `${Math.round(job.progress * 100)}%` }} />
+          </div>
+          <span className="muted" style={{ fontSize: 'var(--fs-xs)' }}>
+            {job.message}
+          </span>
+        </div>
+      ) : (
+        <>
+          <p className="muted" style={{ fontSize: 'var(--fs-xs)' }}>
+            {drawing ? t('generative.drawHint') : region ? t('generative.regionReady') : t('generative.videoHint')}
+          </p>
+          <div className="row" style={{ flexWrap: 'wrap' }}>
+            <button className="btn btn-sm" disabled={!canEdit} aria-pressed={drawing} onClick={() => ctx.ed.getState().set({ drawingRegion: !drawing, ...(drawing ? {} : { regionDraft: null, playing: false }) })}>
+              <SquareDashed size={14} /> {region ? t('generative.redraw') : t('generative.markArea')}
+            </button>
+          </div>
+          {region && (
+            <form
+              className="col"
+              onSubmit={(e) => {
+                e.preventDefault();
+                void start();
+              }}
+            >
+              <input className="input" value={prompt} onChange={(e) => setPrompt(e.target.value)} placeholder={t('generative.videoPlaceholder')} aria-label={t('generative.prompt')} />
+              <button className="btn btn-sm btn-ai" type="submit" disabled={!canEdit}>
+                <Sparkles size={14} /> {t('generative.fillArea')}
+              </button>
+            </form>
+          )}
+        </>
+      )}
+    </section>
   );
 }
 

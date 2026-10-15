@@ -12,10 +12,18 @@ export interface Command {
   run: () => void;
 }
 
+/** What the palette offers for free text that matches no command (inside a project: run it as a command). */
+export interface FreeTextAction {
+  label: (text: string) => string;
+  run: (text: string) => void;
+}
+
 interface CommandState {
   scopes: Record<string, Command[]>;
   paletteOpen: boolean;
   shortcutsOpen: boolean;
+  freeText: FreeTextAction | null;
+  setFreeText(a: FreeTextAction | null): void;
   setScope(scope: string, commands: Command[] | null): void;
   openPalette(open: boolean): void;
   openShortcuts(open: boolean): void;
@@ -25,6 +33,10 @@ export const useCommandStore = create<CommandState>((set, get) => ({
   scopes: {},
   paletteOpen: false,
   shortcutsOpen: false,
+  freeText: null,
+  setFreeText(freeText) {
+    set({ freeText });
+  },
   setScope(scope, commands) {
     const scopes = { ...get().scopes };
     if (commands) scopes[scope] = commands;

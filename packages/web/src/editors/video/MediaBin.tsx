@@ -35,8 +35,8 @@ export function MediaBin({ ctx, onCaptions }: { ctx: TimelineCtx; onCaptions: ()
   useEffect(() => {
     void load();
     // Proxies and waveforms finish in the background; refresh when jobs complete.
-    return realtime.on('job', (m: { job: { type: string; status: string } }) => {
-      if (m.job.status === 'done' && m.job.type.startsWith('asset.')) void load();
+    return realtime.on('job', (m: { job: { kind: string; status: string } }) => {
+      if (m.job.status === 'done' && (m.job.kind?.startsWith('asset') || m.job.kind === 'video-fill')) void load();
     });
   }, [projectId]);
 

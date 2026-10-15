@@ -153,6 +153,34 @@ export function slidesFromDocumentOps(state: ProjectState, documentId: string, d
   return { ops, deckId: targetDeck, slides: Math.min(sections.length, maxSlides) };
 }
 
+/** Change a video's frame size, filling around each shot with a blurred, darker copy of it. */
+export async function reframeOps(services: Services, state: ProjectState, sequenceId: string, width: number, height: number, fill: 'blur' | 'none'): Promise<{ ops: Operation[]; fillClips: number }> {
+  const seq = state.nodes[sequenceId] as SceneNode<'sequence'> | undefined;
+  if (!seq || seq.type !== 'sequence' || seq.props.purpose !== 'video') throw new Error('sequenceId is not a video sequence.');
+  const ops: Operation[] = [{ kind: 'update', id: seq.id, set: { width, height } }];
+  let n = 0;
+  if (fill === 'blur') {
+    const video = tracksOf(state, seq.id).filter((t) => t.props.trackType === 'video');
+    const fillTrack = makeNode('track', { name: 'Frame fill', trackType: 'video' });
+    const lastVideo = video[video.length - 1];
+    const fillOps: Operation[] = [];
+    for (const t of video)
+      for (const c of clipsOf(state, t.id)) {
+        if (!c.props.assetId) continue;
+        const a = await services.assets.get(c.props.assetId);
+        if (!a?.width || !a.height) continue;
+        const contain = Math.min(width / a.width, height / a.height);
+        const cover = Math.max(width / a.width, height / a.height);
+        if (cover / contain < 1.01) continue;
+        const copy = makeNode('clip', { ...structuredClone(c.props), name: `${c.props.name} (fill)`, scale: (cover / contain) * 1.06, x: 0, y: 0, volume: -60, keyframes: {}, effects: [{ id: `fx_fill${n}`, effect: 'gaussianBlur', params: { radius: 28 }, enabled: true }, { id: `fx_dim${n}`, effect: 'colorGrade', params: { exposure: -0.6, contrast: 0, saturation: -15, temperature: 0, tint: 0, intensity: 1 }, enabled: true }], title: null, generation: null });
+        fillOps.push({ kind: 'create', parentId: fillTrack.id, nodes: [copy] });
+        n++;
+      }
+    if (n) ops.push({ kind: 'create', parentId: seq.id, index: lastVideo ? seq.children.indexOf(lastVideo.id) + 1 : seq.children.length, nodes: [fillTrack] }, ...fillOps);
+  }
+  return { ops, fillClips: n };
+}
+
 function aiTools(services: Services): ToolDef[] {
   const asTool = (e: unknown): never => {
     if (e instanceof ToolError) throw e;
@@ -252,27 +280,13 @@ function aiTools(services: Services): ToolDef[] {
       async handler(args, ctx) {
         await ctx.requireProject(args.projectId, 'write');
         const state = await ctx.state(args.projectId);
-        const seq = state.nodes[args.sequenceId] as SceneNode<'sequence'> | undefined;
-        if (!seq || seq.type !== 'sequence' || seq.props.purpose !== 'video') throw new ToolError('sequenceId is not a video sequence.');
-        const ops: Operation[] = [{ kind: 'update', id: seq.id, set: { width: args.width, height: args.height } }];
-        let n = 0;
-        if (args.fill === 'blur') {
-          const tracks = tracksOf(state, seq.id);
-          const video = tracks.filter((t) => t.props.trackType === 'video');
-          const fillTrack = makeNode('track', { name: 'Frame fill', trackType: 'video' });
-          const lastVideo = video[video.length - 1];
-          ops.push({ kind: 'create', parentId: seq.id, index: lastVideo ? seq.children.indexOf(lastVideo.id) + 1 : seq.children.length, nodes: [fillTrack] });
-          for (const t of video) for (const c of clipsOf(state, t.id)) {
-            if (!c.props.assetId) continue;
-            const a = await services.assets.get(c.props.assetId);
-            if (!a?.width || !a.height) continue;
-            const contain = Math.min(args.width / a.width, args.height / a.height);
-            const cover = Math.max(args.width / a.width, args.height / a.height);
-            const copy = makeNode('clip', { ...structuredClone(c.props), name: `${c.props.name} (fill)`, scale: (cover / contain) * 1.06, x: 0, y: 0, volume: -60, keyframes: {}, transitionIn: c.props.transitionIn, transitionOut: c.props.transitionOut, effects: [{ id: `fx_fill${n}`, effect: 'gaussianBlur', params: { radius: 28 }, enabled: true }, { id: `fx_dim${n}`, effect: 'colorGrade', params: { exposure: -0.6, contrast: 0, saturation: -15, temperature: 0, tint: 0, intensity: 1 }, enabled: true }], title: null, generation: null });
-            ops.push({ kind: 'create', parentId: fillTrack.id, nodes: [copy] });
-            n++;
-          }
+        let r;
+        try {
+          r = await reframeOps(services, state, args.sequenceId, args.width, args.height, args.fill);
+        } catch (e) {
+          asTool(e);
         }
+        const { ops, fillClips: n } = r!;
         const out = await ctx.apply(args.projectId, ops, `Extend the frame to ${args.width}×${args.height}`);
         return writeResult(out, { fillClips: n });
       },
@@ -412,16 +426,24 @@ useModule(({ services, router }) => {
     h(async (req, res) => {
       const user = requireUser(req);
       const projectId = String(req.params.id);
-      const body = z.object({ canvasId: z.string(), prompt: z.string().max(2000).default(''), selection: zSelection.optional(), provider: z.string().nullable().optional() }).parse(req.body);
+      const body = z.object({ canvasId: z.string(), prompt: z.string().max(2000).default(''), selection: zSelection.optional(), provider: z.string().nullable().optional(), replaceLayerId: z.string().optional() }).parse(req.body);
       await services.projects.requireAccess(projectId, user.id, 'write');
       await requireProviderConsent(services, projectId, body.provider);
       const state = await services.projects.state(projectId);
       const canvas = state.nodes[body.canvasId] as SceneNode<'canvas'> | undefined;
       if (!canvas || canvas.type !== 'canvas') throw new ProjectError('Not an image canvas', 400);
-      const sel = body.selection ?? canvas.props.selection;
+      // Regenerate: same area as an earlier generated layer, which the new result replaces in place.
+      const old = body.replaceLayerId ? (state.nodes[body.replaceLayerId] as SceneNode<'layer'> | undefined) : undefined;
+      if (body.replaceLayerId && !old?.props.generation?.maskAssetId) throw new ProjectError('That layer was not generated', 400);
+      let base = state;
+      if (old) base = applyOp(state, { kind: 'update', id: old.id, set: { visible: false } }).state;
+      const sel = body.selection ?? (old ? { kind: 'mask' as const, assetId: old.props.generation!.maskAssetId! } : canvas.props.selection);
       if (!sel) throw new ProjectError('Select the area to fill first.', 400);
-      const r2 = await generativeFillOps(services, state, canvas.id, sel, body.prompt, { providerId: body.provider ?? null, projectId, ownerId: user.id }).catch(bad);
-      const commitId = await humanEdit(services, user, projectId, [...r2.ops, { kind: 'update', id: canvas.id, set: { selection: null } }], body.prompt ? `Generative fill: ${body.prompt.slice(0, 50)}` : 'Generative fill');
+      const r2 = await generativeFillOps(services, base, canvas.id, sel, body.prompt, { providerId: body.provider ?? null, projectId, ownerId: user.id }).catch(bad);
+      const ops: Operation[] = old
+        ? [{ kind: 'delete', id: old.id }, ...r2.ops.map((o) => (o.kind === 'create' ? { ...o, parentId: old.parentId!, index: state.nodes[old.parentId!]!.children.indexOf(old.id) } : o))]
+        : [...r2.ops, { kind: 'update', id: canvas.id, set: { selection: null } }];
+      const commitId = await humanEdit(services, user, projectId, ops, body.prompt ? `Generative fill: ${body.prompt.slice(0, 50)}` : 'Generative fill');
       res.json({ commitId, layerId: r2.layerId, provider: r2.provider });
     }),
   );
@@ -489,6 +511,20 @@ useModule(({ services, router }) => {
       }
       const commitId = await humanEdit(services, user, projectId, r2!.ops, `Slides from "${(state.nodes[body.documentId] as SceneNode<'document'>).props.name}"`);
       res.json({ commitId, deckId: r2!.deckId, slides: r2!.slides });
+    }),
+  );
+
+  r.post(
+    '/projects/:id/video/reframe',
+    h(async (req, res) => {
+      const user = requireUser(req);
+      const projectId = String(req.params.id);
+      const body = z.object({ sequenceId: z.string(), width: z.number().int().min(16).max(8192), height: z.number().int().min(16).max(8192), fill: z.enum(['blur', 'none']).default('blur') }).parse(req.body);
+      await services.projects.requireAccess(projectId, user.id, 'write');
+      const state = await services.projects.state(projectId);
+      const r2 = await reframeOps(services, state, body.sequenceId, body.width, body.height, body.fill).catch(bad);
+      const commitId = await humanEdit(services, user, projectId, r2.ops, `Reframe to ${body.width}×${body.height}`);
+      res.json({ commitId, fillClips: r2.fillClips });
     }),
   );
 

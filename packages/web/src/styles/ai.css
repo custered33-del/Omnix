@@ -1,0 +1,211 @@
+/* Phase 4: commands, agent runs, generative and style dialogs. */
+
+.ai-ink {
+  color: var(--ai);
+}
+.success-ink {
+  color: var(--success);
+}
+.danger-ink {
+  color: var(--danger);
+}
+
+/* Command bar ------------------------------------------------------------ */
+.command-bar {
+  width: min(680px, calc(100vw - 32px));
+}
+.command-input {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--border);
+}
+.command-input input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  outline: none;
+  background: transparent;
+  font-size: var(--fs-lg);
+  color: var(--text);
+}
+.command-body {
+  padding: 14px 16px 16px;
+  max-height: 55vh;
+  overflow: auto;
+}
+.command-body p {
+  margin: 0;
+}
+.unmatched {
+  list-style: none;
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: var(--r-md);
+  background: var(--warning-soft);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: var(--fs-sm);
+}
+.unmatched li {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+}
+.unmatched svg {
+  flex: none;
+  color: var(--warning);
+  transform: translateY(2px);
+}
+.command-trigger {
+  color: var(--ai);
+}
+@media (max-width: 1100px) {
+  .hide-narrow {
+    display: none;
+  }
+}
+
+/* Agent runs ------------------------------------------------------------- */
+.run-card {
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.run-card.focused {
+  outline: 2px solid var(--ai);
+  outline-offset: 1px;
+}
+.run-goal {
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.run-plan {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: var(--fs-sm);
+}
+.run-plan li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.run-plan li.pending {
+  color: var(--muted);
+}
+.run-plan li.active {
+  font-weight: 600;
+}
+.gate-card {
+  border: 1px solid color-mix(in srgb, var(--ai) 40%, transparent);
+  background: var(--ai-soft);
+  border-radius: var(--r-md);
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.gate-summary {
+  margin: 0;
+  white-space: pre-wrap;
+  font-size: var(--fs-sm);
+  max-height: 220px;
+  overflow: auto;
+}
+.run-summary {
+  margin: 0;
+  font-size: var(--fs-sm);
+  padding: 10px 12px;
+  border-radius: var(--r-md);
+  background: var(--success-soft);
+}
+.run-checkpoints {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: var(--fs-sm);
+}
+.run-checkpoints li {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+}
+.run-log {
+  list-style: none;
+  margin: 6px 0 0;
+  padding: 8px 10px;
+  border-radius: var(--r-md);
+  background: var(--surface-2);
+  font-size: var(--fs-xs);
+  max-height: 260px;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.run-log li.failed,
+.run-log li.log-error {
+  color: var(--danger);
+}
+.run-log li.log-gate,
+.run-log li.log-decision {
+  color: var(--ai);
+}
+.run-log code {
+  font-size: 0.95em;
+  padding: 0 4px;
+  border-radius: 4px;
+  background: var(--surface-3);
+}
+.ai-note {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 14px;
+  border-radius: var(--r-md);
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+}
+.ai-note p {
+  margin: 0;
+}
+.copy-block {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: var(--r-sm);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: var(--fs-xs);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* Generative and style ---------------------------------------------------- */
+.gen-info {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.gen-info p {
+  margin: 0;
+}
+.style-ref-thumb {
+  width: 44px;
+  height: 44px;
+  object-fit: cover;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--border);
+}

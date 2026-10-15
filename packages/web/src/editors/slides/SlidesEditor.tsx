@@ -1,12 +1,14 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useStore } from 'zustand';
-import { Type, ImagePlus, Film, Shapes, BarChart3, Link2, Play, Timer, Plus, FileUp, Square, Circle, Minus } from 'lucide-react';
+import { Type, ImagePlus, Film, Shapes, BarChart3, Link2, Play, Timer, Plus, FileUp, Square, Circle, Minus, Palette } from 'lucide-react';
 import type { SceneNode, SlideElementProps } from '@omnix/core';
 import { deckSlides, makeNode, newId } from '@omnix/core';
 import { useProject, useProjectStore } from '../../state/project.js';
 import { useRenderHost } from '../../render/context.js';
 import { useShortcuts } from '../../ui/shortcuts.js';
 import { useCommands } from '../../state/commands.js';
+import { useDialogs } from '../../state/dialogs.js';
+import { t } from '../../i18n/index.js';
 import { MenuButton } from '../../ui/primitives.js';
 import { AssetPicker } from '../../components/AssetPicker.js';
 import { EmbedPicker } from '../../components/EmbedView.js';
@@ -44,6 +46,7 @@ export function SlidesEditor({ deckId }: { deckId: string }) {
   }, [state]);
   useEffect(() => {
     if (slideId) store.getState().reportLocation({ tool: 'slides', nodeId: slideId });
+    store.getState().setEditorContext({ slideId });
   }, [slideId]);
 
   const add = (props: Partial<SlideElementProps>, label: string) => {
@@ -109,6 +112,7 @@ export function SlidesEditor({ deckId }: { deckId: string }) {
     },
     [slideId, canEdit],
   );
+  const openStyle = useDialogs((d) => d.openStyle);
   useCommands(
     'slides',
     [
@@ -176,6 +180,9 @@ export function SlidesEditor({ deckId }: { deckId: string }) {
           </button>
         </div>
         <span className="spacer" />
+        <button className="btn btn-sm btn-ghost" onClick={() => openStyle(deckId)} disabled={!canEdit}>
+          <Palette /> {t('style.short')}
+        </button>
         <button className="btn btn-sm btn-ghost" onClick={() => setPicker('import')} disabled={!canEdit}>
           <FileUp /> Import
         </button>
