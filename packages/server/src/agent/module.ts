@@ -102,12 +102,12 @@ function agentTools(services: Services): ToolDef[] {
     defineTool({
       name: 'agent_checkpoint',
       title: 'Checkpoint a finished stage',
-      description: 'Mark the current stage done: saves a named version of the project (the user can roll back to it) with your summary, then moves to the next stage. Pauses when the user reviews each stage.',
+      description: 'Mark the current stage done: saves a named version of the project (the user can roll back to it) with your summary, then moves to the next stage. When the user reviews each stage, the run pauses first: if they approve, the next stage starts; if they ask for changes, the same stage continues, so make the changes and checkpoint it again.',
       category: 'agent',
       access: 'write',
       input: { runId: z.string(), summary: z.string().max(2000).describe('What this stage did, for the person reviewing it.') },
       output: zStatus,
-      example: { input: { runId: 'job_7f...', summary: 'Trimmed the five strongest shots to 26 s and ordered them wide to close.' }, output: { runId: 'job_7f...', status: 'awaiting_approval', stage: 'Add titles and music', pendingGate: { id: 'gate_3', title: 'Stage finished: Pick and trim the best shots', summary: 'Trimmed the five...' } } },
+      example: { input: { runId: 'job_7f...', summary: 'Trimmed the five strongest shots to 26 s and ordered them wide to close.' }, output: { runId: 'job_7f...', status: 'awaiting_approval', stage: 'Pick and trim the best shots', pendingGate: { id: 'gate_3', title: 'Stage finished: Pick and trim the best shots', summary: 'Trimmed the five...' } } },
       async handler(args, ctx) {
         const job = agent.requireExternal(ctx.principal, args.runId);
         if (job.status === 'awaiting_approval') throw new ToolError('The run is waiting for approval; call agent_wait first.');

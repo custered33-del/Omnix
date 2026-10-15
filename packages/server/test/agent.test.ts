@@ -300,9 +300,10 @@ describe('agent runs driven by Claude over MCP', () => {
       const w = await call('doc_insert_markdown', { projectId: p.id, documentId: p.doc, markdown: 'Launching soon.' });
       expect(w.error).toBeNull();
       const cp = await call('agent_checkpoint', { runId, summary: 'Drafted the note.' });
-      expect(cp.data).toMatchObject({ status: 'awaiting_approval', stage: 'Export' });
+      // The stage being reviewed stays current until it is approved.
+      expect(cp.data).toMatchObject({ status: 'awaiting_approval', stage: 'Draft' });
       await decide(runId, 'approve');
-      await call('agent_wait', { runId, timeoutSeconds: 5 });
+      expect((await call('agent_wait', { runId, timeoutSeconds: 5 })).data.stage).toBe('Export');
       // Exporting is gated: the first attempt pauses, the same call after approval goes through.
       const ex1 = await call('export_file', { projectId: p.id, nodeId: p.doc, format: 'md' });
       expect(ex1.error).toMatch(/Paused for the user's approval \(Before exporting/);
@@ -325,6 +326,37 @@ describe('agent runs driven by Claude over MCP', () => {
       const refused = await c2.callTool({ name: 'agent_start_run', arguments: { projectId: p.id, goal: 'x' } });
       expect(JSON.stringify(refused.content)).toMatch(/autonomous connection/);
       await c2.close();
+    } finally {
+      await c.close();
+    }
+  });
+
+  it('keeps working on a stage when the person asks for changes at its review', async () => {
+    const p = await docProject();
+    const { token } = await json(await ts.api('/api/auth/tokens', { method: 'POST', json: { name: 'Claude', scopes: ['omnix:read', 'omnix:edit', 'omnix:autonomous'] } }));
+    const c = new Client({ name: 'claude', version: '1' });
+    await c.connect(new StreamableHTTPClientTransport(new URL(`${ts.url}/mcp`), { requestInit: { headers: { Authorization: `Bearer ${token}` } } }));
+    const call = async (name: string, args: Record<string, unknown>) => (await c.callTool({ name, arguments: args })).structuredContent as Record<string, any>;
+    try {
+      const runId = (await call('agent_start_run', { projectId: p.id, goal: 'Draft and polish', plan: ['Draft', 'Polish'] })).runId as string;
+      await decide(runId, 'approve');
+      await call('agent_wait', { runId, timeoutSeconds: 5 });
+      expect((await call('agent_checkpoint', { runId, summary: 'First draft.' })).checkpoint ?? {}).toBeDefined();
+      await decide(runId, 'changes', { feedback: 'Shorter, please.' });
+      expect((await call('agent_wait', { runId, timeoutSeconds: 5 })).stage).toBe('Draft');
+      let run = (await json(await ts.api(`/api/agent/runs/${runId}`))).run;
+      expect(run.plan.map((s: { status: string }) => s.status)).toEqual(['active', 'pending']);
+      // The revision is checkpointed, and saved as a version, under the same stage.
+      const again = await call('agent_checkpoint', { runId, summary: 'Shorter draft.' });
+      expect(again).toMatchObject({ stage: 'Draft', status: 'awaiting_approval' });
+      run = (await json(await ts.api(`/api/agent/runs/${runId}`))).run;
+      expect(run.checkpoints.map((cp: { stage: string }) => cp.stage)).toEqual(['Draft', 'Draft']);
+      await decide(runId, 'approve');
+      expect((await call('agent_wait', { runId, timeoutSeconds: 5 })).stage).toBe('Polish');
+      run = (await json(await ts.api(`/api/agent/runs/${runId}`))).run;
+      expect(run.plan.map((s: { status: string }) => s.status)).toEqual(['done', 'active']);
+      const versions = (await json(await ts.api(`/api/projects/${p.id}/history`))).snapshots as { name: string }[];
+      expect(versions.filter((v) => v.name === 'Claude: Draft')).toHaveLength(2);
     } finally {
       await c.close();
     }

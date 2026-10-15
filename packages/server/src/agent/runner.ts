@@ -296,6 +296,8 @@ export class AgentService {
       if (decision === 'changes') await this.notes?.record(job.projectId, { kind: 'rejected', text: `At "${gate.title}" ${user.name} asked for changes${fb ? `: ${fb}` : ''}`, author: by, ref: { jobId } });
     }
     if (decision === 'stop') return this.stop(user, job, options.rollbackTo);
+    // An approved stage is finished and the next one starts; with changes asked for, it carries on.
+    if (gate.kind === 'stage' && decision === 'approve') advanceStage(data);
     if (data.driver === 'internal') {
       data.resume = { decision, ...(fb ? { feedback: fb } : {}) };
       await this.save(job);
@@ -409,13 +411,13 @@ export class AgentService {
     const session = await this.services.projects.session(projectId);
     const cp: Checkpoint = { id: `cp_${data.checkpoints.length + 1}`, stage, summary: summary.slice(0, 2000), snapshotId: snap?.id ?? null, head: session.head, at: new Date().toISOString() };
     data.checkpoints.push(cp);
-    if (activeIdx >= 0) data.plan[activeIdx]!.status = 'done';
-    const next = data.plan.find((s) => s.status === 'pending') ?? null;
-    if (next) next.status = 'active';
-    const done = data.plan.filter((s) => s.status === 'done').length;
+    // With a review, the stage stays current until the person approves it (asking for changes keeps it going).
+    const reviewed = data.gates.some((g) => g.kind === 'stage');
+    const next = reviewed ? null : advanceStage(data);
+    const done = data.plan.filter((s) => s.status === 'done').length + (reviewed && activeIdx >= 0 ? 1 : 0);
     this.log(job, { kind: 'checkpoint', text: `Checkpoint "${stage}": ${summary.slice(0, 200)}` });
-    await this.save(job, { progress: data.plan.length ? done / data.plan.length : 0, message: next ? `Stage ${data.plan.indexOf(next) + 1}: ${next.title}` : 'Wrapping up' });
-    if (data.gates.some((g) => g.kind === 'stage')) return { checkpoint: cp, next, paused: await this.pause(job, 'stage', `${gateTitle('stage')}: ${stage}`, summary) };
+    await this.save(job, { progress: data.plan.length ? done / data.plan.length : 0, message: reviewed ? `Waiting for review: ${stage}` : next ? `Stage ${data.plan.indexOf(next) + 1}: ${next.title}` : 'Wrapping up' });
+    if (reviewed) return { checkpoint: cp, next, paused: await this.pause(job, 'stage', `${gateTitle('stage')}: ${stage}`, summary) };
     return { checkpoint: cp, next, paused: null };
   }
 
@@ -498,7 +500,9 @@ export class AgentService {
           text = `Not run: ${user.name} declined this at the approval gate.${res.feedback ? ` Their feedback: ${res.feedback}` : ''}`;
           isError = true;
         } else if (res.decision === 'approve') {
-          text = `${user.name} approved "${gate.title}".${res.feedback ? ` Their note: ${res.feedback}` : ''} Continue.`;
+          const current = gate.kind === 'stage' ? data.plan.find((s) => s.status === 'active') : undefined;
+          const then = gate.kind !== 'stage' ? 'Continue.' : current ? `Next stage: ${current.title}.` : 'All stages are done: check the result (render_preview), then call finish.';
+          text = `${user.name} approved "${gate.title}".${res.feedback ? ` Their note: ${res.feedback}` : ''} ${then}`;
         } else {
           text = `${user.name} asked for changes at "${gate.title}": ${res.feedback ?? '(no details)'}. Address this before moving on${gate.kind === 'plan' ? ', then call plan_stages again with the revised plan' : gate.kind === 'stage' ? ', then call checkpoint again' : ''}.`;
         }
@@ -666,6 +670,15 @@ ${projectTreeText(state, 250)}
 ${notes.length ? `\nSession memory (latest notes):\n${notes.join('\n')}\n` : ''}
 Start by planning (plan_stages).`;
   }
+}
+
+/** Finish the current stage and start the next one, which it returns. */
+function advanceStage(data: AgentRunData): PlanStage | null {
+  const current = data.plan.find((s) => s.status === 'active');
+  if (current) current.status = 'done';
+  const next = data.plan.find((s) => s.status === 'pending') ?? null;
+  if (next) next.status = 'active';
+  return next;
 }
 
 function describeCall(name: string, input: unknown): string {
