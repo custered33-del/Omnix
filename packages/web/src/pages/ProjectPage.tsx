@@ -98,7 +98,6 @@ function ProjectView({ store }: { store: ProjectStore }) {
   const presence = useStore(store, (s) => s.presence);
   const preview = useStore(store, (s) => s.preview);
   const commentMode = useStore(store, (s) => s.commentMode);
-  const focusRequest = useStore(store, (s) => s.focusRequest);
   const [params, setParams] = useSearchParams();
   const [panel, setPanel] = useState<Panel>(() => (params.get('panel') as Panel) ?? (params.get('proposal') ? 'proposals' : params.get('commit') ? 'history' : params.get('run') ? 'runs' : params.get('comment') ? 'comments' : null));
   const dialogs = useDialogs();

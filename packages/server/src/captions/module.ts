@@ -1,16 +1,11 @@
-import fs from 'node:fs/promises';
-import os from 'node:os';
-import path from 'node:path';
-import crypto from 'node:crypto';
 import { z } from 'zod';
-import { childrenOf, clipEnd, clipsOf, makeNode, requireNodeOfType, tracksOf, type Author, type Operation, type ProjectState, type SceneNode, type TitleSpec } from '@omnix/core';
+import { childrenOf } from '@omnix/core';
 import { parseSubtitles } from '@omnix/exporters';
 import type { Services } from '../services.js';
 import { useModule } from '../app.js';
 import { h, requireUser, author as authorOf } from '../http/middleware.js';
 import { ProjectError } from '../projects/service.js';
-import { decodeAudioMono } from '../util/media.js';
-import { encodeWav, resolveSpeechProvider, toCaptionLines, type CaptionSegment, type SpeechProvider } from './stt.js';
+import { resolveSpeechProvider, type CaptionSegment, type SpeechProvider } from './stt.js';
 
 export { DEFAULT_CAPTION_STYLE, captionTrackOps, captionClipOps, captionSegments, type CaptionJobInput } from './core.js';
 import { captionClipOps, captionSegments, type CaptionJobInput } from './core.js';

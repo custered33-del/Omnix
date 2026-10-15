@@ -150,8 +150,21 @@ export function versionTools(services: Services): ToolDef[] {
         time: z.number().min(0).optional().describe('Seconds, for video and animation'),
         images: z.boolean().default(true),
       },
-      output: z.object({ from: z.unknown(), to: z.unknown(), comparison: z.unknown(), pixels: z.unknown().optional() }),
-      example: { input: { projectId: 'prj_8Kq2...', from: 'snap_1...', documentId: 'cnv_1' }, output: { comparison: { summary: 'Poster: 1 added, 2 changed' }, pixels: { changedPercent: 12.4 } } },
+      output: z.object({
+        from: z.object({ commitId: z.string().nullable(), label: z.string(), at: z.string().nullable() }),
+        to: z.object({ commitId: z.string().nullable(), label: z.string(), at: z.string().nullable() }),
+        comparison: z.record(z.string(), z.unknown()),
+        pixels: z.object({ nodeId: z.string(), changedPercent: z.number(), bbox: z.unknown(), width: z.number(), height: z.number() }).optional(),
+      }),
+      example: {
+        input: { projectId: 'prj_8Kq2...', from: 'snap_1...', documentId: 'cnv_1' },
+        output: {
+          from: { commitId: 'c_41...', label: 'Claude: Poster', at: '2026-10-14T09:12:00.000Z' },
+          to: { commitId: 'c_57...', label: 'Current version', at: '2026-10-14T09:30:00.000Z' },
+          comparison: { summary: 'Poster: 1 added, 2 changed' },
+          pixels: { nodeId: 'cnv_1', changedPercent: 12.4, bbox: { x: 95, y: 472, width: 579, height: 136 }, width: 768, height: 768 },
+        },
+      },
       async handler(args, ctx) {
         await ctx.requireProject(args.projectId, 'read');
         const session = await services.projects.session(args.projectId);

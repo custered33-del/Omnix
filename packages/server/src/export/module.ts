@@ -1,4 +1,3 @@
-import express from 'express';
 import fs from 'node:fs/promises';
 import { spawn } from 'node:child_process';
 import os from 'node:os';

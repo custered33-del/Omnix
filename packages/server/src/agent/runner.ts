@@ -630,7 +630,6 @@ export class AgentService {
   }
 
   private async control(job: JobRecord, name: string, input: Record<string, unknown>): Promise<{ text: string; paused?: boolean; finished?: boolean; error?: boolean }> {
-    const data = job.data as AgentRunData;
     switch (name) {
       case 'plan_stages': {
         const stages = Array.isArray(input.stages) ? input.stages.filter((s): s is string => typeof s === 'string' && !!s.trim()) : [];

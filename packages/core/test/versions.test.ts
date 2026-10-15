@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { applyOp, assetRefs, compareVersions, createProjectState, replaceAssetOps, deckSlides, diffWords, documentBlocks, insertBlocksOps, makeNode, newSlideOps, nodesOfType, type Operation, type ProjectState, type SceneNode } from '../src/index.js';
+import { applyOp, assetRefs, compareVersions, createProjectState, replaceAssetOps, deckSlides, diffWords, documentBlocks, insertBlocksOps, makeNode, newSlideOps, nodesOfType, type Operation, type ProjectState } from '../src/index.js';
 
 const apply = (s: ProjectState, op: Operation) => applyOp(s, op).state;
 

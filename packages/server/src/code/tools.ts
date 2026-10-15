@@ -143,7 +143,7 @@ export function codeTools(code: CodeService): ToolDef[] {
       description: 'Link a notebook cell\'s chart, table or output live into a document (as a block after afterBlockId, default at the end) or onto a slide (at x, y, w, h). When the cell runs again, the document and slide update.',
       category: 'code',
       access: 'write',
-      input: { projectId: zProjectId, cellId: z.string(), documentId: z.string().optional(), afterBlockId: z.string().optional(), slideId: z.string().optional(), x: z.number().default(160), y: z.number().default(260), w: z.number().positive().default(1600), h: z.number().positive().default(720), caption: z.string().max(500).optional() },
+      input: { projectId: zProjectId, cellId: z.string(), documentId: z.string().optional(), afterBlockId: z.string().optional(), slideId: z.string().optional(), x: z.number().default(160), y: z.number().default(260), w: z.number().positive().default(1600).describe('Width on the slide (slide elements call it w)'), h: z.number().positive().default(720).describe('Height on the slide (h)'), caption: z.string().max(500).optional() },
       output: zWriteResult.extend({ nodeId: z.string() }),
       example: { input: { projectId: 'prj_8Kq2...', cellId: 'cell_8', slideId: 'sld_3' }, output: { status: 'committed', commitId: 'c_pl...', nodeId: 'el_7...' } },
       async handler(args, ctx) {

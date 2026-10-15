@@ -5,7 +5,7 @@ import { createProject, expect, signIn, test } from './fixtures.js';
 
 /**
  * Accessibility: every page, each editor, the project panels and the main dialogs pass axe's
- * WCAG 2.1 A and AA rules and its best practices, in the light and dark themes. A failure
+ * WCAG 2.1 A and AA rules and its best practices, in the light, dark and high-contrast themes. A failure
  * lists each rule with the elements that break it.
  */
 type Found = { where: string; rule: string; impact: string | null | undefined; help: string; targets: string[] };
@@ -37,22 +37,38 @@ const PAGES = [
 ] as const;
 const TOOLS = ['Image editor', 'Video editor', 'Animation maker', 'Code Grounds', 'Document', 'Slideshow'] as const;
 
+/** The signed-in person's theme (kept on the server, so it is reset after each test). */
+async function setTheme(page: Page, theme: 'system' | 'high-contrast'): Promise<void> {
+  await page.evaluate(async (t) => {
+    await fetch('/api/auth/me', { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ preferences: { theme: t } }) });
+  }, theme);
+}
+
+test.afterEach(async ({ page }) => {
+  if (page.url().startsWith('http')) await setTheme(page, 'system').catch(() => {});
+});
+
 async function paletteAction(page: Page, name: string): Promise<void> {
   await page.keyboard.press('Control+k');
   await page.getByRole('combobox').fill(name);
   await page.keyboard.press('Enter');
 }
 
-for (const scheme of ['light', 'dark'] as const) {
+for (const scheme of ['light', 'dark', 'high-contrast'] as const) {
   test(`pages, editors, panels and dialogs pass axe (${scheme})`, async ({ page }) => {
     const found: Found[] = [];
-    await page.emulateMedia({ colorScheme: scheme });
+    await page.emulateMedia({ colorScheme: scheme === 'light' ? 'light' : 'dark' });
     if (scheme === 'light') {
       await page.goto('/');
       await page.waitForSelector('form.auth-card');
       await scan(page, found, 'sign in');
     }
     await signIn(page);
+    if (scheme === 'high-contrast') {
+      await setTheme(page, 'high-contrast');
+      await page.reload();
+      await expect(page.locator('html')).toHaveAttribute('data-theme', 'high-contrast');
+    }
     await scan(page, found, 'dashboard');
     for (const [path, name] of PAGES) {
       await page.goto(path);

@@ -2244,10 +2244,91 @@ See what changed between two versions of a project: named versions (ids from get
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "type": "object",
   "properties": {
-    "from": {},
-    "to": {},
-    "comparison": {},
-    "pixels": {}
+    "from": {
+      "type": "object",
+      "properties": {
+        "commitId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "label": {
+          "type": "string"
+        },
+        "at": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "commitId",
+        "label",
+        "at"
+      ],
+      "additionalProperties": false
+    },
+    "to": {
+      "type": "object",
+      "properties": {
+        "commitId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "label": {
+          "type": "string"
+        },
+        "at": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "commitId",
+        "label",
+        "at"
+      ],
+      "additionalProperties": false
+    },
+    "comparison": {
+      "type": "object",
+      "propertyNames": {
+        "type": "string"
+      },
+      "additionalProperties": {}
+    },
+    "pixels": {
+      "type": "object",
+      "properties": {
+        "nodeId": {
+          "type": "string"
+        },
+        "changedPercent": {
+          "type": "number"
+        },
+        "bbox": {},
+        "width": {
+          "type": "number"
+        },
+        "height": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "nodeId",
+        "changedPercent",
+        "bbox",
+        "width",
+        "height"
+      ],
+      "additionalProperties": false
+    }
   },
   "required": [
     "from",
@@ -2277,11 +2358,30 @@ Example result (structured content):
 
 ```json
 {
+  "from": {
+    "commitId": "c_41...",
+    "label": "Claude: Poster",
+    "at": "2026-10-14T09:12:00.000Z"
+  },
+  "to": {
+    "commitId": "c_57...",
+    "label": "Current version",
+    "at": "2026-10-14T09:30:00.000Z"
+  },
   "comparison": {
     "summary": "Poster: 1 added, 2 changed"
   },
   "pixels": {
-    "changedPercent": 12.4
+    "nodeId": "cnv_1",
+    "changedPercent": 12.4,
+    "bbox": {
+      "x": 95,
+      "y": 472,
+      "width": 579,
+      "height": 136
+    },
+    "width": 768,
+    "height": 768
   }
 }
 ```
@@ -2506,14 +2606,15 @@ Apply a preset (id or name from list_presets) to a target: layer-effects to a la
       "type": "string",
       "description": "Preset id or exact name"
     },
-    "targetId": {
-      "type": "string"
+    "nodeId": {
+      "type": "string",
+      "description": "What to apply it to"
     }
   },
   "required": [
     "projectId",
     "preset",
-    "targetId"
+    "nodeId"
   ]
 }
 ```
@@ -2568,7 +2669,7 @@ Example call:
   "arguments": {
     "projectId": "prj_8Kq2...",
     "preset": "Warm film",
-    "targetId": "seq_main"
+    "nodeId": "seq_main"
   }
 }
 ```
@@ -7903,7 +8004,7 @@ Example result (structured content):
 
 **Write into a document** · write
 
-Insert Markdown into a document as editable blocks: headings, paragraphs, lists, to-dos ([ ] / [x]), quotes, code fences, tables, dividers, images (![alt](asset:<assetId>)) and live links (!embed[chart](<cellId>), !embed[canvas](<id>), !embed[slide](<id>), !embed[sequence-frame](<id>@<seconds>), !embed[asset](<assetId>)). Inserts after afterBlockId, at the start with afterBlockId null, or at the end by default (filling an empty last paragraph). A new document already starts with its name as a level-1 heading, so do not repeat it.
+Insert Markdown into a document as editable blocks: headings, paragraphs, lists, to-dos ([ ] / [x]), quotes, code fences, tables, dividers, images (`![alt](asset:<assetId>)`) and live links (`!embed[chart](<cellId>)`, `!embed[canvas](<id>)`, `!embed[slide](<id>)`, `!embed[sequence-frame](<id>@<seconds>)`, `!embed[asset](<assetId>)`). Inserts after afterBlockId, at the start with afterBlockId null, or at the end by default (filling an empty last paragraph). A new document already starts with its name as a level-1 heading, so do not repeat it.
 
 <details><summary>Input schema</summary>
 
@@ -9017,11 +9118,13 @@ Add an element to a slide: text (inline markdown), image or video (asset), shape
     },
     "w": {
       "type": "number",
-      "exclusiveMinimum": 0
+      "exclusiveMinimum": 0,
+      "description": "Width in slide pixels (the element's w property)"
     },
     "h": {
       "type": "number",
-      "minimum": 0
+      "minimum": 0,
+      "description": "Height in slide pixels (h)"
     },
     "rotation": {
       "default": 0,
@@ -10810,11 +10913,13 @@ Link a notebook cell's chart, table or output live into a document (as a block a
     },
     "w": {
       "default": 1600,
+      "description": "Width on the slide (slide elements call it w)",
       "type": "number",
       "exclusiveMinimum": 0
     },
     "h": {
       "default": 720,
+      "description": "Height on the slide (h)",
       "type": "number",
       "exclusiveMinimum": 0
     },
@@ -12585,8 +12690,9 @@ Apply the look of a reference (an image or video asset, or a canvas, layer, clip
       "minLength": 1,
       "description": "Project id (from list_projects)."
     },
-    "targetId": {
-      "type": "string"
+    "nodeId": {
+      "type": "string",
+      "description": "What to restyle: a canvas, layer, clip, sequence, deck, slide or document"
     },
     "reference": {
       "type": "object",
@@ -12622,7 +12728,7 @@ Apply the look of a reference (an image or video asset, or a canvas, layer, clip
   },
   "required": [
     "projectId",
-    "targetId",
+    "nodeId",
     "reference"
   ]
 }
@@ -12687,7 +12793,7 @@ Example call:
   "name": "style_match",
   "arguments": {
     "projectId": "prj_8Kq2...",
-    "targetId": "seq_main",
+    "nodeId": "seq_main",
     "reference": {
       "assetId": "a7c..."
     },

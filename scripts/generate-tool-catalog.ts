@@ -63,7 +63,8 @@ for (const [cat, list] of byCat) {
   for (const t of list) {
     lines.push(`### \`${t.name}\``, '');
     lines.push(`**${t.title}** · ${t.access === 'read' ? 'read-only' : t.destructive ? 'write, may remove content' : 'write'}`, '');
-    lines.push(t.description, '');
+    // Markdown written inside a description (link and image syntax) is shown as code, not followed.
+    lines.push(t.description.replace(/!?(?:embed)?\[[^\]\n]*\]\([^)\n]*\)/g, (m) => `\`${m}\``), '');
     lines.push('<details><summary>Input schema</summary>', '', '```json', JSON.stringify(schemaOf(t), null, 2), '```', '', '</details>', '');
     lines.push('<details><summary>Output schema</summary>', '', '```json', JSON.stringify(outputSchemaOf(t), null, 2), '```', '', '</details>', '');
     lines.push('Example call:', '', '```json', JSON.stringify({ name: t.name, arguments: t.example.input }, null, 2), '```', '');

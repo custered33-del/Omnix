@@ -2,7 +2,7 @@
 
 Omnix is a creative studio where an AI collaborator is a first-class participant. It combines an image editor, a video editor, an animation maker, a code workspace (Code Grounds), a document editor and a slideshow builder in one project. Every capability is exposed through the Model Context Protocol (MCP), so Claude can read the canvas, make edits, render previews and hand finished work back, while you set the direction and approve the results.
 
-> **Status:** under active construction, phase by phase. See [`docs/phases`](docs/phases) for what each phase delivered and what is still incomplete.
+> **Status:** all six phases are built. [`docs/phases`](docs/phases) describes what each phase delivered and the decisions behind it; [the final review](docs/phases/phase-6-review.md) lists what was checked and fixed, and what is still not done and why.
 
 ## Requirements
 
@@ -43,10 +43,13 @@ Useful scripts:
 | Variable | Default | Purpose |
 | --- | --- | --- |
 | `OMNIX_PORT` | `4317` | HTTP port |
+| `OMNIX_HOST` | `0.0.0.0` | Address to listen on (`127.0.0.1` keeps Omnix to this computer) |
 | `OMNIX_PUBLIC_URL` | `http://localhost:4317` | Public base URL (used for Claude connector and share links) |
 | `OMNIX_DATA_DIR` | `.omnix-data` | Local data folder |
 | `OMNIX_DATABASE_URL` | unset | `postgres://...` to store projects in Postgres |
 | `OMNIX_S3_BUCKET`, `OMNIX_S3_ENDPOINT`, `OMNIX_S3_REGION`, `OMNIX_S3_ACCESS_KEY_ID`, `OMNIX_S3_SECRET_ACCESS_KEY` | unset | S3-compatible media storage |
+| `OMNIX_S3_FORCE_PATH_STYLE` | `true` | Path-style S3 addresses (set `false` for virtual-hosted buckets) |
+| `OMNIX_MAX_UPLOAD_MB` | `4096` | Largest single upload. Long videos need the default; lower it on a server shared with people you do not know |
 | `OMNIX_OPEN_SIGNUP` | `false` | Allow more than the first account to sign up |
 | `OMNIX_FFMPEG`, `OMNIX_FFPROBE` | `ffmpeg`, `ffprobe` | Paths to the media tools |
 | `OMNIX_PDFTOPPM` | `pdftoppm` | Poppler tool used to import PDF pages as slides |
@@ -57,6 +60,7 @@ Useful scripts:
 | `OMNIX_IMAGE_GEN_URL`, `OMNIX_IMAGE_GEN_API_KEY`, `OMNIX_IMAGE_GEN_MODEL` | unset | Optional image model for generative fill and extend: any server speaking the OpenAI images edit API (`…/images/edits`). Without one, Omnix fills areas from their surroundings |
 | `OMNIX_STT_URL` | unset | OpenAI-compatible speech-to-text endpoint for automatic captions (otherwise speech detection leaves timed caption slots) |
 | `OMNIX_PLUGINS_DIR` | `<data folder>/plugins` | Folder of installed plugins (see [`docs/PLUGINS.md`](docs/PLUGINS.md)) |
+| `OMNIX_WEB_DIST` | `packages/web/dist` | The built web app to serve |
 | `OMNIX_SANDBOX_ISOLATION` | `required` | Code Grounds runs code only where Node's permission model keeps it away from the server's files (Node 22.13 or newer). `best-effort` runs code anyway, for servers where only trusted people run code |
 
 ## Connect Omnix to Claude
@@ -111,6 +115,7 @@ Each change Claude makes is attributed to Claude in the project history, appears
 ## Working together
 
 - **Comments where they belong.** Turn on comment mode (`Ctrl+Alt+M`) and click to pin a comment to a point on a canvas or slide, a moment in a video, a line of code or a phrase in a document. Code comments move with their lines. The Comments panel lists every thread; Claude reads them with `list_comments` and closes them with `resolve_comment`.
+- **Typing together.** Two people (or a person and Claude) typing in the same paragraph or code file at once both keep their words: each edit carries the text it was typed over and is merged word by word. Undo takes back only your own words.
 - **Live cursors.** Everyone in a project sees where the others are working, Claude included: cursors on canvases and slides, playheads on the timeline, tagged lines in code, and bars beside paragraphs.
 - **Compare versions.** Compare any two versions as pictures (side by side, swipe, overlay, or the difference) and as text (paragraphs, code lines, slides), then go back to either one.
 - **Asset library.** Uploads are tagged automatically and searchable by name, tag, color, size, kind or `unused`. Identical files are stored once; look-alike copies (resized or re-saved) are found and can be merged, with every use switched to the copy you keep.
@@ -136,6 +141,7 @@ Documentation:
 - [`docs/MCP_TOOLS.md`](docs/MCP_TOOLS.md): MCP tool catalog (generated)
 - [`docs/PLUGINS.md`](docs/PLUGINS.md): writing a plugin
 - [`docs/phases`](docs/phases): what was built in each phase, decisions and gaps
+- [`docs/phases/phase-6-review.md`](docs/phases/phase-6-review.md): the final review, and what could not be fixed
 
 ## License
 

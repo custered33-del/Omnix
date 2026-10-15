@@ -1,7 +1,6 @@
 import { describe, expect, it, beforeAll, afterAll } from 'vitest';
 import fs from 'node:fs';
 import http from 'node:http';
-import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import sharp from 'sharp';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
@@ -382,7 +381,7 @@ describe('style reference', () => {
     const t2 = makeNode('track', { name: 'Layers', trackType: 'animation' });
     const b = mk('Stiff', 'linear');
     await commit(p.id, { kind: 'batch', ops: [{ kind: 'create', parentId: track.id, nodes: [a] }, { kind: 'create', parentId: s.rootId, nodes: [{ ...second, parentId: s.rootId, children: [t2.id] }, { ...t2, parentId: second.id, children: [b.id] }, { ...b, parentId: t2.id }] }] });
-    const r = await auto.callTool({ name: 'style_match', arguments: { projectId: p.id, targetId: second.id, reference: { nodeId: p.doc }, aspects: ['motion'] } });
+    const r = await auto.callTool({ name: 'style_match', arguments: { projectId: p.id, nodeId: second.id, reference: { nodeId: p.doc }, aspects: ['motion'] } });
     expect(r.isError, JSON.stringify(r.content)).toBeFalsy();
     s = await state(p.id);
     expect((s.nodes[b.id] as SceneNode<'animLayer'>).props.keyframes.x![0]!.easing).toBe('bounce-out');

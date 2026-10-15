@@ -104,7 +104,7 @@ test('Claude completes a launch kit as one reviewed run', async ({ page, errors 
     // ── Stage 1: the poster ───────────────────────────────────────────────────
     await call('update_node', { projectId: project.id, nodeId: canvas.id, set: { width: 1080, height: 1080, name: 'Poster' }, label: 'Square poster, 1080 × 1080' });
     await call('update_node', { projectId: project.id, nodeId: background.id, set: { fillColor: '#171a2e' }, label: 'Night-blue background' });
-    await call('apply_preset', { projectId: project.id, preset: 'Film grain', targetId: background.id });
+    await call('apply_preset', { projectId: project.id, preset: 'Film grain', nodeId: background.id });
     const glow = await call('image_add_layer', { projectId: project.id, canvasId: canvas.id, kind: 'shape', name: 'Glow', shapes: [{ id: 'g', kind: 'ellipse', x: 240, y: 60, width: 600, height: 600, fill: '#f59f00', stroke: null, strokeWidth: 0 }], opacity: 0.7, blendMode: 'screen' });
     await call('image_add_filter', { projectId: project.id, layerId: glow.layerId, filter: 'gaussianBlur', params: { radius: 130 } });
     await call('image_add_layer', { projectId: project.id, canvasId: canvas.id, kind: 'raster', name: 'Aurora lamp', assetId: asset.id, x: 330, y: 90, width: 420, height: 513 });
@@ -184,7 +184,7 @@ test('Claude completes a launch kit as one reviewed run', async ({ page, errors 
         '- **14 March**: in stores and online',
       ].join('\n\n'),
     });
-    await call('apply_preset', { projectId: project.id, preset: 'Modern sans', targetId: brief.documentId });
+    await call('apply_preset', { projectId: project.id, preset: 'Modern sans', nodeId: brief.documentId });
     const deck = await call('slides_from_document', { projectId: project.id, documentId: brief.documentId });
     await call('slides_set_theme', { projectId: project.id, deckId: deck.deckId, colors: { background: '#171a2e', surface: '#22263f', text: '#ffffff', muted: '#b7bad0', accent: '#ffc861', accent2: '#f59f00' }, fonts: { heading: 'Space Grotesk', body: 'Inter' } });
     const last = await call('slides_add_slide', { projectId: project.id, deckId: deck.deckId, layout: 'title', title: 'Light that follows the sun', subtitle: 'In stores 14 March', notes: 'Close on the poster.' });
@@ -206,7 +206,7 @@ test('Claude completes a launch kit as one reviewed run', async ({ page, errors 
     // ── Stage 3: the teaser ───────────────────────────────────────────────────
     const teaser = await call('add_document', { projectId: project.id, tool: 'video', name: 'Teaser' });
     const clip = await call('video_add_clip', { projectId: project.id, sequenceId: teaser.documentId, assetId: asset.id, start: 0, out: 6, name: 'Aurora lamp' });
-    await call('apply_preset', { projectId: project.id, preset: 'Warm film', targetId: clip.clipId });
+    await call('apply_preset', { projectId: project.id, preset: 'Warm film', nodeId: clip.clipId });
     await call('video_add_title', { projectId: project.id, sequenceId: teaser.documentId, text: 'Light that follows the sun', start: 0.5, duration: 2.5, fontSize: 84, color: '#ffffff' });
     await call('video_add_title', { projectId: project.id, sequenceId: teaser.documentId, text: 'Aurora · 14 March', start: 3.2, duration: 2.8, fontSize: 72, color: '#ffc861' });
     await call('render_preview', { projectId: project.id, nodeId: teaser.documentId, time: 1.5, maxSize: 512 });

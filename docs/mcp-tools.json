@@ -6607,11 +6607,13 @@
         },
         "w": {
           "type": "number",
-          "exclusiveMinimum": 0
+          "exclusiveMinimum": 0,
+          "description": "Width in slide pixels (the element's w property)"
         },
         "h": {
           "type": "number",
-          "minimum": 0
+          "minimum": 0,
+          "description": "Height in slide pixels (h)"
         },
         "rotation": {
           "default": 0,
@@ -8055,11 +8057,13 @@
         },
         "w": {
           "default": 1600,
+          "description": "Width on the slide (slide elements call it w)",
           "type": "number",
           "exclusiveMinimum": 0
         },
         "h": {
           "default": 720,
+          "description": "Height on the slide (h)",
           "type": "number",
           "exclusiveMinimum": 0
         },
@@ -9630,8 +9634,9 @@
           "minLength": 1,
           "description": "Project id (from list_projects)."
         },
-        "targetId": {
-          "type": "string"
+        "nodeId": {
+          "type": "string",
+          "description": "What to restyle: a canvas, layer, clip, sequence, deck, slide or document"
         },
         "reference": {
           "type": "object",
@@ -9667,7 +9672,7 @@
       },
       "required": [
         "projectId",
-        "targetId",
+        "nodeId",
         "reference"
       ]
     },
@@ -9717,7 +9722,7 @@
     "example": {
       "input": {
         "projectId": "prj_8Kq2...",
-        "targetId": "seq_main",
+        "nodeId": "seq_main",
         "reference": {
           "assetId": "a7c..."
         },
@@ -10181,10 +10186,91 @@
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "type": "object",
       "properties": {
-        "from": {},
-        "to": {},
-        "comparison": {},
-        "pixels": {}
+        "from": {
+          "type": "object",
+          "properties": {
+            "commitId": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "label": {
+              "type": "string"
+            },
+            "at": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "commitId",
+            "label",
+            "at"
+          ],
+          "additionalProperties": false
+        },
+        "to": {
+          "type": "object",
+          "properties": {
+            "commitId": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "label": {
+              "type": "string"
+            },
+            "at": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "commitId",
+            "label",
+            "at"
+          ],
+          "additionalProperties": false
+        },
+        "comparison": {
+          "type": "object",
+          "propertyNames": {
+            "type": "string"
+          },
+          "additionalProperties": {}
+        },
+        "pixels": {
+          "type": "object",
+          "properties": {
+            "nodeId": {
+              "type": "string"
+            },
+            "changedPercent": {
+              "type": "number"
+            },
+            "bbox": {},
+            "width": {
+              "type": "number"
+            },
+            "height": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "nodeId",
+            "changedPercent",
+            "bbox",
+            "width",
+            "height"
+          ],
+          "additionalProperties": false
+        }
       },
       "required": [
         "from",
@@ -10200,11 +10286,30 @@
         "documentId": "cnv_1"
       },
       "output": {
+        "from": {
+          "commitId": "c_41...",
+          "label": "Claude: Poster",
+          "at": "2026-10-14T09:12:00.000Z"
+        },
+        "to": {
+          "commitId": "c_57...",
+          "label": "Current version",
+          "at": "2026-10-14T09:30:00.000Z"
+        },
         "comparison": {
           "summary": "Poster: 1 added, 2 changed"
         },
         "pixels": {
-          "changedPercent": 12.4
+          "nodeId": "cnv_1",
+          "changedPercent": 12.4,
+          "bbox": {
+            "x": 95,
+            "y": 472,
+            "width": 579,
+            "height": 136
+          },
+          "width": 768,
+          "height": 768
         }
       }
     }
@@ -10561,14 +10666,15 @@
           "type": "string",
           "description": "Preset id or exact name"
         },
-        "targetId": {
-          "type": "string"
+        "nodeId": {
+          "type": "string",
+          "description": "What to apply it to"
         }
       },
       "required": [
         "projectId",
         "preset",
-        "targetId"
+        "nodeId"
       ]
     },
     "outputSchema": {
@@ -10608,7 +10714,7 @@
       "input": {
         "projectId": "prj_8Kq2...",
         "preset": "Warm film",
-        "targetId": "seq_main"
+        "nodeId": "seq_main"
       },
       "output": {
         "status": "proposed",

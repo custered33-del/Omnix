@@ -40,7 +40,7 @@ function runView(job: JobRecord) {
 
 const zStatus = z.object({ runId: z.string(), status: z.string(), stage: z.string().nullable(), pendingGate: z.object({ id: z.string(), title: z.string(), summary: z.string() }).nullable(), decision: z.object({ decision: z.string(), feedback: z.string().optional() }).nullable().optional() });
 
-function statusOf(agent: AgentService, job: JobRecord, decision?: AgentRunData['resume']) {
+function statusOf(job: JobRecord, decision?: AgentRunData['resume']) {
   const d = job.data as AgentRunData;
   const stage = d.plan.find((s) => s.status === 'active')?.title ?? null;
   return { runId: job.id, status: job.status, stage, pendingGate: d.pendingGate ? { id: d.pendingGate.id, title: d.pendingGate.title, summary: d.pendingGate.summary } : null, ...(decision !== undefined ? { decision } : {}) };
@@ -79,7 +79,7 @@ function agentTools(services: Services): ToolDef[] {
       example: { input: { projectId: 'prj_8Kq2...', goal: 'Make a 30-second product teaser from the uploaded clips', plan: ['Pick and trim the best shots', 'Add titles and music', 'Color and pacing pass', 'Export'] }, output: { runId: 'job_7f...', status: 'awaiting_approval', stage: 'Pick and trim the best shots', pendingGate: { id: 'gate_1', title: 'Approve the plan', summary: '1. Pick and trim...' } } },
       async handler(args, ctx) {
         const job = await wrap(() => agent.startExternal(ctx.principal, { projectId: args.projectId, goal: args.goal, ...(args.plan ? { plan: args.plan } : {}), gates: args.gates ?? DEFAULT_GATES }));
-        const s = statusOf(agent, agent.get(job.id));
+        const s = statusOf(agent.get(job.id));
         return { text: `Run ${job.id} started. ${statusText(s)}`, data: s };
       },
     }),
@@ -96,7 +96,7 @@ function agentTools(services: Services): ToolDef[] {
         wrap(async () => {
           const job = agent.requireExternal(ctx.principal, args.runId);
           await agent.setPlan(job, args.stages);
-          const s = statusOf(agent, agent.get(job.id));
+          const s = statusOf(agent.get(job.id));
           return { text: statusText(s), data: s };
         }),
     }),
@@ -114,7 +114,7 @@ function agentTools(services: Services): ToolDef[] {
           const job = agent.requireExternal(ctx.principal, args.runId);
           if (job.status === 'awaiting_approval') throw new ToolError('The run is waiting for approval; call agent_wait first.');
           await agent.checkpoint(job, args.summary);
-          const s = statusOf(agent, agent.get(job.id));
+          const s = statusOf(agent.get(job.id));
           return { text: `Checkpoint saved. ${statusText(s)}`, data: s };
         }),
     }),
@@ -131,7 +131,7 @@ function agentTools(services: Services): ToolDef[] {
         wrap(async () => {
           const job = agent.requireExternal(ctx.principal, args.runId);
           await agent.requestApproval(job, args.title, args.summary);
-          const s = statusOf(agent, agent.get(job.id));
+          const s = statusOf(agent.get(job.id));
           return { text: statusText(s), data: s };
         }),
     }),
@@ -149,7 +149,7 @@ function agentTools(services: Services): ToolDef[] {
           agent.requireExternal(ctx.principal, args.runId);
           const job = await agent.waitForDecision(args.runId, args.timeoutSeconds * 1000);
           const decision = job.status === 'awaiting_approval' ? undefined : agent.lastDecision(job);
-          const s = statusOf(agent, job, decision ?? null);
+          const s = statusOf(job, decision ?? null);
           return { text: job.status === 'awaiting_approval' ? `Still waiting for the user (${s.pendingGate?.title}). Call agent_wait again.` : statusText(s), data: s };
         }),
     }),
@@ -166,7 +166,7 @@ function agentTools(services: Services): ToolDef[] {
         wrap(async () => {
           const jobs = args.runId ? [agent.requireOwn(ctx.principal, args.runId)] : services.jobs.snapshot({ kind: 'agent' }).filter((j) => j.ownerId === ctx.principal.user.id && (!args.projectId || j.projectId === args.projectId)).slice(0, 10);
           // The user's latest answer is included; reading it here does not use it up.
-          const runs = jobs.map((j) => statusOf(agent, j, agent.lastDecision(j as Parameters<typeof agent.lastDecision>[0])));
+          const runs = jobs.map((j) => statusOf(j, agent.lastDecision(j as Parameters<typeof agent.lastDecision>[0])));
           return { text: runs.map((r) => `${r.runId}: ${statusText(r)}`).join('\n') || 'No runs.', data: { runs } };
         }),
     }),
@@ -184,7 +184,7 @@ function agentTools(services: Services): ToolDef[] {
           const job = agent.requireExternal(ctx.principal, args.runId);
           if (job.status === 'awaiting_approval') throw new ToolError('The run is waiting for approval; call agent_wait first.');
           await agent.finish(job, args.summary);
-          return { text: 'Run finished. The summary is in the run log and session memory.', data: statusOf(agent, agent.get(job.id)) };
+          return { text: 'Run finished. The summary is in the run log and session memory.', data: statusOf(agent.get(job.id)) };
         }),
     }),
   ] as unknown as ToolDef[];

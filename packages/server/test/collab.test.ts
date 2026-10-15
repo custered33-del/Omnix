@@ -420,9 +420,9 @@ describe('presets and templates (55)', () => {
 
     const themes = await call(auto, 'list_presets', { kind: 'slide-theme' });
     expect(themes.presets.length).toBeGreaterThan(2);
-    const applied = await call(approve, 'apply_preset', { projectId: created.projectId, preset: 'Midnight', targetId: deck.id });
+    const applied = await call(approve, 'apply_preset', { projectId: created.projectId, preset: 'Midnight', nodeId: deck.id });
     expect(applied.status).toBe('proposed');
-    const direct = await call(auto, 'apply_preset', { projectId: created.projectId, preset: 'Midnight', targetId: deck.id });
+    const direct = await call(auto, 'apply_preset', { projectId: created.projectId, preset: 'Midnight', nodeId: deck.id });
     expect(direct.status).toBe('committed');
     s = await state(created.projectId);
     expect((s.nodes[deck.id] as SceneNode<'deck'>).props.theme.name).toBe('Midnight');

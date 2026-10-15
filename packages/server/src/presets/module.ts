@@ -162,16 +162,16 @@ function presetTools(services: Services): ToolDef[] {
         "Apply a preset (id or name from list_presets) to a target: layer-effects to a layer or a whole canvas (its pictures), clip-effects to a clip, a track or a whole sequence (picture clips), rig to an animation layer, doc-styles to a document, slide-theme to a slideshow. Looks are added on top of existing ones; rigs, styles and themes replace the target's own.",
       category: 'project',
       access: 'write',
-      input: { projectId: zProjectId, preset: z.string().describe('Preset id or exact name'), targetId: z.string() },
+      input: { projectId: zProjectId, preset: z.string().describe('Preset id or exact name'), nodeId: z.string().describe('What to apply it to') },
       output: zWriteResult.extend({ changed: z.number() }),
-      example: { input: { projectId: 'prj_8Kq2...', preset: 'Warm film', targetId: 'seq_main' }, output: { status: 'proposed', proposalId: 'prop_9...', changed: 4 } },
+      example: { input: { projectId: 'prj_8Kq2...', preset: 'Warm film', nodeId: 'seq_main' }, output: { status: 'proposed', proposalId: 'prop_9...', changed: 4 } },
       async handler(args, ctx) {
         await ctx.requireProject(args.projectId, 'write');
         let ops;
         let preset: Preset;
         try {
           preset = await presets.find(args.preset, ctx.principal.user.id);
-          ops = applyPresetOps(await ctx.state(args.projectId), preset, args.targetId);
+          ops = applyPresetOps(await ctx.state(args.projectId), preset, args.nodeId);
         } catch (e) {
           throw new ToolError(e instanceof Error ? e.message : String(e));
         }

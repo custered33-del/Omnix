@@ -303,14 +303,14 @@ function aiTools(services: Services): ToolDef[] {
         'Apply the look of a reference (an image or video asset, or a canvas, layer, clip, sequence, slideshow, slide or document in the project) to a target in any editor. Aspects: color, tone, texture (grain), typography (fonts) and motion (easing, transitions, timing). Results are ordinary editable settings: a look adjustment layer or color grade, a grain filter, theme or text styles, easing.',
       category: 'ai',
       access: 'write',
-      input: { projectId: zProjectId, targetId: z.string(), reference: zReference, aspects: zAspects.optional().describe('Default: everything that applies.'), strength: z.number().min(0).max(1).default(0.8) },
+      input: { projectId: zProjectId, nodeId: z.string().describe('What to restyle: a canvas, layer, clip, sequence, deck, slide or document'), reference: zReference, aspects: zAspects.optional().describe('Default: everything that applies.'), strength: z.number().min(0).max(1).default(0.8) },
       output: zWriteResult.extend({ applied: z.array(z.string()), skipped: z.array(z.string()) }),
-      example: { input: { projectId: 'prj_8Kq2...', targetId: 'seq_main', reference: { assetId: 'a7c...' }, aspects: ['color', 'tone'], strength: 0.7 }, output: { status: 'proposed', proposalId: 'prop_5b...', applied: ['color and tone (a color grade with the reference look)'], skipped: [] } },
+      example: { input: { projectId: 'prj_8Kq2...', nodeId: 'seq_main', reference: { assetId: 'a7c...' }, aspects: ['color', 'tone'], strength: 0.7 }, output: { status: 'proposed', proposalId: 'prop_5b...', applied: ['color and tone (a color grade with the reference look)'], skipped: [] } },
       async handler(args, ctx) {
         await ctx.requireProject(args.projectId, 'write');
         const state = await ctx.state(args.projectId);
         const ref = await loadReference(services, state, args.reference).catch(asTool);
-        const r = await styleMatch(services, state, { targetId: args.targetId, reference: ref, aspects: args.aspects ?? [], strength: args.strength, projectId: args.projectId, ownerId: ctx.principal.user.id }).catch(asTool);
+        const r = await styleMatch(services, state, { targetId: args.nodeId, reference: ref, aspects: args.aspects ?? [], strength: args.strength, projectId: args.projectId, ownerId: ctx.principal.user.id }).catch(asTool);
         if (!r.ops.length) return { text: `Nothing to apply. ${r.skipped.join('. ')}`, data: { status: 'none', applied: [], skipped: r.skipped } };
         const out = await ctx.apply(args.projectId, r.ops, `Match style of ${ref.label}`);
         return writeResult(out, { applied: r.applied, skipped: r.skipped });

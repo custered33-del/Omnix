@@ -156,11 +156,6 @@ function deckOf(c: Ctx): SceneNode<'deck'> | null {
   return d?.type === 'deck' ? (d as SceneNode<'deck'>) : null;
 }
 
-function canvasOfDoc(c: Ctx): SceneNode<'canvas'> | null {
-  const d = c.state.nodes[c.env.documentId];
-  return d?.type === 'canvas' ? (d as SceneNode<'canvas'>) : null;
-}
-
 function currentSlide(c: Ctx): SceneNode<'slide'> | null {
   const deck = deckOf(c);
   if (!deck) return null;
