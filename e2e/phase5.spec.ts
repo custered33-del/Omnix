@@ -88,3 +88,49 @@ test('a saved version compares with the current one as pictures and as text', as
   await expect.poll(async () => (await projectState(page)).nodes['lyr_e2esky']?.props.fillColor).toBe('#3366cc');
   expect(errors).toEqual([]);
 });
+
+test('people watching the public link follow the presenter, and can browse on their own', async ({ page, browser, errors }) => {
+  await signIn(page);
+  await createProject(page, 'Slideshow');
+  await page.waitForSelector('.slide-canvas');
+  for (let i = 0; i < 2; i++) {
+    await page.locator('.editor-toolbar').getByRole('button', { name: 'New slide' }).click();
+    await page.getByRole('menuitem', { name: 'Title and body' }).click();
+  }
+  await expect(page.locator('.sorter-item')).toHaveCount(3);
+  await page.click('.slide-inspector [role=tab]:has-text("Theme")');
+  await page.click('text=Anyone with the link can watch');
+  const url = await page.locator('input[aria-label="Presentation link"]').inputValue();
+
+  const viewer = await browser.newContext();
+  const watch = await viewer.newPage();
+  await watch.goto(url);
+  await expect(watch.locator('.presenter')).toHaveAttribute('aria-label', /slide 1 of 3/);
+  await expect(watch.locator('.follow-banner')).toHaveCount(0);
+
+  // Seb presents from the start; the viewer follows.
+  await page.locator('.sorter-item').first().click();
+  await page.click('.editor-toolbar button:has-text("Present")');
+  await page.waitForSelector('.presenter');
+  await expect(watch.getByText('Following the presenter')).toBeVisible();
+  await page.keyboard.press('ArrowRight');
+  await expect(watch.locator('.presenter')).toHaveAttribute('aria-label', /slide 2 of 3/);
+  await page.keyboard.press('ArrowRight');
+  await expect(watch.locator('.presenter')).toHaveAttribute('aria-label', /slide 3 of 3/);
+
+  // Moving on their own stops following; following again jumps back to the presenter.
+  await watch.keyboard.press('Home');
+  await expect(watch.getByText('Browsing on your own')).toBeVisible();
+  await expect(watch.locator('.presenter')).toHaveAttribute('aria-label', /slide 1 of 3/);
+  await page.keyboard.press('ArrowLeft');
+  await expect(watch.locator('.presenter')).toHaveAttribute('aria-label', /slide 1 of 3/);
+  await watch.getByRole('button', { name: 'Follow the presenter' }).click();
+  await expect(watch.locator('.presenter')).toHaveAttribute('aria-label', /slide 2 of 3/);
+
+  // When Seb stops presenting, the banner goes and the viewer is free again.
+  await page.keyboard.press('Escape');
+  await expect(page.locator('.presenter')).toHaveCount(0);
+  await expect(watch.locator('.follow-banner')).toHaveCount(0);
+  await viewer.close();
+  expect(errors).toEqual([]);
+});

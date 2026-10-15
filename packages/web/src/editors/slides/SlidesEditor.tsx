@@ -33,6 +33,7 @@ export function SlidesEditor({ deckId }: { deckId: string }) {
   const ctx: SlidesCtx = useMemo(() => ({ store, ed, deckId }), [store, ed, deckId]);
   const slideId = useStore(ed, (s) => s.slideId);
   const presenting = useStore(ed, (s) => s.presenting);
+  const shared = !!(state.nodes[deckId] as SceneNode<'deck'> | undefined)?.props.shareId;
   const [picker, setPicker] = useState<null | 'image' | 'video' | 'embed' | 'import'>(null);
   const [bottom, setBottom] = useState<'notes' | 'build'>('notes');
 
@@ -228,9 +229,12 @@ export function SlidesEditor({ deckId }: { deckId: string }) {
           deckId={deckId}
           startSlide={presenting.startSlide}
           mode={presenting.mode}
+          // With the public link on, people watching it follow along.
+          onPosition={presenting.mode === 'present' && shared ? (p) => void post(`/api/projects/${store.getState().projectId}/decks/${deckId}/live`, p).catch(() => {}) : undefined}
           onExit={(r) => {
             const mode = presenting.mode;
             ed.getState().set({ presenting: null });
+            if (mode === 'present' && shared) void post(`/api/projects/${store.getState().projectId}/decks/${deckId}/live`, { ended: true }).catch(() => {});
             if (mode === 'rehearse' && Object.keys(r.timings).length && canEdit) {
               store.getState().commit({ kind: 'batch', ops: Object.entries(r.timings).filter(([id]) => store.getState().state!.nodes[id]).map(([id, sec]) => ({ kind: 'update' as const, id, set: { rehearsalSeconds: Math.round(sec * 10) / 10 } })) }, 'Save rehearsal timings');
               toast.success('Rehearsal timings saved');

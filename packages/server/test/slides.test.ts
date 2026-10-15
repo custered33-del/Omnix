@@ -225,6 +225,48 @@ describe('presentation links', () => {
     expect((await fetch(`${ts.url}/api/assets/${pic.props.assetId}/file`)).status).toBe(401);
   });
 
+  it('streams where the presenter is to people watching the public link', async () => {
+    const state = await getState();
+    const shareId = (state.nodes[deckId] as SceneNode<'deck'>).props.shareId!;
+    const [first, second] = deckSlides(state, deckId);
+    // Anyone with the link can listen; no cookie.
+    const ctrl = new AbortController();
+    const res = await fetch(`${ts.url}/api/present/${shareId}/live`, { signal: ctrl.signal });
+    expect(res.headers.get('content-type')).toMatch(/text\/event-stream/);
+    const reader = res.body!.getReader();
+    let buffer = '';
+    const nextEvent = async (): Promise<Record<string, unknown>> => {
+      for (;;) {
+        const end = buffer.indexOf('\n\n');
+        if (end >= 0) {
+          const chunk = buffer.slice(0, end);
+          buffer = buffer.slice(end + 2);
+          const data = chunk.split('\n').find((l) => l.startsWith('data: '));
+          if (data) return JSON.parse(data.slice(6));
+          continue;
+        }
+        const { value, done } = await reader.read();
+        if (done) throw new Error('stream ended');
+        buffer += new TextDecoder().decode(value);
+      }
+    };
+    try {
+      expect(await nextEvent()).toEqual({ presenting: false });
+      const r = await json(await ts.api(`/api/projects/${projectId}/decks/${deckId}/live`, { method: 'POST', json: { slideId: second!.id, step: 1 } }));
+      expect(r).toEqual({ shared: true, watching: 1 });
+      expect(await nextEvent()).toEqual({ presenting: true, slideId: second!.id, step: 1 });
+      await ts.api(`/api/projects/${projectId}/decks/${deckId}/live`, { method: 'POST', json: { slideId: first!.id, step: 0 } });
+      expect(await nextEvent()).toMatchObject({ slideId: first!.id });
+      await ts.api(`/api/projects/${projectId}/decks/${deckId}/live`, { method: 'POST', json: { ended: true } });
+      expect(await nextEvent()).toEqual({ presenting: false });
+    } finally {
+      ctrl.abort();
+    }
+    // Reporting needs an account with access; listening to a link that does not exist fails.
+    expect((await fetch(`${ts.url}/api/projects/${projectId}/decks/${deckId}/live`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{"slideId":"x"}' })).status).toBe(401);
+    expect((await fetch(`${ts.url}/api/present/not-a-real-share-id/live`)).status).toBe(404);
+  });
+
   it('closes the link when sharing is turned off, and undo brings it back', async () => {
     const state = await getState();
     const shareId = (state.nodes[deckId] as SceneNode<'deck'>).props.shareId!;

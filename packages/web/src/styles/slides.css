@@ -513,3 +513,26 @@
 .present-message .muted {
   color: #a3a7b3;
 }
+
+/* Public link: follow the person presenting */
+.follow-banner {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px 6px 12px;
+  border-radius: 999px;
+  background: rgba(20, 22, 28, 0.82);
+  color: #fff;
+  font-size: var(--fs-sm);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+}
+.follow-banner .btn {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: transparent;
+  color: #fff;
+}

@@ -595,6 +595,64 @@ useModule(({ services, router }) => {
     }),
   );
 
+  /*
+   * Follow the presenter. Whoever presents a shared deck from the editor reports where they are;
+   * people watching the public link receive it as server-sent events (no account needed) and
+   * follow along. Only the slide and build step travel, and nothing is stored.
+   */
+  const live = new Map<string, { slideId: string; step: number; at: number }>();
+  const watchers = new Map<string, Set<express.Response>>();
+  const MAX_WATCHERS = 500;
+  const send = (res: express.Response, data: unknown) => res.write(`data: ${JSON.stringify(data)}\n\n`);
+  const broadcast = (shareId: string, data: unknown) => {
+    for (const res of watchers.get(shareId) ?? []) send(res, data);
+  };
+
+  router.post(
+    '/projects/:id/decks/:deckId/live',
+    h(async (req, res) => {
+      const user = requireUser(req);
+      const projectId = String(req.params.id);
+      await services.projects.requireAccess(projectId, user.id, 'read');
+      const deck = requireDeck(await services.projects.state(projectId), String(req.params.deckId));
+      const body = z.object({ slideId: z.string().max(80).optional(), step: z.number().int().min(0).max(1000).default(0), ended: z.boolean().optional() }).parse(req.body);
+      const shareId = deck.props.shareId;
+      if (shareId) {
+        if (body.ended || !body.slideId) {
+          live.delete(shareId);
+          broadcast(shareId, { presenting: false });
+        } else {
+          const at = { slideId: body.slideId, step: body.step, at: Date.now() };
+          live.set(shareId, at);
+          broadcast(shareId, { presenting: true, slideId: at.slideId, step: at.step });
+        }
+      }
+      res.json({ shared: !!shareId, watching: shareId ? (watchers.get(shareId)?.size ?? 0) : 0 });
+    }),
+  );
+
+  router.get(
+    '/present/:shareId/live',
+    h(async (req, res) => {
+      const shareId = String(req.params.shareId);
+      await loadShare(shareId);
+      const set = watchers.get(shareId) ?? new Set<express.Response>();
+      if (set.size >= MAX_WATCHERS) throw new ProjectError('Too many people are following this presentation right now.', 503);
+      watchers.set(shareId, set);
+      res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-store', Connection: 'keep-alive', 'X-Accel-Buffering': 'no', 'X-Robots-Tag': 'noindex' });
+      const now = live.get(shareId);
+      // A position more than two hours old is a presentation that ended without saying so.
+      send(res, now && Date.now() - now.at < 2 * 3600_000 ? { presenting: true, slideId: now.slideId, step: now.step } : { presenting: false });
+      set.add(res);
+      const ping = setInterval(() => res.write(': ping\n\n'), 25_000);
+      req.on('close', () => {
+        clearInterval(ping);
+        set.delete(res);
+        if (!set.size) watchers.delete(shareId);
+      });
+    }),
+  );
+
   const sharedAsset = async (req: express.Request, id: string): Promise<AssetRecord> => {
     const d = await loadShare(String(req.params.shareId));
     const a = d.assets.has(id) ? await services.assets.get(id) : undefined;

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { ChevronLeft, ChevronRight, X, Monitor, Timer, Maximize, Square } from 'lucide-react';
 import type { ProjectState, SceneNode } from '@omnix/core';
 import { deckSlides, ease, slideElements } from '@omnix/core';
@@ -21,7 +21,38 @@ function fmt(sec: number): string {
  * animation embeds, and a presenter view with notes, the next slide and timers. Rehearsal
  * mode records how long each slide takes. The public web link uses the audience mode.
  */
-export function Presenter({ host, state, deckId, startSlide, mode, onExit }: { host: BrowserRenderHost; state: ProjectState; deckId: string; startSlide: string | null; mode: 'present' | 'rehearse' | 'audience'; onExit: (r: PresenterResult) => void }) {
+export interface PresenterPosition {
+  slideId: string;
+  step: number;
+}
+
+export function Presenter({
+  host,
+  state,
+  deckId,
+  startSlide,
+  mode,
+  onExit,
+  onPosition,
+  follow,
+  onNavigate,
+  banner,
+}: {
+  host: BrowserRenderHost;
+  state: ProjectState;
+  deckId: string;
+  startSlide: string | null;
+  mode: 'present' | 'rehearse' | 'audience';
+  onExit: (r: PresenterResult) => void;
+  /** Told the slide and build step whenever they change (to share with an audience). */
+  onPosition?: (p: PresenterPosition) => void;
+  /** Go to this position whenever seq changes (an audience following the presenter). */
+  follow?: (PresenterPosition & { seq: number }) | null;
+  /** The viewer moved on their own (keys, clicks or the buttons). */
+  onNavigate?: () => void;
+  /** Shown over the slide, also in full screen. */
+  banner?: ReactNode;
+}) {
   const slides = deckSlides(state, deckId).filter((s) => !s.props.hidden);
   const deck = state.nodes[deckId] as SceneNode<'deck'>;
   const [index, setIndex] = useState(() => Math.max(0, slides.findIndex((s) => s.id === startSlide)));
@@ -95,6 +126,21 @@ export function Presenter({ host, state, deckId, startSlide, mode, onExit }: { h
     } else goTo(index - 1, true);
   }, [step, index, goTo]);
 
+  useEffect(() => {
+    if (slide) onPosition?.({ slideId: slide.id, step });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [slide?.id, step]);
+
+  useEffect(() => {
+    if (!follow) return;
+    const i = slides.findIndex((s) => s.id === follow.slideId);
+    if (i < 0) return;
+    if (i !== index) goTo(i);
+    setStep(Math.min(follow.step, slideStepCount(state, follow.slideId)));
+    timing.current.stepStartedAt = performance.now();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [follow?.seq]);
+
   // Draw every animation frame (builds, transitions, playing embeds).
   useEffect(() => {
     let raf = 0;
@@ -127,16 +173,30 @@ export function Presenter({ host, state, deckId, startSlide, mode, onExit }: { h
     return () => cancelAnimationFrame(raf);
   }, [slide?.id, step, box, state, host]);
 
+  // Moving on one's own (as opposed to following the presenter).
+  const userNext = () => {
+    onNavigate?.();
+    next();
+  };
+  const userPrev = () => {
+    onNavigate?.();
+    prev();
+  };
   const onKey = (e: React.KeyboardEvent) => {
     if (summary) return;
     if (['ArrowRight', 'ArrowDown', 'PageDown', ' ', 'Enter', 'n'].includes(e.key)) {
       e.preventDefault();
-      next();
+      userNext();
     } else if (['ArrowLeft', 'ArrowUp', 'PageUp', 'Backspace', 'p'].includes(e.key)) {
       e.preventDefault();
-      prev();
-    } else if (e.key === 'Home') goTo(0);
-    else if (e.key === 'End') goTo(slides.length - 1, true);
+      userPrev();
+    } else if (e.key === 'Home') {
+      onNavigate?.();
+      goTo(0);
+    } else if (e.key === 'End') {
+      onNavigate?.();
+      goTo(slides.length - 1, true);
+    }
     else if (e.key === 'Escape') finish();
     else if (e.key.toLowerCase() === 'b' || e.key === '.') setBlack(!black);
     else if (e.key.toLowerCase() === 'v' && mode !== 'audience') setPresenterView(!presenterView);
@@ -161,7 +221,7 @@ export function Presenter({ host, state, deckId, startSlide, mode, onExit }: { h
 
   return (
     <div className={`presenter${presenterView ? ' with-notes' : ''}`} ref={root} tabIndex={-1} onKeyDown={onKey} role="application" aria-roledescription="slideshow" aria-label={`${deck.props.name}, slide ${index + 1} of ${slides.length}`}>
-      <div className="presenter-stage" ref={stage} onClick={(e) => (e.button === 0 && !summary ? next() : undefined)}>
+      <div className="presenter-stage" ref={stage} onClick={(e) => (e.button === 0 && !summary ? userNext() : undefined)}>
         <canvas ref={canvas} style={{ position: 'absolute', left: ox, top: oy, width: W * k, height: H * k }} aria-hidden="true" />
         {videos.map((v) => (
           <video
@@ -202,13 +262,13 @@ export function Presenter({ host, state, deckId, startSlide, mode, onExit }: { h
         </aside>
       )}
       <div className="presenter-controls" role="toolbar" aria-label="Presentation controls">
-        <button className="icon-btn" aria-label="Previous" onClick={prev}>
+        <button className="icon-btn" aria-label="Previous" onClick={userPrev}>
           <ChevronLeft />
         </button>
         <span className="tabular">
           {index + 1} / {slides.length}
         </span>
-        <button className="icon-btn" aria-label="Next" onClick={next}>
+        <button className="icon-btn" aria-label="Next" onClick={userNext}>
           <ChevronRight />
         </button>
         <button className="icon-btn" aria-label={black ? 'Show slide' : 'Black screen'} aria-pressed={black} onClick={() => setBlack(!black)}>
@@ -226,6 +286,7 @@ export function Presenter({ host, state, deckId, startSlide, mode, onExit }: { h
           <X />
         </button>
       </div>
+      {banner}
       {summary && (
         <div className="presenter-summary" role="dialog" aria-modal="true" aria-labelledby="rehearsal-title">
           <h2 id="rehearsal-title">Rehearsal finished</h2>
