@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { applyOp, compareVersions, createProjectState, deckSlides, diffWords, documentBlocks, insertBlocksOps, makeNode, newSlideOps, nodesOfType, type Operation, type ProjectState, type SceneNode } from '../src/index.js';
+import { applyOp, assetRefs, compareVersions, createProjectState, replaceAssetOps, deckSlides, diffWords, documentBlocks, insertBlocksOps, makeNode, newSlideOps, nodesOfType, type Operation, type ProjectState, type SceneNode } from '../src/index.js';
 
 const apply = (s: ProjectState, op: Operation) => applyOp(s, op).state;
 
@@ -78,5 +78,27 @@ describe('comparing versions', () => {
     expect(d.slides![0]!.slideId).toBe(first.id);
     expect(compareVersions(before, before).changed).toEqual([]);
     expect(added.slideId).toBe(d.slides![1]!.slideId);
+  });
+});
+
+describe('asset references', () => {
+  it('finds every use of an asset and points them at another', () => {
+    let s = createProjectState({ primaryTool: 'image' });
+    const canvas = nodesOfType(s, 'canvas')[0]!;
+    const a = 'a'.repeat(64);
+    const b = 'b'.repeat(64);
+    const l1 = makeNode('layer', { name: 'Photo', layerType: 'raster', assetId: a } as never);
+    const l2 = makeNode('layer', { name: 'Masked', layerType: 'fill', mask: { assetId: a, enabled: true } } as never);
+    const l3 = makeNode('layer', { name: 'Other', layerType: 'raster', assetId: b } as never);
+    for (const l of [l1, l2, l3]) s = apply(s, { kind: 'create', parentId: canvas.id, nodes: [l] });
+    const refs = assetRefs(s);
+    expect(refs.get(a)).toEqual([l1.id, l2.id]);
+    expect(refs.get(b)).toEqual([l3.id]);
+    const ops = replaceAssetOps(s, a, b);
+    expect(ops).toHaveLength(2);
+    for (const op of ops) s = apply(s, op);
+    expect(assetRefs(s).get(a)).toBeUndefined();
+    expect(assetRefs(s).get(b)).toHaveLength(3);
+    expect((s.nodes[l2.id]!.props as { mask: { enabled: boolean } }).mask.enabled).toBe(true);
   });
 });

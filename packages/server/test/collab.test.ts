@@ -1,7 +1,8 @@
 import { describe, expect, it, beforeAll, afterAll } from 'vitest';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
-import { deckSlides, type ProjectState, type SceneNode } from '@omnix/core';
+import sharp from 'sharp';
+import { assetRefs, deckSlides, type ProjectState, type SceneNode } from '@omnix/core';
 import { startTestServer, json, type TestServer } from './helpers.js';
 
 let ts: TestServer;
@@ -154,5 +155,101 @@ describe('versions and visual diff (52)', () => {
     const res = await viewer.callTool({ name: 'save_version', arguments: { projectId: p.projectId, name: 'x' } });
     expect(res.isError).toBe(true);
     await viewer.close();
+  });
+});
+
+/** A landscape picture: blue sky over green hills with a sun, at any size. */
+async function landscape(width: number, format: 'png' | 'jpeg', variant = 0): Promise<Buffer> {
+  const h = Math.round(width * 0.625);
+  const svg = variant
+    ? `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${h}" viewBox="0 0 160 100"><rect width="160" height="100" fill="#f4e04d"/><circle cx="40" cy="70" r="30" fill="#c0392b"/><rect x="90" y="10" width="50" height="40" fill="#222"/></svg>`
+    : `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${h}" viewBox="0 0 160 100"><rect width="160" height="100" fill="#3d7fe0"/><circle cx="120" cy="25" r="12" fill="#ffd34d"/><path d="M0 70 Q40 45 80 70 T160 65 V100 H0Z" fill="#2e9e4f"/></svg>`;
+  const img = sharp(Buffer.from(svg));
+  return format === 'png' ? img.png().toBuffer() : img.jpeg({ quality: 70 }).toBuffer();
+}
+
+async function upload(name: string, data: Buffer, type: string, projectId?: string) {
+  const r = await ts.api(`/api/assets?name=${encodeURIComponent(name)}${projectId ? `&projectId=${projectId}` : ''}`, { method: 'POST', body: new Uint8Array(data), headers: { 'content-type': type } });
+  return json(r);
+}
+
+describe('asset library (53)', () => {
+  it('tags files automatically, spots resized copies, and merges them across projects', async () => {
+    const big = await upload('hills.png', await landscape(1600, 'png'), 'image/png');
+    expect(big.asset.autoTags).toEqual(expect.arrayContaining(['landscape', 'blue']));
+    expect(big.similar).toEqual([]);
+    // A smaller, re-encoded copy is a different file but the same picture.
+    const small = await upload('hills-small.jpg', await landscape(400, 'jpeg'), 'image/jpeg');
+    expect(small.deduplicated).toBe(false);
+    expect(small.similar.map((x: { id: string }) => x.id)).toEqual([big.asset.id]);
+    const other = await upload('poster.png', await landscape(800, 'png', 1), 'image/png');
+    expect(other.similar).toEqual([]);
+
+    // Search uses automatic tags, sizes and usage.
+    const find = async (q: string) => (await json(await ts.api(`/api/assets?q=${encodeURIComponent(q)}`))).assets.map((a: { name: string }) => a.name);
+    expect(await find('blue landscape')).toEqual(expect.arrayContaining(['hills.png', 'hills-small.jpg']));
+    expect(await find('blue landscape')).not.toContain('poster.png');
+    expect(await find('1600x1000')).toEqual(['hills.png']);
+
+    // The small copy is used on a canvas; merging switches the canvas to the big one.
+    const p = await call(auto, 'create_project', { name: 'Hills', primaryTool: 'image' });
+    let s = await state(p.projectId);
+    const canvas = Object.values(s.nodes).find((n) => n.type === 'canvas')!;
+    await call(auto, 'image_add_layer', { projectId: p.projectId, canvasId: canvas.id, kind: 'raster', assetId: small.asset.id, name: 'Hills' });
+    expect(await find('unused')).not.toContain('hills-small.jpg');
+    const groups = (await json(await ts.api('/api/assets/similar'))).groups;
+    expect(groups).toHaveLength(1);
+    expect(groups[0].map((a: { id: string }) => a.id)).toEqual([big.asset.id, small.asset.id]);
+    expect(groups[0][1].usedIn).toEqual([expect.objectContaining({ projectId: p.projectId, count: 1 })]);
+
+    const merged = await json(await ts.api('/api/assets/merge', { method: 'POST', json: { keep: big.asset.id, drop: [small.asset.id] } }));
+    expect(merged.merged).toEqual([small.asset.id]);
+    expect(merged.projects).toEqual([expect.objectContaining({ projectId: p.projectId, replaced: 1, status: 'committed' })]);
+    s = await state(p.projectId);
+    expect(assetRefs(s).get(big.asset.id)).toHaveLength(1);
+    expect(assetRefs(s).has(small.asset.id)).toBe(false);
+    // The copy is gone from the library; the kept file is now in the project.
+    expect((await ts.api(`/api/assets/${small.asset.id}`)).status).toBe(404);
+    const kept = await json(await ts.api(`/api/assets/${big.asset.id}`));
+    expect(kept.asset.usedIn.map((u: { projectId: string }) => u.projectId)).toEqual([p.projectId]);
+    expect((await json(await ts.api('/api/assets/similar'))).groups).toEqual([]);
+  });
+
+  it('tags and removes many files at once, keeping files a project still uses', async () => {
+    const one = await upload('one.png', await sharp({ create: { width: 64, height: 64, channels: 4, background: '#ff0000' } }).png().toBuffer(), 'image/png');
+    const two = await upload('two.png', await sharp({ create: { width: 64, height: 32, channels: 4, background: '#00ff00' } }).png().toBuffer(), 'image/png');
+    const r = await json(await ts.api('/api/assets/bulk', { method: 'POST', json: { ids: [one.asset.id, two.asset.id], addTags: ['swatch'] } }));
+    expect(r.changed).toBe(2);
+    expect((await json(await ts.api('/api/assets?tag=swatch'))).total).toBe(2);
+    await json(await ts.api('/api/assets/bulk', { method: 'POST', json: { ids: [one.asset.id], removeTags: ['swatch'] } }));
+    expect((await json(await ts.api('/api/assets?tag=swatch'))).total).toBe(1);
+    // A file placed in a project survives "remove from library": the project still shows it.
+    const p = await call(auto, 'create_project', { name: 'Swatches', primaryTool: 'image' });
+    const s = await state(p.projectId);
+    const canvas = Object.values(s.nodes).find((n) => n.type === 'canvas')!;
+    await call(auto, 'image_add_layer', { projectId: p.projectId, canvasId: canvas.id, kind: 'raster', assetId: two.asset.id });
+    await json(await ts.api('/api/assets/bulk', { method: 'POST', json: { ids: [one.asset.id, two.asset.id], remove: true } }));
+    expect((await ts.api(`/api/assets/${one.asset.id}/file`)).status).toBe(404);
+    expect((await ts.api(`/api/projects/${p.projectId}/render-at?node=${canvas.id}&size=64`)).status).toBe(200);
+    expect(await ts.omnix.services.blobs.get(two.asset.id)).toBeTruthy();
+  });
+
+  it('lets Claude search, find near-duplicates and propose a merge in approval mode', async () => {
+    const a = await upload('mark.png', await landscape(1200, 'png'), 'image/png');
+    const b = await upload('mark-copy.jpg', await landscape(600, 'jpeg'), 'image/jpeg');
+    const p = await call(auto, 'create_project', { name: 'Marks', primaryTool: 'image' });
+    const s = await state(p.projectId);
+    const canvas = Object.values(s.nodes).find((n) => n.type === 'canvas')!;
+    await call(auto, 'image_add_layer', { projectId: p.projectId, canvasId: canvas.id, kind: 'raster', assetId: b.asset.id });
+    const found = await call(auto, 'list_assets', { query: 'mark landscape' });
+    expect(found.assets.map((x: { name: string }) => x.name)).toEqual(expect.arrayContaining(['mark.png', 'mark-copy.jpg']));
+    const sim = await call(approve, 'find_similar_assets', {});
+    const group = sim.groups.find((g: { id: string }[]) => g.some((x) => x.id === b.asset.id));
+    expect(group.map((x: { id: string }) => x.id)).toContain(a.asset.id);
+    const merged = await call(approve, 'merge_assets', { keep: a.asset.id, drop: [b.asset.id] });
+    expect(merged.projects).toEqual([expect.objectContaining({ projectId: p.projectId, status: 'proposed' })]);
+    // Until the proposal is accepted the copy stays where it is.
+    expect(merged.merged).toEqual([]);
+    expect(assetRefs(await state(p.projectId)).has(b.asset.id)).toBe(true);
   });
 });

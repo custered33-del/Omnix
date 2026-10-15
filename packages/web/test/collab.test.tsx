@@ -188,3 +188,47 @@ describe('compare versions', () => {
     expect(urls.some((u) => u.includes(`/compare/pixels?from=snap_1&to=current&node=${p.canvas.id}`))).toBe(true);
   });
 });
+
+describe('asset library', () => {
+  it('flags similar files, merges a group and tags several files at once', async () => {
+    const { MemoryRouter } = await import('react-router-dom');
+    const { AssetsPage } = await import('../src/pages/AssetsPage.js');
+    const asset = (id: string, name: string, extra: Record<string, unknown> = {}) => ({ id, name, kind: 'image', mime: 'image/png', size: 1000, width: 100, height: 60, tags: [], autoTags: ['landscape', 'blue'], createdAt: new Date().toISOString(), hasThumbnail: true, usedIn: [], ...extra });
+    const a = asset('a'.repeat(64), 'hills.png', { usedIn: [{ projectId: 'p1', projectName: 'Launch', count: 2 }] });
+    const b = asset('b'.repeat(64), 'hills-web.jpg');
+    const calls: { url: string; body: unknown }[] = [];
+    globalThis.fetch = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
+      const u = String(url);
+      const body = init?.body ? JSON.parse(String(init.body)) : undefined;
+      calls.push({ url: u, body });
+      if (u.startsWith('/api/assets?')) return new Response(JSON.stringify({ total: 2, tags: [], autoTags: ['blue', 'landscape'], similarGroups: 1, assets: [a, b] }), { status: 200 });
+      if (u === '/api/assets/similar') return new Response(JSON.stringify({ groups: [[a, b]] }), { status: 200 });
+      if (u === '/api/assets/merge') return new Response(JSON.stringify({ kept: a.id, merged: [b.id], projects: [{ projectName: 'Launch', replaced: 1, status: 'committed' }] }), { status: 200 });
+      if (u === '/api/assets/bulk') return new Response(JSON.stringify({ changed: 2 }), { status: 200 });
+      return new Response('{}', { status: 404 });
+    }) as typeof fetch;
+    render(
+      <MemoryRouter>
+        <AssetsPage />
+      </MemoryRouter>,
+    );
+    expect(await screen.findByText('1 group of files look like copies of each other.')).toBeInTheDocument();
+    expect(screen.getByText('In 1 project')).toBeInTheDocument();
+    expect(screen.getByText('Not used in any project')).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Review' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Similar files' });
+    // The second copy can be chosen as the one to keep.
+    await userEvent.click(within(dialog).getAllByRole('radio')[1]!);
+    await userEvent.click(within(dialog).getByRole('button', { name: /Merge into the kept file/ }));
+    expect(calls.find((c) => c.url === '/api/assets/merge')!.body).toEqual({ keep: b.id, drop: [a.id] });
+    await userEvent.keyboard('{Escape}');
+
+    await userEvent.click(screen.getByRole('button', { name: /Select/ }));
+    await userEvent.click(screen.getByRole('button', { name: 'hills.png' }));
+    await userEvent.click(screen.getByRole('button', { name: 'hills-web.jpg' }));
+    expect(screen.getByText('2 selected')).toBeInTheDocument();
+    await userEvent.type(screen.getByRole('textbox', { name: 'Tag selected' }), 'hero{Enter}');
+    expect(calls.find((c) => c.url === '/api/assets/bulk')!.body).toEqual({ ids: [a.id, b.id], addTags: ['hero'] });
+  });
+});

@@ -1449,13 +1449,13 @@
     "title": "Search the asset library",
     "category": "assets",
     "access": "read",
-    "description": "Search images, video, audio, LUTs and fonts in the asset library by name, tag or kind. Asset ids are content hashes and can be placed into any project.",
+    "description": "Search images, video, audio, LUTs and fonts in the asset library. Every word must match something about the file: name, tags, automatic tags (landscape, portrait, square, 4k, transparent, short, silent, main colors like blue or orange), size such as 1920x1080, the prompt it was generated from, camera details, or a project it is used in. \"unused\" finds files no project uses. Asset ids are content hashes and can be placed into any project.",
     "inputSchema": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "type": "object",
       "properties": {
         "query": {
-          "description": "Matches name and tags (case-insensitive).",
+          "description": "Words to match, e.g. \"blue landscape logo\" or \"kind:video short\".",
           "type": "string"
         },
         "kind": {
@@ -1567,6 +1567,151 @@
     "example": {
       "input": {
         "assetId": "9f86d081884c7d65..."
+      }
+    }
+  },
+  {
+    "name": "find_similar_assets",
+    "title": "Find near-duplicate files",
+    "category": "assets",
+    "access": "read",
+    "description": "Find groups of pictures and videos in the library that are the same image in different files (resized, re-encoded or re-saved copies). Identical files are already stored once; these are the near-duplicates. The first file in each group is the best copy to keep (largest picture). Merge a group with merge_assets.",
+    "inputSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {}
+    },
+    "outputSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "groups": {
+          "type": "array",
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id",
+                "name"
+              ],
+              "additionalProperties": {}
+            }
+          }
+        }
+      },
+      "required": [
+        "groups"
+      ],
+      "additionalProperties": false
+    },
+    "example": {
+      "input": {},
+      "output": {
+        "groups": [
+          [
+            {
+              "id": "3f9a...",
+              "name": "logo.png",
+              "width": 2000,
+              "height": 2000,
+              "usedIn": [
+                "Launch"
+              ]
+            },
+            {
+              "id": "77c1...",
+              "name": "logo-small.jpg",
+              "width": 500,
+              "height": 500,
+              "usedIn": []
+            }
+          ]
+        ]
+      }
+    }
+  },
+  {
+    "name": "merge_assets",
+    "title": "Merge near-duplicate files",
+    "category": "assets",
+    "access": "write",
+    "description": "Keep one file and switch every use of the other copies (layers, clips, slide images, document images, LUTs) to it in each project you can edit, then remove the copies from the library. With edit-with-approval the project changes arrive as proposals and the copies stay until they are accepted.",
+    "inputSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "keep": {
+          "type": "string",
+          "description": "Asset id to keep"
+        },
+        "drop": {
+          "minItems": 1,
+          "maxItems": 50,
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Asset ids to merge into it"
+        }
+      },
+      "required": [
+        "keep",
+        "drop"
+      ]
+    },
+    "outputSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "kept": {
+          "type": "string"
+        },
+        "merged": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "projects": {
+          "type": "array",
+          "items": {}
+        }
+      },
+      "required": [
+        "kept",
+        "merged",
+        "projects"
+      ],
+      "additionalProperties": false
+    },
+    "example": {
+      "input": {
+        "keep": "3f9a...",
+        "drop": [
+          "77c1..."
+        ]
+      },
+      "output": {
+        "kept": "3f9a...",
+        "merged": [
+          "77c1..."
+        ],
+        "projects": [
+          {
+            "projectName": "Launch",
+            "replaced": 2,
+            "status": "committed"
+          }
+        ]
       }
     }
   },

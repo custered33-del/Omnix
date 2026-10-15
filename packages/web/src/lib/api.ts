@@ -45,7 +45,7 @@ export const patch = <T>(path: string, json: unknown) => api<T>(path, { method: 
 export const del = <T>(path: string) => api<T>(path, { method: 'DELETE' });
 
 /** Upload a file as a raw body; returns the asset record. */
-export async function uploadFile(file: File | Blob, options: { name?: string; projectId?: string; tags?: string[]; onProgress?: (f: number) => void } = {}): Promise<{ asset: AssetSummary; deduplicated: boolean }> {
+export async function uploadFile(file: File | Blob, options: { name?: string; projectId?: string; tags?: string[]; onProgress?: (f: number) => void } = {}): Promise<{ asset: AssetSummary; deduplicated: boolean; similar?: { id: string; name: string; distance: number }[] }> {
   const name = options.name ?? (file instanceof File ? file.name : 'upload');
   const params = new URLSearchParams({ name });
   if (options.projectId) params.set('projectId', options.projectId);
@@ -92,6 +92,9 @@ export interface AssetSummary {
   hasThumbnail?: boolean;
   waveform?: number[];
   projectIds?: string[];
+  /** Tags Omnix worked out itself: orientation, main colors, length, transparency. */
+  autoTags?: string[];
+  usedIn?: { projectId: string; projectName: string; count: number }[];
 }
 
 export const assetUrl = (id: string) => `/api/assets/${id}/file`;

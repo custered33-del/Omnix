@@ -12,6 +12,7 @@ import { ProjectError } from '../projects/service.js';
 import { assetSummary, requireAsset, visibleAssets } from '../mcp/tools/assets.js';
 import type { AssetRecord } from '../assets/pipeline.js';
 import { ToolError } from '../mcp/registry.js';
+import { assetUsage, ensureAnalyzed, mergeAssets, releaseAsset, searchAssets, similarGroups, similarTo, type AssetUse } from '../assets/library.js';
 
 async function requireVisible(services: Services, userId: string, id: string): Promise<AssetRecord> {
   try {
@@ -46,29 +47,99 @@ export async function sendBlob(services: Services, req: express.Request, res: ex
   res.set('Accept-Ranges', 'bytes').send(data);
 }
 
+/** The library as one person sees it, with fingerprints filled in and where each asset is used. */
+export async function libraryFor(services: Services, userId: string): Promise<{ list: AssetRecord[]; usage: Map<string, AssetUse[]> }> {
+  let list = await visibleAssets(services, userId);
+  // Older assets get their automatic tags and fingerprint the first time the library is opened.
+  const missing = list.filter((a) => !a.autoTags).slice(0, 60);
+  if (missing.length) {
+    const done = new Map((await Promise.all(missing.map((a) => ensureAnalyzed(services, a)))).map((a) => [a.id, a]));
+    list = list.map((a) => done.get(a.id) ?? a);
+  }
+  const projects = await services.projects.listForUser(userId, { includeArchived: true });
+  return { list, usage: await assetUsage(services, projects) };
+}
+
 export function assetRoutes(services: Services): express.Router {
   const r = express.Router();
+  const listed = (a: AssetRecord, usage: Map<string, AssetUse[]>) => ({
+    ...assetSummary(a, ''),
+    autoTags: a.autoTags ?? [],
+    proxyStatus: a.proxyStatus,
+    hasThumbnail: !!a.thumbnailBlob,
+    waveform: a.waveform ? a.waveform.filter((_, i) => i % 3 === 0) : undefined,
+    owners: a.owners.length,
+    projectIds: a.projectIds,
+    usedIn: (usage.get(a.id) ?? []).map((u) => ({ projectId: u.projectId, projectName: u.projectName, count: u.nodeIds.length })),
+  });
 
   r.get(
     '/',
     h(async (req, res) => {
       const user = requireUser(req);
       const q = z
-        .object({ q: z.string().optional(), kind: z.string().optional(), tag: z.string().optional(), projectId: z.string().optional(), limit: z.coerce.number().int().min(1).max(1000).optional(), offset: z.coerce.number().int().min(0).optional() })
+        .object({ q: z.string().optional(), kind: z.string().optional(), tag: z.string().optional(), projectId: z.string().optional(), sort: z.enum(['newest', 'oldest', 'name', 'size', 'relevance']).optional(), limit: z.coerce.number().int().min(1).max(1000).optional(), offset: z.coerce.number().int().min(0).optional() })
         .parse(req.query);
-      let list = await visibleAssets(services, user.id);
-      if (q.kind) list = list.filter((a) => a.kind === q.kind);
-      if (q.tag) list = list.filter((a) => a.tags.includes(q.tag!));
-      if (q.projectId) list = list.filter((a) => a.projectIds.includes(q.projectId!));
-      if (q.q) {
-        const needle = q.q.toLowerCase();
-        list = list.filter((a) => a.name.toLowerCase().includes(needle) || a.tags.some((t) => t.toLowerCase().includes(needle)) || a.kind === needle);
-      }
-      list.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+      const { list: all, usage } = await libraryFor(services, user.id);
+      const list = searchAssets(all, { ...(q.q ? { query: q.q } : {}), ...(q.kind ? { kind: q.kind } : {}), ...(q.tag ? { tag: q.tag } : {}), ...(q.projectId ? { projectId: q.projectId } : {}), ...(q.sort ? { sort: q.sort } : {}), usage });
       const total = list.length;
       const offset = q.offset ?? 0;
       const tags = [...new Set(list.flatMap((a) => a.tags))].sort();
-      res.json({ total, tags, assets: list.slice(offset, offset + (q.limit ?? 100)).map((a) => ({ ...assetSummary(a, ''), proxyStatus: a.proxyStatus, hasThumbnail: !!a.thumbnailBlob, waveform: a.waveform ? a.waveform.filter((_, i) => i % 3 === 0) : undefined, owners: a.owners.length, projectIds: a.projectIds })) });
+      const autoTags = [...new Set(list.flatMap((a) => a.autoTags ?? []))].sort();
+      const similar = similarGroups(all).length;
+      res.json({ total, tags, autoTags, similarGroups: similar, assets: list.slice(offset, offset + (q.limit ?? 100)).map((a) => listed(a, usage)) });
+    }),
+  );
+
+  /** Groups of near-duplicate files (resized or re-encoded copies), best copy first. */
+  r.get(
+    '/similar',
+    h(async (req, res) => {
+      const user = requireUser(req);
+      const { list, usage } = await libraryFor(services, user.id);
+      res.json({ groups: similarGroups(list).map((g) => g.map((a) => listed(a, usage))) });
+    }),
+  );
+
+  /** Keep one copy: every project the person can edit switches to it, and the others leave the library. */
+  r.post(
+    '/merge',
+    h(async (req, res) => {
+      const user = requireUser(req);
+      const body = z.object({ keep: z.string(), drop: z.array(z.string()).min(1).max(50) }).parse(req.body);
+      for (const id of [body.keep, ...body.drop]) await requireVisible(services, user.id, id);
+      const author = { type: 'human' as const, id: user.id, name: user.name };
+      const result = await mergeAssets(services, user.id, body.keep, body.drop, async (projectId, ops, label) => {
+        await services.projects.commit(projectId, ops.length === 1 ? ops[0]! : { kind: 'batch', ops }, author, { label, via: 'ui' });
+        return 'committed';
+      });
+      res.json(result);
+    }),
+  );
+
+  /** Tag, untag or remove many assets at once. */
+  r.post(
+    '/bulk',
+    h(async (req, res) => {
+      const user = requireUser(req);
+      const body = z.object({ ids: z.array(z.string()).min(1).max(500), addTags: z.array(z.string().max(40)).max(20).optional(), removeTags: z.array(z.string().max(40)).max(20).optional(), remove: z.boolean().optional() }).parse(req.body);
+      let changed = 0;
+      for (const id of body.ids) {
+        const a = await requireVisible(services, user.id, id);
+        if (body.remove) {
+          await releaseAsset(services, a, user.id);
+          changed++;
+          continue;
+        }
+        const add = (body.addTags ?? []).map((t) => t.trim()).filter(Boolean);
+        const drop = new Set((body.removeTags ?? []).map((t) => t.trim().toLowerCase()));
+        const tags = [...new Set([...a.tags.filter((t) => !drop.has(t.toLowerCase())), ...add])];
+        if (tags.join('\u0000') !== a.tags.join('\u0000')) {
+          await services.assets.update(a.id, { tags });
+          changed++;
+        }
+      }
+      res.json({ changed });
     }),
   );
 
@@ -91,7 +162,9 @@ export function assetRoutes(services: Services): express.Router {
       }
       const existed = !!(await services.assets.get(tmp.sha256));
       const asset = await services.assets.ingestFile(tmp.path, { name, ownerId: user.id, ...(projectId ? { projectId } : {}), tags, mimeHint: String(req.headers['content-type'] ?? '') }, tmp.sha256);
-      res.status(existed ? 200 : 201).json({ asset: { ...assetSummary(asset, ''), proxyStatus: asset.proxyStatus, waveform: asset.waveform, exif: asset.exif }, deduplicated: existed });
+      // A new file that looks like one already in the library (a resized or re-saved copy).
+      const similar = existed ? [] : similarTo(asset, await visibleAssets(services, user.id)).slice(0, 3).map(({ asset: s, distance }) => ({ id: s.id, name: s.name, distance, width: s.width, height: s.height }));
+      res.status(existed ? 200 : 201).json({ asset: { ...assetSummary(asset, ''), autoTags: asset.autoTags ?? [], proxyStatus: asset.proxyStatus, waveform: asset.waveform, exif: asset.exif }, deduplicated: existed, similar });
     }),
   );
 
@@ -111,8 +184,10 @@ export function assetRoutes(services: Services): express.Router {
     '/:id',
     h(async (req, res) => {
       const user = requireUser(req);
-      const a = await requireVisible(services, user.id, String(req.params.id));
-      res.json({ asset: { ...a, owners: undefined, ownedByMe: a.owners.includes(user.id) } });
+      const a = await ensureAnalyzed(services, await requireVisible(services, user.id, String(req.params.id)));
+      const { list, usage } = await libraryFor(services, user.id);
+      const similar = similarTo(a, list).map(({ asset: s, distance }) => ({ id: s.id, name: s.name, distance, width: s.width, height: s.height, size: s.size }));
+      res.json({ asset: { ...a, owners: undefined, ownedByMe: a.owners.includes(user.id), usedIn: usage.get(a.id) ?? [], similar } });
     }),
   );
 
@@ -133,15 +208,7 @@ export function assetRoutes(services: Services): express.Router {
     h(async (req, res) => {
       const user = requireUser(req);
       const a = await requireVisible(services, user.id, String(req.params.id));
-      const owners = a.owners.filter((o) => o !== user.id);
-      if (owners.length === 0 && a.projectIds.length === 0) {
-        await services.store.delete('assets', a.id);
-        await services.blobs.delete(a.id);
-        if (a.thumbnailBlob) await services.blobs.delete(a.thumbnailBlob);
-        if (a.proxyBlob) await services.blobs.delete(a.proxyBlob);
-      } else {
-        await services.assets.update(a.id, { owners });
-      }
+      await releaseAsset(services, a, user.id);
       res.json({ ok: true });
     }),
   );

@@ -13,6 +13,7 @@ import { sha256File } from '../storage/blobs.js';
 import type { OmnixConfig } from '../config.js';
 import { extractFrame, makeProxy, probe, waveformPeaks, type MediaInfo } from '../util/media.js';
 import type { JobQueue } from '../jobs/queue.js';
+import { analyzeAsset } from './library.js';
 
 export type AssetKind = 'image' | 'video' | 'audio' | 'lut' | 'font' | 'text' | 'data' | 'other';
 
@@ -26,6 +27,10 @@ export interface AssetRecord {
   owners: string[];
   projectIds: string[];
   tags: string[];
+  /** Tags Omnix works out itself (orientation, main colors, length, transparency...). */
+  autoTags?: string[];
+  /** Perceptual fingerprint of pictures and video frames, for finding near-duplicates. */
+  phash?: string;
   width?: number;
   height?: number;
   duration?: number;
@@ -246,6 +251,11 @@ export class AssetPipeline {
       // Metadata failure should not block storing the file; the record notes what is missing.
       record.tags.push('metadata-unavailable');
       if (this.config.dev) console.warn(`[assets] metadata extraction failed for ${options.name}:`, e instanceof Error ? e.message : e);
+    }
+    try {
+      Object.assign(record, await analyzeAsset(this.blobs, record));
+    } catch {
+      record.autoTags = [];
     }
     await this.blobs.putFile(tempPath, hash);
     await this.store.put(C.assets, hash, record);

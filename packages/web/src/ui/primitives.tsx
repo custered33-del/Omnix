@@ -10,20 +10,46 @@ import { t } from '../i18n/index.js';
 
 const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
+/** Open dialogs, innermost last: Escape closes only the top one, wherever focus is. */
+const dialogStack: { close: () => void; el: () => HTMLElement | null }[] = [];
+if (typeof window !== 'undefined') {
+  window.addEventListener('keydown', (e) => {
+    const top = dialogStack[dialogStack.length - 1];
+    if (!top || e.defaultPrevented) return;
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      e.stopPropagation();
+      top.close();
+    } else if (e.key === 'Tab' && !top.el()?.contains(document.activeElement)) {
+      // Focus fell out of the dialog (its button disappeared, say): bring it back in.
+      e.preventDefault();
+      top.el()?.querySelector<HTMLElement>(FOCUSABLE)?.focus();
+    }
+  });
+}
+
 export function Dialog(props: { title: string; onClose: () => void; children: ReactNode; footer?: ReactNode; wide?: boolean; full?: boolean; description?: string; icon?: ReactNode }) {
   const ref = useRef<HTMLDivElement>(null);
   const titleId = useId();
   const descId = useId();
+  const close = useRef(props.onClose);
+  close.current = props.onClose;
   useEffect(() => {
     const prev = document.activeElement as HTMLElement | null;
     const el = ref.current;
     const first = el?.querySelector<HTMLElement>('[data-autofocus]') ?? el?.querySelector<HTMLElement>(FOCUSABLE);
     first?.focus();
-    return () => prev?.focus?.();
+    const entry = { close: () => close.current(), el: () => ref.current };
+    dialogStack.push(entry);
+    return () => {
+      dialogStack.splice(dialogStack.indexOf(entry), 1);
+      prev?.focus?.();
+    };
   }, []);
   const onKey = (e: ReactKeyboardEvent) => {
     if (e.key === 'Escape') {
       e.stopPropagation();
+      e.preventDefault();
       props.onClose();
     }
     if (e.key === 'Tab' && ref.current) {

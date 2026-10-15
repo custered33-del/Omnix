@@ -119,3 +119,56 @@ export function diffOverlay(after: Raster, diff: PixelDiff, color: [number, numb
   }
   return out;
 }
+
+/**
+ * Perceptual "difference hash" of a picture: 64 bits saying whether each pixel of a 9×8
+ * grayscale thumbnail is brighter than its right neighbour, as 16 hex characters. Resized,
+ * re-encoded or lightly edited copies of a picture land within a few bits of each other.
+ */
+export function differenceHash(gray9x8: Uint8Array | Uint8ClampedArray): string {
+  if (gray9x8.length !== 72) throw new Error('differenceHash needs a 9×8 grayscale image');
+  let hex = '';
+  for (let y = 0; y < 8; y++) {
+    let byte = 0;
+    for (let x = 0; x < 8; x++) byte = (byte << 1) | (gray9x8[y * 9 + x]! > gray9x8[y * 9 + x + 1]! ? 1 : 0);
+    hex += byte.toString(16).padStart(2, '0');
+  }
+  return hex;
+}
+
+/** Bits that differ between two hex hashes of the same length. */
+export function hammingDistance(a: string, b: string): number {
+  let d = 0;
+  for (let i = 0; i < a.length; i += 8) {
+    let x = (parseInt(a.slice(i, i + 8), 16) ^ parseInt(b.slice(i, i + 8), 16)) >>> 0;
+    while (x) {
+      x &= x - 1;
+      d++;
+    }
+  }
+  return d;
+}
+
+/** A plain color word for an sRGB color (for automatic tags and search). */
+export function colorWord(r: number, g: number, b: number): string {
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  const l = (max + min) / 510;
+  const s = max === min ? 0 : (max - min) / (l > 0.5 ? 510 - max - min : max + min);
+  if (l < 0.13) return 'black';
+  if (l > 0.9 && s < 0.5) return 'white';
+  if (s < 0.15) return 'gray';
+  let h = 0;
+  const d = max - min;
+  if (max === r) h = ((g - b) / d + (g < b ? 6 : 0)) * 60;
+  else if (max === g) h = ((b - r) / d + 2) * 60;
+  else h = ((r - g) / d + 4) * 60;
+  if (h < 15 || h >= 345) return l < 0.35 && s < 0.6 ? 'brown' : h >= 345 && l > 0.65 ? 'pink' : 'red';
+  if (h < 40) return l < 0.45 ? 'brown' : 'orange';
+  if (h < 65) return 'yellow';
+  if (h < 160) return 'green';
+  if (h < 195) return 'teal';
+  if (h < 255) return 'blue';
+  if (h < 290) return 'purple';
+  return 'pink';
+}

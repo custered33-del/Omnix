@@ -1,27 +1,35 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
-import { Upload, Link2, X, Search, Plus, Download, Trash2 } from 'lucide-react';
+import { Link, useSearchParams } from 'react-router-dom';
+import { Upload, Link2, X, Search, Plus, Download, Trash2, Copy, CheckSquare, Square, Tag } from 'lucide-react';
 import { del, get, patch, post, uploadFile, assetUrl, thumbUrl, type AssetSummary } from '../lib/api.js';
-import { Dialog, Spinner } from '../ui/primitives.js';
+import { ConfirmDialog, Dialog, Spinner } from '../ui/primitives.js';
 import { toast } from '../ui/toast.js';
-import { formatBytes, formatDuration, formatRelative, t } from '../i18n/index.js';
+import { formatBytes, formatDuration, formatRelative, plural, t } from '../i18n/index.js';
 
 const KINDS = ['image', 'video', 'audio', 'lut', 'font', 'text', 'data', 'other'] as const;
 
-interface AssetDetail extends AssetSummary {
+interface AssetDetail extends Omit<AssetSummary, 'usedIn'> {
   exif?: Record<string, string | number>;
   colorSpace?: string | null;
   videoCodec?: string | null;
   audioCodec?: string | null;
-  source?: { kind: string; url?: string };
+  source?: { kind: string; url?: string; prompt?: string };
+  usedIn?: { projectId: string; projectName: string; nodeIds: string[] }[];
+  similar?: { id: string; name: string; distance: number; width?: number; height?: number; size: number }[];
 }
+
+type Listing = { assets: AssetSummary[]; tags: string[]; autoTags: string[]; total: number; similarGroups: number };
 
 export function AssetsPage() {
   const [params, setParams] = useSearchParams();
   const [q, setQ] = useState('');
   const [kind, setKind] = useState<string>('');
   const [tag, setTag] = useState<string>('');
-  const [data, setData] = useState<{ assets: AssetSummary[]; tags: string[]; total: number } | null>(null);
+  const [sort, setSort] = useState('');
+  const [data, setData] = useState<Listing | null>(null);
+  const [selecting, setSelecting] = useState(false);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [similarOpen, setSimilarOpen] = useState(false);
   const [uploads, setUploads] = useState<{ name: string; progress: number }[]>([]);
   const [over, setOver] = useState(false);
   const [urlOpen, setUrlOpen] = useState(false);
@@ -33,8 +41,9 @@ export function AssetsPage() {
     if (q) p.set('q', q);
     if (kind) p.set('kind', kind);
     if (tag) p.set('tag', tag);
-    get<{ assets: AssetSummary[]; tags: string[]; total: number }>(`/api/assets?${p}`).then(setData, (e) => toast.error(e.message));
-  }, [q, kind, tag]);
+    if (sort) p.set('sort', sort);
+    get<Listing>(`/api/assets?${p}`).then(setData, (e) => toast.error(e.message));
+  }, [q, kind, tag, sort]);
   useEffect(() => {
     const id = window.setTimeout(load, 150);
     return () => window.clearTimeout(id);
@@ -45,7 +54,9 @@ export function AssetsPage() {
       setUploads((u) => [...u, { name: f.name, progress: 0 }]);
       try {
         const r = await uploadFile(f, { onProgress: (p) => setUploads((u) => u.map((x) => (x.name === f.name ? { ...x, progress: p } : x))) });
-        toast.success(r.deduplicated ? t('assets.duplicate', { name: f.name }) : t('assets.uploaded', { name: f.name }));
+        const like = r.similar?.[0];
+        if (like) toast.info(t('assets.looksLikeUpload', { name: f.name, other: like.name }), { label: t('assets.review'), run: () => setSimilarOpen(true) });
+        else toast.success(r.deduplicated ? t('assets.duplicate', { name: f.name }) : t('assets.uploaded', { name: f.name }));
       } catch (e) {
         toast.error((e as Error).message);
       } finally {
@@ -72,7 +83,7 @@ export function AssetsPage() {
       <header className="page-header">
         <div className="grow">
           <h1>{t('assets.title')}</h1>
-          {data && <p className="subtitle">{data.total} items · identical files are stored once</p>}
+          {data && <p className="subtitle">{t('assets.subtitle', { count: data.total })}</p>}
         </div>
         <button className="btn" onClick={() => setUrlOpen(true)}>
           <Link2 /> {t('assets.importUrl')}
@@ -98,17 +109,62 @@ export function AssetsPage() {
             </button>
           ))}
         </div>
-        {data && data.tags.length > 0 && (
+        {data && (data.tags.length > 0 || data.autoTags.length > 0) && (
           <select className="select" style={{ width: 180 }} value={tag} onChange={(e) => setTag(e.target.value)} aria-label={t('assets.tags')}>
             <option value="">{t('assets.tags')}: {t('assets.filterAll')}</option>
-            {data.tags.map((x) => (
-              <option key={x} value={x}>
-                {x}
-              </option>
-            ))}
+            {data.tags.length > 0 && (
+              <optgroup label={t('assets.tags')}>
+                {data.tags.map((x) => (
+                  <option key={x} value={x}>
+                    {x}
+                  </option>
+                ))}
+              </optgroup>
+            )}
+            {data.autoTags.length > 0 && (
+              <optgroup label={t('assets.autoTags')}>
+                {data.autoTags.map((x) => (
+                  <option key={`auto-${x}`} value={x}>
+                    {x}
+                  </option>
+                ))}
+              </optgroup>
+            )}
           </select>
         )}
+        <select className="select" style={{ width: 150 }} value={sort} onChange={(e) => setSort(e.target.value)} aria-label={t('assets.sort')}>
+          <option value="">
+            {t('assets.sort')}: {q ? t('assets.sorts.relevance') : t('assets.sorts.newest')}
+          </option>
+          {(['newest', 'oldest', 'name', 'size'] as const).map((k) => (
+            <option key={k} value={k}>
+              {t(`assets.sorts.${k}`)}
+            </option>
+          ))}
+        </select>
+        <span className="spacer" />
+        <button
+          className={`btn btn-sm${selecting ? ' btn-primary' : ''}`}
+          aria-pressed={selecting}
+          onClick={() => {
+            setSelecting(!selecting);
+            setSelected(new Set());
+          }}
+        >
+          <CheckSquare /> {selecting ? t('assets.doneSelecting') : t('assets.select')}
+        </button>
       </div>
+
+      {data && data.similarGroups > 0 && (
+        <div className="notice" role="status">
+          <Copy size={16} aria-hidden="true" />
+          <span className="grow">{plural('assets.similarBanner', data.similarGroups)}</span>
+          <button className="btn btn-sm" onClick={() => setSimilarOpen(true)}>
+            {t('assets.review')}
+          </button>
+        </div>
+      )}
+      {selecting && selected.size > 0 && <BulkBar ids={[...selected]} tags={data?.tags ?? []} onDone={() => (setSelected(new Set()), load())} />}
 
       {uploads.length > 0 && (
         <div className="card" style={{ padding: 16, marginBottom: 16 }} role="status">
@@ -135,7 +191,20 @@ export function AssetsPage() {
         <ul className="project-grid" style={{ listStyle: 'none', padding: 0, margin: 0, gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))' }}>
           {data.assets.map((a) => (
             <li key={a.id}>
-              <button className="project-card" style={{ width: '100%', padding: 0, cursor: 'pointer', textAlign: 'left' }} onClick={() => setParams({ focus: a.id })} aria-label={a.name}>
+              <button
+                className={`project-card asset-card${selected.has(a.id) ? ' selected' : ''}`}
+                style={{ width: '100%', padding: 0, cursor: 'pointer', textAlign: 'left' }}
+                onClick={() => {
+                  if (!selecting) return setParams({ focus: a.id });
+                  const next = new Set(selected);
+                  if (next.has(a.id)) next.delete(a.id);
+                  else next.add(a.id);
+                  setSelected(next);
+                }}
+                aria-label={a.name}
+                {...(selecting ? { 'aria-pressed': selected.has(a.id) } : {})}
+              >
+                {selecting && <span className="asset-check" aria-hidden="true">{selected.has(a.id) ? <CheckSquare size={18} /> : <Square size={18} />}</span>}
                 <span className="cover" style={{ display: 'block', aspectRatio: '4 / 3', background: a.hasThumbnail ? `var(--surface-2) url(${thumbUrl(a.id)}) center / cover` : 'var(--surface-2)' }} />
                 <span className="meta" style={{ display: 'block' }}>
                   <span className="name truncate" style={{ display: 'block' }}>
@@ -145,24 +214,36 @@ export function AssetsPage() {
                     {t(`assets.kinds.${a.kind}`)} · {a.width ? `${a.width}×${a.height}` : formatBytes(a.size)}
                     {a.duration ? ` · ${formatDuration(a.duration)}` : ''}
                   </span>
+                  <span className="sub" style={{ display: 'block' }}>
+                    {a.usedIn?.length ? plural('assets.usedInCount', a.usedIn.length) : t('assets.unused')}
+                  </span>
                 </span>
               </button>
             </li>
           ))}
         </ul>
       )}
-      {focus && <AssetDetailDialog id={focus} onClose={() => setParams({})} onChanged={load} />}
+      {focus && <AssetDetailDialog id={focus} onClose={() => setParams({})} onChanged={load} onSearch={(word) => (setQ(word), setParams({}))} />}
+      {similarOpen && <SimilarDialog onClose={() => setSimilarOpen(false)} onChanged={load} />}
       {urlOpen && <ImportUrlDialog onClose={() => setUrlOpen(false)} onDone={load} />}
     </div>
   );
 }
 
-function AssetDetailDialog({ id, onClose, onChanged }: { id: string; onClose: () => void; onChanged: () => void }) {
+function AssetDetailDialog({ id, onClose, onChanged, onSearch }: { id: string; onClose: () => void; onChanged: () => void; onSearch: (word: string) => void }) {
   const [a, setA] = useState<AssetDetail | null>(null);
   const [newTag, setNewTag] = useState('');
-  useEffect(() => {
+  const [, setParams] = useSearchParams();
+  const reload = useCallback(() => {
     get<{ asset: AssetDetail }>(`/api/assets/${id}`).then((r) => setA(r.asset), (e) => toast.error(e.message));
   }, [id]);
+  useEffect(reload, [reload]);
+  const mergeInto = async (dropId: string) => {
+    const r = await post<MergeResult>('/api/assets/merge', { keep: id, drop: [dropId] });
+    toast.success(mergedMessage(r, a?.name ?? ''));
+    reload();
+    onChanged();
+  };
   const saveTags = async (tags: string[]) => {
     const r = await patch<{ asset: AssetDetail }>(`/api/assets/${id}`, { tags });
     setA((cur) => (cur ? { ...cur, tags: r.asset.tags } : cur));
@@ -262,6 +343,53 @@ function AssetDetailDialog({ id, onClose, onChanged }: { id: string; onClose: ()
                 </button>
               </form>
             </div>
+            {(a.autoTags?.length ?? 0) > 0 && (
+              <div className="col">
+                <span className="label">{t('assets.autoTags')}</span>
+                <div className="row" style={{ flexWrap: 'wrap', gap: 4 }}>
+                  {a.autoTags!.map((tag) => (
+                    <button key={tag} type="button" className="chip" onClick={() => onSearch(tag)}>
+                      {tag}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+            <div className="col">
+              <span className="label">{t('assets.usedIn')}</span>
+              {a.usedIn?.length ? (
+                <ul className="plain-list">
+                  {a.usedIn.map((u) => (
+                    <li key={u.projectId}>
+                      <Link to={`/projects/${u.projectId}`}>{t('assets.usedInUses', { name: u.projectName, count: u.nodeIds.length })}</Link>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <span className="muted" style={{ fontSize: 'var(--fs-sm)' }}>
+                  {t('assets.unused')}
+                </span>
+              )}
+            </div>
+            {(a.similar?.length ?? 0) > 0 && (
+              <div className="col">
+                <span className="label">{t('assets.looksLike')}</span>
+                {a.similar!.map((s) => (
+                  <div key={s.id} className="row" style={{ gap: 8 }}>
+                    <img src={thumbUrl(s.id)} alt="" width={48} height={36} style={{ objectFit: 'cover', borderRadius: 4, border: '1px solid var(--border)' }} />
+                    <button type="button" className="link-btn grow truncate" onClick={() => setParams({ focus: s.id })}>
+                      {s.name}
+                    </button>
+                    <span className="muted tabular" style={{ fontSize: 'var(--fs-xs)' }}>
+                      {s.width ? `${s.width}×${s.height}` : formatBytes(s.size)}
+                    </span>
+                    <button className="btn btn-sm" onClick={() => void mergeInto(s.id).catch((e: Error) => toast.error(e.message))}>
+                      {t('assets.mergeInto')}
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
             <div className="row">
               <a className="btn btn-sm" href={`${assetUrl(a.id)}?download=1`}>
                 <Download /> Download
@@ -319,5 +447,125 @@ function ImportUrlDialog({ onClose, onDone }: { onClose: () => void; onDone: () 
     >
       <input className="input" data-autofocus type="url" placeholder="https://…" value={url} onChange={(e) => setUrl(e.target.value)} aria-label="URL" />
     </Dialog>
+  );
+}
+
+interface MergeResult {
+  kept: string;
+  merged: string[];
+  projects: { projectName: string; replaced: number; status: string }[];
+}
+
+function mergedMessage(r: MergeResult, name: string): string {
+  const uses = r.projects.filter((p) => p.status !== 'skipped').reduce((n, p) => n + p.replaced, 0);
+  return uses ? plural('assets.merged', r.merged.length, { uses, name }) : plural('assets.mergedUnused', r.merged.length, { name });
+}
+
+/** Near-duplicate groups: pick the copy to keep and merge the rest into it. */
+function SimilarDialog({ onClose, onChanged }: { onClose: () => void; onChanged: () => void }) {
+  const [groups, setGroups] = useState<AssetSummary[][] | null>(null);
+  const [keep, setKeep] = useState<Record<number, string>>({});
+  const [busy, setBusy] = useState<number | null>(null);
+  const load = useCallback(() => {
+    get<{ groups: AssetSummary[][] }>('/api/assets/similar').then((r) => setGroups(r.groups), (e) => toast.error(e.message));
+  }, []);
+  useEffect(load, [load]);
+  return (
+    <Dialog title={t('assets.similarTitle')} onClose={onClose} wide description={t('assets.similarHint')}>
+      {!groups && <Spinner />}
+      {groups && groups.length === 0 && <p>{t('assets.noSimilar')}</p>}
+      <div className="col" style={{ gap: 16 }}>
+        {groups?.map((g, gi) => {
+          const kept = keep[gi] ?? g[0]!.id;
+          return (
+            <section key={g.map((a) => a.id).join()} className="similar-group">
+              <div className="similar-row" role="radiogroup" aria-label={t('assets.keep')}>
+                {g.map((a) => (
+                  <label key={a.id} className={`similar-item${a.id === kept ? ' kept' : ''}`}>
+                    <img src={thumbUrl(a.id)} alt="" />
+                    <span className="row" style={{ gap: 6 }}>
+                      <input type="radio" name={`keep-${gi}`} checked={a.id === kept} onChange={() => setKeep({ ...keep, [gi]: a.id })} />
+                      <span className="truncate">{a.name}</span>
+                    </span>
+                    <span className="muted" style={{ fontSize: 'var(--fs-xs)' }}>
+                      {a.width ? `${a.width}×${a.height} · ` : ''}
+                      {formatBytes(a.size)} · {a.usedIn?.length ? plural('assets.usedInCount', a.usedIn.length) : t('assets.unused')}
+                    </span>
+                  </label>
+                ))}
+              </div>
+              <button
+                className="btn btn-sm btn-primary"
+                disabled={busy !== null}
+                onClick={async () => {
+                  setBusy(gi);
+                  try {
+                    const r = await post<MergeResult>('/api/assets/merge', { keep: kept, drop: g.filter((a) => a.id !== kept).map((a) => a.id) });
+                    toast.success(mergedMessage(r, g.find((a) => a.id === kept)!.name));
+                    load();
+                    onChanged();
+                  } catch (e) {
+                    toast.error((e as Error).message);
+                  } finally {
+                    setBusy(null);
+                  }
+                }}
+              >
+                {busy === gi ? <Spinner /> : <Copy />} {t('assets.merge')}
+              </button>
+            </section>
+          );
+        })}
+      </div>
+    </Dialog>
+  );
+}
+
+/** Actions for several selected assets. */
+function BulkBar({ ids, tags, onDone }: { ids: string[]; tags: string[]; onDone: () => void }) {
+  const [tag, setTag] = useState('');
+  const [confirm, setConfirm] = useState(false);
+  const run = async (body: Record<string, unknown>, message: string) => {
+    try {
+      await post('/api/assets/bulk', { ids, ...body });
+      toast.success(message);
+      onDone();
+    } catch (e) {
+      toast.error((e as Error).message);
+    }
+  };
+  return (
+    <div className="bulk-bar" role="toolbar" aria-label={plural('assets.selected', ids.length)}>
+      <strong>{plural('assets.selected', ids.length)}</strong>
+      <form
+        className="row"
+        style={{ gap: 4 }}
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (tag.trim()) void run({ addTags: [tag.trim()] }, t('assets.tagged', { count: ids.length }));
+          setTag('');
+        }}
+      >
+        <input className="input sm" style={{ width: 140 }} placeholder={t('assets.addTag')} value={tag} onChange={(e) => setTag(e.target.value)} aria-label={t('assets.bulkTag')} />
+        <button className="btn btn-sm" type="submit" disabled={!tag.trim()}>
+          <Tag /> {t('assets.bulkTag')}
+        </button>
+      </form>
+      {tags.length > 0 && (
+        <select className="select sm" style={{ width: 160 }} value="" onChange={(e) => e.target.value && void run({ removeTags: [e.target.value] }, t('assets.tagged', { count: ids.length }))} aria-label={t('assets.bulkUntag')}>
+          <option value="">{t('assets.bulkUntag')}…</option>
+          {tags.map((x) => (
+            <option key={x} value={x}>
+              {x}
+            </option>
+          ))}
+        </select>
+      )}
+      <span className="spacer" />
+      <button className="btn btn-sm btn-danger" onClick={() => setConfirm(true)}>
+        <Trash2 /> {t('assets.bulkRemove')}
+      </button>
+      {confirm && <ConfirmDialog title={t('assets.bulkRemove')} message={t('assets.bulkRemoveConfirm', { count: ids.length })} confirmLabel={t('app.remove')} danger onConfirm={() => run({ remove: true }, t('assets.removed', { count: ids.length }))} onClose={() => setConfirm(false)} />}
+    </div>
   );
 }
