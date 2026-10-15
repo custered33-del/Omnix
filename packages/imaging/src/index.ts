@@ -8,3 +8,4 @@ export * from './inpaint.js';
 export * from './resize.js';
 export * from './background.js';
 export * from './style.js';
+export * from './compare.js';

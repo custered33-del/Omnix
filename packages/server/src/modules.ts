@@ -14,3 +14,4 @@ import './oauth/module.js';
 import './slides/module.js';
 import './agent/module.js';
 import './ai/module.js';
+import './versions/module.js';

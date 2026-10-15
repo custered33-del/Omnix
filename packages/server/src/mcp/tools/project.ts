@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { childrenOf, makeNode, notesContainer, outlineProject, primaryDocumentNodes, projectTreeText, subtreeIds, TOOL_KINDS, zOperation, type SceneNode } from '@omnix/core';
-import { edit, writeResult, zWriteResult } from './helpers.js';
+import { describeNode, edit, writeResult, zWriteResult } from './helpers.js';
 import { C } from '../../storage/store.js';
 import { defineTool, outcomeText, zNodeId, zProjectId, ToolError } from '../registry.js';
 import { renderNode } from '../../render/renderNode.js';
@@ -77,11 +77,11 @@ export const projectReadTools = [
   defineTool({
     name: 'get_history',
     title: 'Read history',
-    description: 'List recent changes on the current branch: who made them (human or AI), when, and what. Useful to see what the user did since your last turn.',
+    description: 'List recent changes on the current branch (who made them, human or AI, when, and what) and the named versions people saved. Useful to see what the user did since your last turn; compare any two with compare_versions.',
     category: 'project',
     access: 'read',
     input: { projectId: zProjectId, limit: z.number().int().min(1).max(200).optional() },
-    output: z.object({ head: z.string().nullable(), commits: z.array(z.object({ id: z.string(), label: z.string(), author: z.string(), authorType: z.string(), timestamp: z.string() })) }),
+    output: z.object({ head: z.string().nullable(), commits: z.array(z.object({ id: z.string(), label: z.string(), author: z.string(), authorType: z.string(), timestamp: z.string() })), versions: z.array(z.object({ id: z.string(), name: z.string(), commitId: z.string().nullable(), createdAt: z.string(), author: z.string() })) }),
     example: { input: { projectId: 'prj_8Kq2...', limit: 5 } },
     async handler(args, ctx) {
       await ctx.requireProject(args.projectId, 'read');
@@ -91,7 +91,9 @@ export const projectReadTools = [
         .slice(-(args.limit ?? 30))
         .reverse()
         .map((c) => ({ id: c.id, label: c.label, author: c.author.name, authorType: c.author.type, timestamp: c.timestamp, ...(c.approvedBy ? { approvedBy: c.approvedBy.name } : {}) }));
-      return { text: commits.map((c) => `${c.timestamp} ${c.author}: ${c.label}`).join('\n') || 'No changes yet.', data: { head: session.head, commits } };
+      const versions = session.listSnapshots().map((v) => ({ id: v.id, name: v.name, commitId: v.commitId, createdAt: v.createdAt, author: v.author.name }));
+      const text = [commits.map((c) => `${c.timestamp} ${c.author}: ${c.label}`).join('\n') || 'No changes yet.', ...(versions.length ? ['Saved versions:', ...versions.map((v) => `- ${v.id} "${v.name}" (${v.createdAt}, ${v.author})`)] : [])].join('\n');
+      return { text, data: { head: session.head, commits, versions } };
     },
   }),
 
@@ -225,7 +227,7 @@ export const projectWriteTools = [
     example: { input: { projectId: 'prj_8Kq2...', nodeId: 'lyr_sky', set: { opacity: 0.8, blendMode: 'screen' }, label: 'Soften the sky' }, output: { status: 'proposed', proposalId: 'prop_1x...' } },
     async handler(args, ctx) {
       if (!args.set && !args.unset?.length) throw new ToolError('Pass set and/or unset.');
-      const out = await edit(ctx, args.projectId, args.label ?? `Edit ${args.nodeId}`, (state) => {
+      const out = await edit(ctx, args.projectId, (state) => args.label ?? `Edit ${describeNode(state, args.nodeId)}`, (state) => {
         if (!state.nodes[args.nodeId]) throw new ToolError(`No node "${args.nodeId}" in this project. Call get_project to find ids.`);
         return [{ kind: 'update', id: args.nodeId, set: args.set ?? {}, ...(args.unset?.length ? { unset: args.unset } : {}) }];
       });
@@ -243,7 +245,7 @@ export const projectWriteTools = [
     output: zWriteResult,
     example: { input: { projectId: 'prj_8Kq2...', nodeId: 'sld_4', index: 0 }, output: { status: 'committed', commitId: 'c_3a...' } },
     async handler(args, ctx) {
-      const out = await edit(ctx, args.projectId, `Move ${args.nodeId}`, (state) => {
+      const out = await edit(ctx, args.projectId, (state) => `Move ${describeNode(state, args.nodeId)}`, (state) => {
         const n = state.nodes[args.nodeId];
         if (!n?.parentId) throw new ToolError(`No movable node "${args.nodeId}".`);
         return [{ kind: 'move', id: n.id, parentId: args.parentId ?? n.parentId, index: args.index }];
@@ -263,7 +265,7 @@ export const projectWriteTools = [
     example: { input: { projectId: 'prj_8Kq2...', nodeId: 'lyr_old' }, output: { status: 'proposed', proposalId: 'prop_7c...', deleted: 1 } },
     async handler(args, ctx) {
       let count = 0;
-      const out = await edit(ctx, args.projectId, `Delete ${args.nodeId}`, (state) => {
+      const out = await edit(ctx, args.projectId, (state) => `Delete ${describeNode(state, args.nodeId)}`, (state) => {
         const n = state.nodes[args.nodeId];
         if (!n || !n.parentId) throw new ToolError(`No deletable node "${args.nodeId}".`);
         if (n.type === 'notes' || n.type === 'comments') throw new ToolError('Session memory and comment containers cannot be deleted.');

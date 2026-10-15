@@ -95,3 +95,64 @@ describe('comments pinned in every tool (51)', () => {
     expect(here!.location).toMatchObject({ tool: 'slides', nodeId: slide.id, x: 200, y: 150 });
   });
 });
+
+describe('versions and visual diff (52)', () => {
+  it('saves a version, then compares it with the current state as text, structure and pictures', async () => {
+    const p = await call(auto, 'create_project', { name: 'Poster v2', primaryTool: 'image' });
+    let s = await state(p.projectId);
+    const canvas = Object.values(s.nodes).find((n) => n.type === 'canvas')!;
+    await call(auto, 'image_add_layer', { projectId: p.projectId, canvasId: canvas.id, kind: 'fill', name: 'Sky', fillColor: '#3366cc' });
+    const v = await call(auto, 'save_version', { projectId: p.projectId, name: 'Blue sky' });
+    expect(v.versionId).toMatch(/^snap_/);
+    s = await state(p.projectId);
+    const sky = Object.values(s.nodes).find((n) => n.type === 'layer' && (n.props as { name?: string }).name === 'Sky')!;
+    await call(auto, 'update_node', { projectId: p.projectId, nodeId: sky.id, set: { fillColor: '#cc3333' } });
+
+    const hist = await call(auto, 'get_history', { projectId: p.projectId });
+    expect(hist.versions.map((x: { name: string }) => x.name)).toEqual(['Blue sky']);
+
+    const r = await auto.callTool({ name: 'compare_versions', arguments: { projectId: p.projectId, from: v.versionId, documentId: canvas.id } });
+    expect(r.isError).toBeFalsy();
+    const data = r.structuredContent as Record<string, any>;
+    expect(data.from.label).toBe('Blue sky');
+    expect(data.comparison.documents[0].structural.changed.map((c: { id: string }) => c.id)).toContain(sky.id);
+    expect(data.pixels.changedPercent).toBeGreaterThan(90);
+    const images = (r.content as { type: string }[]).filter((c) => c.type === 'image');
+    expect(images).toHaveLength(3);
+
+    // The same over HTTP for the app.
+    const cmp = await json(await ts.api(`/api/projects/${p.projectId}/compare?from=${v.versionId}&to=current&doc=${canvas.id}`));
+    expect(cmp.comparison.changed).toEqual([canvas.id]);
+    const px = await json(await ts.api(`/api/projects/${p.projectId}/compare/pixels?from=${v.versionId}&to=current&node=${canvas.id}&size=256`));
+    expect(px.fraction).toBeGreaterThan(0.9);
+    expect(px.width).toBeLessThanOrEqual(256);
+    const img = await ts.api(`/api/projects/${p.projectId}/compare/image?from=${v.versionId}&to=current&node=${canvas.id}&size=256&which=diff`);
+    expect(img.headers.get('content-type')).toBe('image/png');
+    expect((await img.arrayBuffer()).byteLength).toBeGreaterThan(100);
+    // Comparing a version with itself finds nothing.
+    const same = await json(await ts.api(`/api/projects/${p.projectId}/compare?from=current&to=current`));
+    expect(same.comparison.changed).toEqual([]);
+    expect((await ts.api(`/api/projects/${p.projectId}/compare?from=nope`)).status).toBe(404);
+  });
+
+  it('compares documents paragraph by paragraph and code line by line', async () => {
+    const p = await call(auto, 'create_project', { name: 'Brief', primaryTool: 'document' });
+    const doc = await call(auto, 'add_document', { projectId: p.projectId, tool: 'document', name: 'Plan' });
+    const ins = await call(auto, 'doc_insert_markdown', { projectId: p.projectId, documentId: doc.documentId, markdown: 'Revenue grew 12% this quarter.' });
+    const v = await call(auto, 'save_version', { projectId: p.projectId, name: 'Draft 1' });
+    await call(auto, 'doc_edit_block', { projectId: p.projectId, blockId: ins.blockIds[0], text: 'Revenue grew 14% this quarter.' });
+    const r = await call(auto, 'compare_versions', { projectId: p.projectId, from: v.versionId, documentId: doc.documentId });
+    const d = r.comparison.documents[0];
+    expect(d.summary).toMatch(/1 paragraph edited/);
+    expect(d.blocks[0]).toMatchObject({ status: 'changed', before: 'Revenue grew 12% this quarter.', after: 'Revenue grew 14% this quarter.' });
+    expect(r.pixels).toBeUndefined();
+  });
+
+  it('refuses to save versions on a view-only connection', async () => {
+    const viewer = await connect(['omnix:read'], 'Viewer');
+    const p = await call(auto, 'create_project', { name: 'Locked', primaryTool: 'image' });
+    const res = await viewer.callTool({ name: 'save_version', arguments: { projectId: p.projectId, name: 'x' } });
+    expect(res.isError).toBe(true);
+    await viewer.close();
+  });
+});

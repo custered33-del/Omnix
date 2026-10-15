@@ -47,7 +47,37 @@ export function diffLines(a: string, b: string): DiffRun[] {
   return runs;
 }
 
-/** Edit script over two line arrays: 0 keep, -1 delete from a, 1 insert from b. */
+/** A run of a word-level diff (whitespace and punctuation are their own tokens). */
+export interface WordRun {
+  kind: 'same' | 'removed' | 'added';
+  text: string;
+}
+
+/** Word-level diff of two strings, for showing an edited sentence inline. */
+export function diffWords(a: string, b: string): WordRun[] {
+  if (a === b) return a ? [{ kind: 'same', text: a }] : [];
+  const tok = (s: string) => s.match(/\s+|[\p{L}\p{N}_'’-]+|[^\s\p{L}\p{N}_]/gu) ?? [];
+  const A = tok(a);
+  const B = tok(b);
+  const out: WordRun[] = [];
+  const push = (kind: WordRun['kind'], text: string) => {
+    const last = out[out.length - 1];
+    if (last && last.kind === kind) last.text += text;
+    else out.push({ kind, text });
+  };
+  let i = 0;
+  let j = 0;
+  for (const e of myers(A, B)) {
+    if (e === 0) {
+      push('same', A[i++]!);
+      j++;
+    } else if (e < 0) push('removed', A[i++]!);
+    else push('added', B[j++]!);
+  }
+  return out;
+}
+
+/** Edit script over two token arrays: 0 keep, -1 delete from a, 1 insert from b. */
 function myers(a: string[], b: string[]): number[] {
   const n = a.length;
   const m = b.length;

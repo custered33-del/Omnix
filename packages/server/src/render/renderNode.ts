@@ -14,6 +14,8 @@ export interface RenderRequest {
   scheme?: 'light' | 'dark';
   /** Slide build step (presenter); defaults to fully built. */
   step?: number;
+  /** Exact scale (document pixels to output pixels); overrides maxSize for documents. */
+  scale?: number;
 }
 
 /**
@@ -21,6 +23,14 @@ export interface RenderRequest {
  * a slide, a deck (first slide) or the project thumbnail when no node is given.
  */
 export async function renderNode(services: Services, state: ProjectState, req: RenderRequest): Promise<{ data: Buffer; mime: string; width: number; height: number }> {
+  const canvas = await renderNodeCanvas(services, state, req);
+  const format = req.format ?? 'png';
+  const data = await encodeCanvas(canvas, format, { quality: 85 });
+  return { data, mime: `image/${format}`, width: canvas.width, height: canvas.height };
+}
+
+/** The same render, as a canvas (for pixel work such as comparing versions). */
+export async function renderNodeCanvas(services: Services, state: ProjectState, req: RenderRequest): Promise<CanvasLike> {
   const host = services.renderHost();
   host.scheme = req.scheme ?? 'light';
   const max = Math.min(4096, Math.max(16, req.maxSize ?? 1024));
@@ -28,7 +38,7 @@ export async function renderNode(services: Services, state: ProjectState, req: R
   if (req.nodeId && !node) throw new ProjectError(`Node not found: ${req.nodeId}`, 404);
   let canvas: CanvasLike;
   const time = req.time ?? 0;
-  const scaleFor = (w: number, h: number) => Math.min(1, max / Math.max(w, h));
+  const scaleFor = (w: number, h: number) => req.scale ?? Math.min(1, max / Math.max(w, h));
 
   if (!node) {
     await host.prepare(state, state.rootId, 0);
@@ -80,7 +90,5 @@ export async function renderNode(services: Services, state: ProjectState, req: R
       }
     }
   }
-  const format = req.format ?? 'png';
-  const data = await encodeCanvas(canvas, format, { quality: 85 });
-  return { data, mime: `image/${format}`, width: canvas.width, height: canvas.height };
+  return canvas;
 }

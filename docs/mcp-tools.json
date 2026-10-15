@@ -217,7 +217,7 @@
     "title": "Read history",
     "category": "project",
     "access": "read",
-    "description": "List recent changes on the current branch: who made them (human or AI), when, and what. Useful to see what the user did since your last turn.",
+    "description": "List recent changes on the current branch (who made them, human or AI, when, and what) and the named versions people saved. Useful to see what the user did since your last turn; compare any two with compare_versions.",
     "inputSchema": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "type": "object",
@@ -277,11 +277,46 @@
             ],
             "additionalProperties": false
           }
+        },
+        "versions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "commitId": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "createdAt": {
+                "type": "string"
+              },
+              "author": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "name",
+              "commitId",
+              "createdAt",
+              "author"
+            ],
+            "additionalProperties": false
+          }
         }
       },
       "required": [
         "head",
-        "commits"
+        "commits",
+        "versions"
       ],
       "additionalProperties": false
     },
@@ -9750,6 +9785,142 @@
           "image": [
             "Make the sky warmer"
           ]
+        }
+      }
+    }
+  },
+  {
+    "name": "save_version",
+    "title": "Save a version",
+    "category": "project",
+    "access": "write",
+    "description": "Save the project as it is now as a named version (a snapshot people can return to and compare against). Good moments: before a big change, after finishing a stage, or when the user likes how something looks.",
+    "inputSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Project id (from list_projects)."
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120
+        }
+      },
+      "required": [
+        "projectId",
+        "name"
+      ]
+    },
+    "outputSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "versionId": {
+          "type": "string"
+        },
+        "commitId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "versionId",
+        "commitId"
+      ],
+      "additionalProperties": false
+    },
+    "example": {
+      "input": {
+        "projectId": "prj_8Kq2...",
+        "name": "Before the color pass"
+      },
+      "output": {
+        "versionId": "snap_1...",
+        "commitId": "c_9..."
+      }
+    }
+  },
+  {
+    "name": "compare_versions",
+    "title": "Compare two versions",
+    "category": "project",
+    "access": "read",
+    "description": "See what changed between two versions of a project: named versions (ids from get_history), commit ids, \"base\" (the original) or \"current\". Returns a summary per document, paragraph-level text changes for documents, line diffs for code, slide-by-slide changes for decks, and for a canvas, video or animation frame, or slide: before, after and difference pictures with the changed area highlighted and the share of pixels that changed.",
+    "inputSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Project id (from list_projects)."
+        },
+        "from": {
+          "type": "string",
+          "description": "Older version: version id, commit id or \"base\""
+        },
+        "to": {
+          "default": "current",
+          "description": "Newer version (default \"current\")",
+          "type": "string"
+        },
+        "documentId": {
+          "description": "Only this canvas, sequence, workspace, document or deck",
+          "type": "string"
+        },
+        "nodeId": {
+          "description": "Picture comparison of this canvas, layer, sequence, or slide (default: the document when it is visual)",
+          "type": "string"
+        },
+        "time": {
+          "description": "Seconds, for video and animation",
+          "type": "number",
+          "minimum": 0
+        },
+        "images": {
+          "default": true,
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "projectId",
+        "from"
+      ]
+    },
+    "outputSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "from": {},
+        "to": {},
+        "comparison": {},
+        "pixels": {}
+      },
+      "required": [
+        "from",
+        "to",
+        "comparison"
+      ],
+      "additionalProperties": false
+    },
+    "example": {
+      "input": {
+        "projectId": "prj_8Kq2...",
+        "from": "snap_1...",
+        "documentId": "cnv_1"
+      },
+      "output": {
+        "comparison": {
+          "summary": "Poster: 1 added, 2 changed"
+        },
+        "pixels": {
+          "changedPercent": 12.4
         }
       }
     }

@@ -138,3 +138,53 @@ describe('line comments in code', () => {
     }
   });
 });
+
+describe('compare versions', () => {
+  it('shows a paragraph edit inline and pictures of a canvas in four modes', async () => {
+    const p = project();
+    const store = await storeFor(p.state);
+    const docComparison = {
+      documentId: 'doc_1',
+      kind: 'document',
+      name: 'Brief',
+      existsBefore: true,
+      existsAfter: true,
+      structural: { added: [], removed: [], changed: [{ id: 'b1', type: 'block', name: 'Revenue', props: ['text'], before: {}, after: {}, moved: false, reordered: false }], empty: false },
+      blocks: [
+        { status: 'same', blockId: 'b0', blockType: 'heading', after: 'Plan' },
+        { status: 'changed', blockId: 'b1', blockType: 'paragraph', before: 'grew 12%', after: 'grew 14%', words: [{ kind: 'same', text: 'grew ' }, { kind: 'removed', text: '12' }, { kind: 'added', text: '14' }, { kind: 'same', text: '%' }] },
+      ],
+      summary: '1 paragraph edited',
+    };
+    const canvasComparison = { documentId: p.canvas.id, kind: 'canvas', name: 'Poster', existsBefore: true, existsAfter: true, structural: { added: [], removed: [], changed: [], empty: true }, summary: 'No changes' };
+    const base = globalThis.fetch;
+    const urls: string[] = [];
+    globalThis.fetch = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
+      const u = String(url);
+      urls.push(u);
+      if (u.startsWith('/api/projects/p1/history')) return new Response(JSON.stringify({ commits: [], tips: [] }), { status: 200 });
+      if (u.startsWith('/api/projects/p1/compare/pixels')) return new Response(JSON.stringify({ fraction: 0.125, bbox: { x: 1, y: 1, width: 4, height: 4 }, width: 400, height: 300 }), { status: 200 });
+      if (u.startsWith('/api/projects/p1/compare?')) return new Response(JSON.stringify({ from: { commitId: 'c1', label: 'Draft 1', at: null }, to: { commitId: 'c2', label: 'Current version', at: null }, comparison: { documents: [docComparison, canvasComparison], changed: ['doc_1'], summary: 'Brief: 1 paragraph edited' } }), { status: 200 });
+      return base(url, init);
+    }) as typeof fetch;
+    const { CompareVersions } = await import('../src/components/CompareVersions.js');
+    render(
+      <ProjectContext.Provider value={store}>
+        <CompareVersions from="snap_1" to="current" documentId="doc_1" onClose={() => {}} />
+      </ProjectContext.Provider>,
+    );
+    expect(await screen.findByText('Brief: 1 paragraph edited', { exact: false })).toBeInTheDocument();
+    expect(screen.getByText('12', { selector: 'del' })).toBeInTheDocument();
+    expect(screen.getByText('14', { selector: 'ins' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '1 unchanged paragraph' })).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('tab', { name: /Poster/ }));
+    expect(await screen.findByText('12.5% of the picture changed')).toBeInTheDocument();
+    expect(screen.getByRole('img', { name: 'Draft 1' }).getAttribute('src')).toContain('which=before');
+    await userEvent.click(screen.getByRole('button', { name: /Swipe/ }));
+    expect(screen.getByRole('slider', { name: 'Swipe between versions' })).toHaveValue('50');
+    await userEvent.click(screen.getByRole('button', { name: /Difference/ }));
+    expect(screen.getByRole('img', { name: '12.5% of the picture changed' }).getAttribute('src')).toContain('which=diff');
+    expect(urls.some((u) => u.includes(`/compare/pixels?from=snap_1&to=current&node=${p.canvas.id}`))).toBe(true);
+  });
+});

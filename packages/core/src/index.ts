@@ -18,3 +18,4 @@ export * from './documents.js';
 export * from './decks.js';
 export * from './attribution.js';
 export * from './textDiff.js';
+export * from './versions.js';

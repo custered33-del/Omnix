@@ -22,6 +22,7 @@ import { AgentRunsPanel, AgentStartDialog, useAgentRuns } from '../components/Ag
 import { StyleDialog } from '../components/StyleDialog.js';
 import { FindDialog } from '../components/FindDialog.js';
 import { CommentsPanel } from '../components/CommentsPanel.js';
+import { CompareVersions } from '../components/CompareVersions.js';
 import { allComments } from '../components/CommentPins.js';
 import { GenerativeDialog } from '../components/GenerativeDialog.js';
 import '../styles/ai.css';
@@ -102,7 +103,7 @@ function ProjectView({ store }: { store: ProjectStore }) {
   const waitingRuns = runs?.filter((r) => r.status === 'awaiting_approval').length ?? 0;
   const activeRuns = runs?.filter((r) => r.status === 'running' || r.status === 'queued').length ?? 0;
   // Project dialogs belong to this project: close them when leaving it.
-  useEffect(() => () => useDialogs.setState({ command: null, style: null, agent: null, find: false, generative: null }), []);
+  useEffect(() => () => useDialogs.setState({ command: null, style: null, agent: null, find: false, generative: null, compare: null }), []);
   const review = (proposalId: string) => {
     dialogs.close('command');
     params.set('proposal', proposalId);
@@ -159,6 +160,7 @@ function ProjectView({ store }: { store: ProjectStore }) {
       { id: 'agent', label: `${t('agent.start')}…`, section: t('palette.ai'), keywords: 'autonomous goal claude', run: () => dialogs.openAgent() },
       { id: 'runs', label: t('agent.runs'), section: t('palette.ai'), run: () => setPanel('runs') },
       { id: 'style', label: `${t('style.title')}…`, section: t('palette.ai'), keywords: 'reference look grade theme', run: () => dialogs.openStyle(null) },
+      { id: 'compare', label: t('versions.open'), section: t('palette.actions'), keywords: 'diff versions snapshot history before after', run: () => dialogs.openCompare({ documentId: store.getState().activeDocId }) },
       { id: 'find', label: t('find.title'), section: t('palette.actions'), shortcut: 'mod+shift+f', keywords: 'search', run: () => dialogs.openFind(true) },
     ],
     [api],
@@ -392,6 +394,7 @@ function ProjectView({ store }: { store: ProjectStore }) {
         />
       )}
       {dialogs.find && <FindDialog onClose={() => dialogs.openFind(false)} />}
+      {dialogs.compare && <CompareVersions {...(dialogs.compare.from ? { from: dialogs.compare.from } : {})} {...(dialogs.compare.to ? { to: dialogs.compare.to } : {})} documentId={dialogs.compare.documentId ?? activeDocId} onClose={() => dialogs.close('compare')} />}
       {dialogs.generative && <GenerativeDialog mode={dialogs.generative.mode} canvasId={dialogs.generative.canvasId} {...(dialogs.generative.replaceLayerId ? { replaceLayerId: dialogs.generative.replaceLayerId } : {})} {...(dialogs.generative.prompt !== undefined ? { initialPrompt: dialogs.generative.prompt } : {})} onClose={() => dialogs.close('generative')} />}
       {settingsOpen && <ProjectSettingsDialog onClose={() => setSettingsOpen(false)} />}
     </div>

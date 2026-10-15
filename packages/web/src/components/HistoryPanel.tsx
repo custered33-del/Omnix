@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { RotateCcw, GitBranch, Bookmark, Undo } from 'lucide-react';
+import { RotateCcw, GitBranch, Bookmark, Undo, GitCompare } from 'lucide-react';
 import type { Commit, Snapshot, StateDiff } from '@omnix/core';
 import { useProject, useProjectStore } from '../state/project.js';
 import { get, post } from '../lib/api.js';
@@ -7,6 +7,7 @@ import { Avatar, Dialog, Spinner } from '../ui/primitives.js';
 import { toast } from '../ui/toast.js';
 import { DiffView } from './ProposalsPanel.js';
 import { realtime } from '../state/realtime.js';
+import { useDialogs } from '../state/dialogs.js';
 import { formatRelative, t } from '../i18n/index.js';
 
 type CommitSummary = Omit<Commit, 'op' | 'inverse'>;
@@ -28,8 +29,13 @@ export function HistoryPanel({ focusCommit }: { focusCommit: string | null }) {
   }, [load, head]);
   useEffect(() => realtime.on('snapshot', load), [load]);
   const commits = data ? [...data.commits].reverse() : null;
+  const openCompare = useDialogs((s) => s.openCompare);
+  const activeDocId = useProject((s) => s.activeDocId);
   return (
     <div className="col" style={{ gap: 16 }}>
+      <button className="btn btn-sm" style={{ alignSelf: 'flex-start' }} onClick={() => openCompare({ documentId: activeDocId })}>
+        <GitCompare /> {t('versions.open')}
+      </button>
       {canEdit && (
         <form
           className="row"
@@ -55,14 +61,23 @@ export function HistoryPanel({ focusCommit }: { focusCommit: string | null }) {
           <h3 className="section-title" style={{ marginBottom: 6 }}>
             {t('history.versions')}
           </h3>
-          <ul className="list" style={{ listStyle: 'none', margin: 0, padding: 0 }}>
+          <ul className="version-list">
             {[...snapshots].reverse().map((s: Snapshot) => (
-              <li key={s.id} className="list-row" onClick={() => s.commitId && setDetail(s.commitId)}>
-                <Bookmark size={14} aria-hidden="true" />
-                <span className="grow truncate">{s.name}</span>
-                <span className="muted" style={{ fontSize: 'var(--fs-sm)' }}>
-                  {formatRelative(s.createdAt)}
-                </span>
+              <li key={s.id} className="version-row">
+                <button className="version-open" onClick={() => s.commitId && setDetail(s.commitId)} disabled={!s.commitId}>
+                  <img src={`/api/projects/${projectId}/render-at?commit=${s.commitId ?? 'base'}&size=160`} alt="" loading="lazy" />
+                  <span className="grow" style={{ minWidth: 0 }}>
+                    <span className="truncate" style={{ display: 'block' }}>
+                      {s.name}
+                    </span>
+                    <span className="muted" style={{ display: 'block', fontSize: 'var(--fs-xs)' }}>
+                      {s.author.name} · {formatRelative(s.createdAt)}
+                    </span>
+                  </span>
+                </button>
+                <button className="icon-btn" aria-label={`${t('versions.compareWithCurrent')}: ${s.name}`} title={t('versions.compareWithCurrent')} onClick={() => openCompare({ from: s.id, to: 'current', documentId: activeDocId })}>
+                  <GitCompare />
+                </button>
               </li>
             ))}
           </ul>
@@ -105,6 +120,8 @@ function CommitDialog({ commitId, onClose, canEdit }: { commitId: string; onClos
   const store = useProjectStore();
   const projectId = store.getState().projectId;
   const [data, setData] = useState<{ commit: Commit; diff: StateDiff } | null>(null);
+  const openCompare = useDialogs((s) => s.openCompare);
+  const activeDocId = useProject((s) => s.activeDocId);
   useEffect(() => {
     get<{ commit: Commit; diff: StateDiff }>(`/api/projects/${projectId}/commits/${commitId}`).then(setData, (e) => toast.error(e.message));
   }, [commitId, projectId]);
@@ -114,8 +131,19 @@ function CommitDialog({ commitId, onClose, canEdit }: { commitId: string; onClos
       onClose={onClose}
       wide
       footer={
-        canEdit && data ? (
+        data ? (
           <>
+            <button
+              className="btn btn-ghost"
+              onClick={() => {
+                openCompare({ from: commitId, to: 'current', documentId: activeDocId });
+                onClose();
+              }}
+            >
+              <GitCompare /> {t('versions.compareWithCurrent')}
+            </button>
+            {canEdit && (
+              <>
             <button
               className="btn"
               onClick={() =>
@@ -141,6 +169,8 @@ function CommitDialog({ commitId, onClose, canEdit }: { commitId: string; onClos
             >
               <RotateCcw /> {t('history.restore')}
             </button>
+              </>
+            )}
           </>
         ) : undefined
       }

@@ -58,3 +58,33 @@ test('comments pin to slides and code lines, and the panel jumps back to them', 
   await expect(page.getByRole('button', { name: /^Comments \(1 comment\)/ })).toBeVisible();
   expect(errors).toEqual([]);
 });
+
+test('a saved version compares with the current one as pictures and as text', async ({ page, errors }) => {
+  await signIn(page);
+  await createProject(page, 'Image editor');
+  await page.waitForSelector('.viewport canvas.doc');
+  const projectId = page.url().split('/').pop()!;
+  const s = await projectState(page);
+  const canvas = Object.values(s.nodes).find((n) => n.type === 'canvas')!;
+  const layer = { id: 'lyr_e2esky', type: 'layer', parentId: canvas.id, children: [], props: { name: 'Sky', layerType: 'fill', fillColor: '#3366cc', visible: true, locked: false, opacity: 1, blendMode: 'normal', x: 0, y: 0, scaleX: 1, scaleY: 1, rotation: 0, mask: null, vectorMask: null, filters: [] } };
+  expect((await page.request.post(`/api/projects/${projectId}/commits`, { data: { op: { kind: 'create', parentId: canvas.id, nodes: [layer] }, label: 'Add sky' } })).ok()).toBe(true);
+  // Save a version from the History panel, then change the picture.
+  await page.getByRole('button', { name: 'History' }).click();
+  await page.getByRole('textbox', { name: 'Version name' }).fill('Blue');
+  await page.getByRole('button', { name: 'Save version' }).click();
+  await expect(page.locator('.version-row')).toContainText('Blue');
+  expect((await page.request.post(`/api/projects/${projectId}/commits`, { data: { op: { kind: 'update', id: 'lyr_e2esky', set: { fillColor: '#cc3333' } }, label: 'Red sky' } })).ok()).toBe(true);
+
+  await page.getByRole('button', { name: 'Compare with current: Blue' }).click();
+  const dialog = page.getByRole('dialog', { name: 'Compare versions' });
+  await expect(dialog.getByText(/of the picture changed/)).toBeVisible();
+  await expect(dialog.getByRole('img', { name: 'Blue' })).toBeVisible();
+  await dialog.getByRole('button', { name: 'Difference' }).click();
+  await expect(dialog.getByRole('img', { name: /of the picture changed/ })).toBeVisible();
+  await dialog.getByRole('button', { name: 'Swipe' }).click();
+  await dialog.getByRole('slider', { name: 'Swipe between versions' }).fill('20');
+  // Going back to the saved version restores it.
+  await dialog.getByRole('button', { name: 'Go back to "Blue"' }).click();
+  await expect.poll(async () => (await projectState(page)).nodes['lyr_e2esky']?.props.fillColor).toBe('#3366cc');
+  expect(errors).toEqual([]);
+});

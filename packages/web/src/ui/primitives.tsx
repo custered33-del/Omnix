@@ -10,7 +10,7 @@ import { t } from '../i18n/index.js';
 
 const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
-export function Dialog(props: { title: string; onClose: () => void; children: ReactNode; footer?: ReactNode; wide?: boolean; description?: string; icon?: ReactNode }) {
+export function Dialog(props: { title: string; onClose: () => void; children: ReactNode; footer?: ReactNode; wide?: boolean; full?: boolean; description?: string; icon?: ReactNode }) {
   const ref = useRef<HTMLDivElement>(null);
   const titleId = useId();
   const descId = useId();
@@ -42,7 +42,7 @@ export function Dialog(props: { title: string; onClose: () => void; children: Re
   };
   return createPortal(
     <div className="dialog-backdrop" onMouseDown={(e) => e.target === e.currentTarget && props.onClose()}>
-      <div ref={ref} className={`dialog${props.wide ? ' wide' : ''}`} role="dialog" aria-modal="true" aria-labelledby={titleId} aria-describedby={props.description ? descId : undefined} onKeyDown={onKey}>
+      <div ref={ref} className={`dialog${props.wide ? ' wide' : ''}${props.full ? ' full' : ''}`} role="dialog" aria-modal="true" aria-labelledby={titleId} aria-describedby={props.description ? descId : undefined} onKeyDown={onKey}>
         <div className="dialog-header">
           {props.icon}
           <h2 id={titleId}>{props.title}</h2>

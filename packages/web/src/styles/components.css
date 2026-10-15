@@ -527,6 +527,10 @@ kbd,
 .dialog.wide {
   width: min(880px, 100%);
 }
+.dialog.full {
+  width: min(1320px, 100%);
+  height: calc(100vh - 48px);
+}
 .dialog-header {
   display: flex;
   align-items: center;
