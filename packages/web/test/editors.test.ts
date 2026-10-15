@@ -86,3 +86,19 @@ describe('charts and messages', () => {
     expect(formatTimecode(62, 30)).toContain('1:02');
   });
 });
+
+describe('animation layers on the timeline', () => {
+  it('puts layers that overlap in time on separate rows and reuses rows when they do not', async () => {
+    const { layerRows } = await import('../src/editors/video/Timeline.js');
+    const layer = (id: string, start: number, duration: number) => ({ ...makeNode('animLayer', { name: id, start, duration } as Partial<AnimLayerProps>), id }) as SceneNode;
+    const rows = layerRows([layer('a', 0, 2), layer('b', 1, 2), layer('c', 2, 1), layer('d', 0.5, 0.2)]);
+    // a takes row 0; d overlaps it, so row 1; b starts after d has ended, so row 1 again.
+    expect(rows.count).toBe(2);
+    expect(rows.of.get('a')).toBe(0);
+    expect(rows.of.get('d')).toBe(1);
+    expect(rows.of.get('b')).toBe(1);
+    // c starts where a ends, so it can share a's row.
+    expect(rows.of.get('c')).toBe(0);
+    expect(layerRows([layer('x', 0, 1), layer('y', 1, 1)]).count).toBe(1);
+  });
+});

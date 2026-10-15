@@ -381,7 +381,7 @@ export function Timeline({ ctx }: { ctx: TimelineCtx }) {
           const Icon = TRACK_ICON[tp.trackType];
           const upd = (set: Record<string, unknown>, label: string) => store.getState().commit({ kind: 'update', id: track.id, set }, label);
           return (
-            <div key={track.id} className="tl-head" style={{ height: TRACK_HEIGHT[tp.trackType] }} aria-current={selectedTrack === track.id ? 'true' : undefined} onClick={() => ed.getState().set({ selectedTrack: track.id, inspectorTab: 'track' })}>
+            <div key={track.id} className="tl-head" style={{ height: trackHeight(state, track) }} aria-current={selectedTrack === track.id ? 'true' : undefined} onClick={() => ed.getState().set({ selectedTrack: track.id, inspectorTab: 'track' })}>
               <Icon size={14} style={{ color: TRACK_COLORS[tp.trackType], flex: 'none' }} aria-hidden="true" />
               <button className="name truncate" title={tp.name} aria-pressed={selectedTrack === track.id}>
                 {tp.name}
@@ -449,12 +449,13 @@ export function Timeline({ ctx }: { ctx: TimelineCtx }) {
           {tracks.map((track) => {
             const tp = track.props;
             const kids = childrenOf(state, track.id);
+            const rows = layerRows(kids);
             return (
               <div
                 key={track.id}
                 data-track={track.id}
                 className={`tl-lane${tp.locked ? ' locked' : ''}${dropTrack === track.id ? ' drop' : ''}`}
-                style={{ height: TRACK_HEIGHT[tp.trackType] }}
+                style={{ height: trackHeight(state, track) }}
                 onPointerDown={onLaneDown}
                 onDragOver={(e) => {
                   if (e.dataTransfer.types.includes(ASSET_MIME)) {
@@ -469,7 +470,7 @@ export function Timeline({ ctx }: { ctx: TimelineCtx }) {
                   n.type === 'clip' ? (
                     <ClipView key={n.id} clip={n as SceneNode<'clip'>} track={track} pps={pps} selected={selected.includes(n.id)} host={host} onDown={beginClip} onMenu={clipMenu} onSelect={() => select(n.id, false)} />
                   ) : n.type === 'animLayer' ? (
-                    <LayerBar key={n.id} layer={n as SceneNode<'animLayer'>} pps={pps} selected={selected.includes(n.id)} onDown={beginLayer} />
+                    <LayerBar key={n.id} layer={n as SceneNode<'animLayer'>} pps={pps} selected={selected.includes(n.id)} onDown={beginLayer} row={rows.count > 1 ? rows.of.get(n.id) : undefined} />
                   ) : null,
                 )}
               </div>
@@ -592,7 +593,29 @@ function Waveform({ peaks, clip, source, width, height }: { peaks: number[]; cli
   return <canvas ref={ref} className="wave" style={{ top: 'auto', height, width: '100%' }} aria-hidden="true" />;
 }
 
-function LayerBar({ layer, pps, selected, onDown }: { layer: SceneNode<'animLayer'>; pps: number; selected: boolean; onDown: (e: React.PointerEvent, l: SceneNode<'animLayer'>, part: 'body' | 'l' | 'r') => void }) {
+/** Animation layers that overlap in time go on separate rows of their track, so each stays visible and can be grabbed. */
+const LAYER_ROW = 30;
+export function layerRows(kids: readonly SceneNode[]): { of: Map<string, number>; count: number } {
+  const layers = kids.filter((n): n is SceneNode<'animLayer'> => n.type === 'animLayer').sort((a, b) => a.props.start - b.props.start);
+  const ends: number[] = [];
+  const of = new Map<string, number>();
+  for (const l of layers) {
+    let row = ends.findIndex((end) => end <= l.props.start + 1e-6);
+    if (row < 0) row = ends.length;
+    ends[row] = l.props.start + l.props.duration;
+    of.set(l.id, row);
+  }
+  return { of, count: ends.length };
+}
+
+function trackHeight(state: ProjectState, track: SceneNode<'track'>): number {
+  const base = TRACK_HEIGHT[track.props.trackType];
+  if (track.props.trackType !== 'animation') return base;
+  const { count } = layerRows(childrenOf(state, track.id));
+  return count > 1 ? Math.max(base, count * LAYER_ROW + 8) : base;
+}
+
+function LayerBar({ layer, pps, selected, onDown, row }: { layer: SceneNode<'animLayer'>; pps: number; selected: boolean; onDown: (e: React.PointerEvent, l: SceneNode<'animLayer'>, part: 'body' | 'l' | 'r') => void; row?: number }) {
   const p = layer.props;
   const kfTimes = [...new Set([...Object.values(p.keyframes).flatMap((ks) => (ks ?? []).map((k) => k.time)), ...(p.rig?.poses.map((q) => q.time) ?? [])])];
   return (
@@ -602,7 +625,7 @@ function LayerBar({ layer, pps, selected, onDown }: { layer: SceneNode<'animLaye
       tabIndex={0}
       aria-pressed={selected}
       aria-label={`${p.name}, ${p.frames.length} frames, ${p.start.toFixed(2)} to ${(p.start + p.duration).toFixed(2)} seconds`}
-      style={{ left: p.start * pps, width: Math.max(4, p.duration * pps), background: TRACK_COLORS.animation, opacity: p.visible ? 1 : 0.5 }}
+      style={{ left: p.start * pps, width: Math.max(4, p.duration * pps), background: TRACK_COLORS.animation, opacity: p.visible ? 1 : 0.5, ...(row !== undefined ? { top: 4 + row * LAYER_ROW, bottom: 'auto', height: LAYER_ROW - 4 } : {}) }}
       onPointerDown={(e) => onDown(e, layer, 'body')}
     >
       <span className="clip-label">
