@@ -187,6 +187,9 @@ export async function transformersProvider(model = 'onnx-community/whisper-base'
   };
 }
 
+/** Why the speech model last failed, for telling the user (null once it works). */
+export let lastSpeechError: string | null = null;
+
 /** Use `primary`, and the timing-only provider when it fails (for example the model cannot be downloaded). */
 function withFallback(primary: SpeechProvider, fallback: SpeechProvider): SpeechProvider {
   return {
@@ -194,9 +197,13 @@ function withFallback(primary: SpeechProvider, fallback: SpeechProvider): Speech
     label: primary.label,
     async transcribe(input) {
       try {
-        return await primary.transcribe(input);
+        const r = await primary.transcribe(input);
+        lastSpeechError = null;
+        return r;
       } catch (e) {
-        console.error(`[omnix] ${primary.label} failed (${e instanceof Error ? e.message : String(e)}); captions get timing only.`);
+        const why = e instanceof Error ? `${e.message}${e.cause instanceof Error ? ` (${e.cause.message})` : ''}` : String(e);
+        console.error(`[omnix] ${primary.label} failed: ${why}; captions get timing only.`);
+        lastSpeechError = `${primary.label}: ${why}`;
         return fallback.transcribe(input);
       }
     },

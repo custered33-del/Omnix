@@ -5,7 +5,7 @@ import { defineTool, ToolError, zProjectId, type ToolDef } from '../mcp/registry
 import { registerToolProvider } from '../mcp/tools/index.js';
 import { edit, need, writeResult, zWriteResult } from '../mcp/tools/helpers.js';
 import type { Services } from '../services.js';
-import type { SpeechProvider } from '../captions/stt.js';
+import { lastSpeechError, type SpeechProvider } from '../captions/stt.js';
 import { cachedTranscript, describeOnScreen, drawGrid, fmtTime, framePng, onScreenAt, sequenceFrames, sequenceTranscript, trackPoint } from './awareness.js';
 
 /** Claude's senses for video: hear it, see it (with coordinates), and follow what moves. */
@@ -50,7 +50,7 @@ function videoTools(services: Services): ToolDef[] {
         need(state, args.sequenceId, 'sequence', 'sequence');
         const r = await sequenceTranscript(services, state, args.sequenceId, speech(), { projectId: args.projectId, ...(args.clipIds ? { clipIds: args.clipIds } : {}), ...(args.language ? { language: args.language } : {}) });
         const lines = r.segments.map((s) => ({ start: Math.round(s.start * 100) / 100, end: Math.round(s.end * 100) / 100, text: s.text }));
-        const head = !lines.length ? 'No speech found.' : r.hasText ? `${lines.length} line(s):` : `Speech at ${lines.length} place(s), but no words: the speech model could not run (it needs internet once to download). Times:`;
+        const head = !lines.length ? 'No speech found.' : r.hasText ? `${lines.length} line(s):` : `Speech at ${lines.length} place(s), but no words: the speech model could not run${lastSpeechError ? ` (${lastSpeechError})` : ' (it needs internet once to download)'}. Tell the user this exact reason. Times:`;
         return { text: [head, ...lines.map((l) => `[${fmtTime(l.start)}–${fmtTime(l.end)}] ${l.text || '(speech)'}`)].join('\n'), data: { hasWords: r.hasText, lines } };
       },
     }),
