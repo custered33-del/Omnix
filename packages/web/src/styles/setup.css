@@ -730,3 +730,12 @@ pre.copy-value {
   cursor: pointer;
   text-decoration: underline;
 }
+.gpt-guide {
+  display: grid;
+  gap: 16px;
+}
+.gpt-steps {
+  display: grid;
+  gap: 8px;
+  padding-left: 20px;
+}

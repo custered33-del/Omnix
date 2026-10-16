@@ -8,6 +8,7 @@ import { formatShortcut } from '../ui/shortcuts.js';
 import { toast } from '../ui/toast.js';
 import { useClaudeStatus } from '../components/ClaudeStatus.js';
 import { PresetPicker, MODE_LABEL } from '../components/PresetPicker.js';
+import { GptGuide } from './GptGuide.js';
 
 export const SETUP_STEPS = ['account', 'open-connectors', 'add-connector', 'oauth', 'scope', 'test', 'first-project'] as const;
 export type SetupStep = (typeof SETUP_STEPS)[number];
@@ -485,6 +486,9 @@ export function SetupGuide() {
   };
 
   const allDone = SETUP_STEPS.every((s) => completed.has(s));
+  // Which AI the guide is about: Claude (the full guide) or OpenAI's ChatGPT and Codex.
+  const gpt = params.get('ai') === 'gpt';
+  const setAi = (ai: 'claude' | 'gpt') => setParams(ai === 'gpt' ? { ai: 'gpt' } : { step }, { replace: true });
 
   return (
     <div className="page setup-page">
@@ -494,6 +498,14 @@ export function SetupGuide() {
           <p className="subtitle">{t('setup.intro')}</p>
         </div>
         <div className="row" style={{ gap: 8 }}>
+          <div className="segmented" role="group" aria-label="Which AI to connect">
+            <button aria-pressed={!gpt} onClick={() => setAi('claude')}>
+              Claude
+            </button>
+            <button aria-pressed={gpt} onClick={() => setAi('gpt')}>
+              ChatGPT &amp; Codex
+            </button>
+          </div>
           <button
             className="btn btn-ghost"
             onClick={() => {
@@ -505,6 +517,10 @@ export function SetupGuide() {
           </button>
         </div>
       </header>
+      {gpt ? (
+        <GptGuide info={info} />
+      ) : (
+      <>
       <div className="setup-progress" role="progressbar" aria-label={t('setup.progressLabel')} aria-valuemin={0} aria-valuemax={SETUP_STEPS.length} aria-valuenow={completed.size} aria-valuetext={`${completed.size} / ${SETUP_STEPS.length}`}>
         <span style={{ width: `${(completed.size / SETUP_STEPS.length) * 100}%` }} />
       </div>
@@ -572,6 +588,8 @@ export function SetupGuide() {
           </footer>
         </section>
       </div>
+      </>
+      )}
       <p className="muted setup-shortcut">
         <Link to="/help/troubleshooting">{t('troubleshoot.title')}</Link> · {t('tour.searchBody', { shortcut: formatShortcut('mod+k') })}
       </p>

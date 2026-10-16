@@ -33,6 +33,7 @@ const PAGES = [
   ['/settings/claude', 'settings: Claude'],
   ['/settings/plugins', 'settings: plugins'],
   ['/setup', 'setup guide'],
+  ['/setup?ai=gpt', 'setup guide: ChatGPT & Codex'],
   ['/help/troubleshooting', 'troubleshooting'],
 ] as const;
 const TOOLS = ['Image editor', 'Video editor', 'Animation maker', 'Code Grounds', 'Document', 'Slideshow'] as const;
