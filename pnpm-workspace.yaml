@@ -6,3 +6,6 @@ onlyBuiltDependencies:
   - sharp
   - onnxruntime-node
   - protobufjs
+overrides:
+  # One copy of sharp: on Windows two versions cannot load in the same process.
+  sharp: 0.34.5
