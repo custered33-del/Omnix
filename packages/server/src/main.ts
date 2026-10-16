@@ -18,9 +18,9 @@ console.log(`
     Claude Code (this computer):  claude mcp add --transport http omnix ${local}/mcp
 ${
   reachable
-    ? `    claude.ai, Claude Desktop and the phone app:
-      Settings → Connectors → Add custom connector → paste  ${c.publicUrl}/mcp`
-    : `    claude.ai, Claude Desktop and the phone app need a public address:
+    ? `    Claude chat, the Claude phone app and ChatGPT (this address changes each time Omnix starts):
+      paste  ${c.publicUrl}/mcp  as a custom connector`
+    : `    Claude chat, the phone app and ChatGPT need a public address:
       stop Omnix and run  pnpm share  instead of pnpm start`
 }
 `);

@@ -237,7 +237,7 @@ export class OAuthService {
    */
   async startAuthorization(q: Record<string, string | undefined>): Promise<{ requestId: string } | { redirect: string } | { error: string }> {
     const client = await this.client(q.client_id ?? '');
-    if (!client) return { error: 'This app is not registered with Omnix. Remove the connector in Claude and add it again.' };
+    if (!client) return { error: 'This app is not registered with Omnix. Remove the Omnix connector in your AI app (Claude, ChatGPT...) and add it again.' };
     const redirectUri = q.redirect_uri ?? (client.redirectUris.length === 1 ? client.redirectUris[0]! : '');
     if (!client.redirectUris.includes(redirectUri)) return { error: 'The redirect address does not match the one the app registered.' };
     const fail = (error: string, description: string) => ({ redirect: redirectWith(redirectUri, { error, error_description: description, state: q.state ?? null, iss: this.issuer }) });
@@ -263,10 +263,10 @@ export class OAuthService {
 
   async pendingRequest(id: string): Promise<{ req: AuthRequest; client: OAuthClient }> {
     const req = await this.store.get<AuthRequest>(C.oauthCodes, tokenHash(id));
-    if (!req || req.kind !== 'request') throw new ProjectError('This sign-in request was not found. Start again from Claude.', 404);
+    if (!req || req.kind !== 'request') throw new ProjectError('This sign-in request was not found. Start again from your AI app.', 404);
     if (expired(req.expiresAt)) {
       await this.store.delete(C.oauthCodes, tokenHash(id));
-      throw new ProjectError('This sign-in request expired. Click Connect in Claude again.', 410);
+      throw new ProjectError('This sign-in request expired. Click Connect in your AI app again.', 410);
     }
     const client = await this.client(req.clientId);
     if (!client) throw new ProjectError('The app that asked for access is no longer registered.', 404);
@@ -331,7 +331,7 @@ export class OAuthService {
     }
     if (body.grant_type === 'refresh_token') {
       const rec = await this.store.get<TokenRecord>(C.oauthTokens, tokenHash(body.refresh_token ?? ''));
-      if (!rec || rec.kind !== 'refresh' || expired(rec.expiresAt)) throw new OAuthError('invalid_grant', 'The refresh token is invalid or expired. Connect Omnix in Claude again.');
+      if (!rec || rec.kind !== 'refresh' || expired(rec.expiresAt)) throw new OAuthError('invalid_grant', 'The refresh token is invalid or expired. Connect Omnix in your AI app again.');
       if (rec.clientId !== client.id) throw new OAuthError('invalid_grant', 'The refresh token belongs to another client');
       // Rotate: the old refresh token stops working.
       await this.store.delete(C.oauthTokens, rec.id);

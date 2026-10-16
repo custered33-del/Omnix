@@ -60,3 +60,17 @@ Keep `pnpm share` running while you use Claude. If you restart it, the address c
 - **"This connection is view-only":** change it in Omnix under **Settings → Claude**.
 
 There are other ways to connect (an access token, or Claude Desktop's config file) in the [README](../README.md#connect-omnix-to-claude).
+
+## ChatGPT
+
+ChatGPT connects to Omnix the same way Claude chat does, so Omnix needs a public address. On Windows, `Omnix-PC.bat` makes one with cloudflared (free, no account). The black window shows it as a line ending in `/mcp`. The address changes each time Omnix starts.
+
+1. In ChatGPT, open **Settings → Apps & Connectors → Advanced settings** and turn on **Developer mode**. Custom connectors with editing tools need it (Plus or Pro).
+2. Back in **Apps & Connectors**, click **Create**.
+   - Name: `Omnix`
+   - MCP server URL: the `https://….trycloudflare.com/mcp` address from the black window
+   - Authentication: **OAuth**
+3. Click **Create**, then **Connect**. Omnix shows its approval screen. Pick the permission and click **Allow**.
+4. In a chat, choose Omnix from the tools menu (**+ → Developer mode** or **Connectors**), and ask: "List my Omnix projects."
+
+Changes ChatGPT makes are credited to ChatGPT in Omnix's history and can be undone. When the address changes, edit the connector's URL in ChatGPT.

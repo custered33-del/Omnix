@@ -141,7 +141,8 @@ export class BrowserRenderHost implements RenderHost {
     const meta = this.meta.get(id);
     const m = meta?.state === 'ready' ? meta.value : null;
     if (m?.kind === 'audio' && document.createElement('audio').canPlayType(m.mime) !== '') return this.url(id, '/file');
-    if (m?.kind === 'video' && codecs().aac && this.canPlayVideo(id)) return this.url(id, '/proxy');
+    // A video's sound always comes from the server's MP3 copy: the video file's own audio may be in a
+    // format this browser cannot play (a renamed .mov, say), and MP3 plays everywhere.
     return this.url(id, '/audio');
   }
 
