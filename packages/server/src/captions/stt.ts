@@ -12,6 +12,9 @@ import fs from 'node:fs/promises';
  *  - `vad` (always available): finds where speech is, producing correctly timed caption
  *    slots without words, for a person (or Claude, from a script) to fill in.
  */
+/** Why the speech model last failed, for telling the user (null once it works). */
+export let lastSpeechError: string | null = null;
+
 export interface CaptionSegment {
   start: number;
   end: number;
@@ -171,7 +174,9 @@ export async function transformersProvider(model = 'onnx-community/whisper-base'
   try {
     const name = '@huggingface/transformers';
     mod = (await import(name)) as TransformersModule;
-  } catch {
+  } catch (e) {
+    lastSpeechError = `the speech package could not load: ${e instanceof Error ? e.message : String(e)}`;
+    console.error(`[omnix] ${lastSpeechError}`);
     return null;
   }
   let pipe: AsrPipeline | null = null;
@@ -186,9 +191,6 @@ export async function transformersProvider(model = 'onnx-community/whisper-base'
     },
   };
 }
-
-/** Why the speech model last failed, for telling the user (null once it works). */
-export let lastSpeechError: string | null = null;
 
 /** Use `primary`, and the timing-only provider when it fails (for example the model cannot be downloaded). */
 function withFallback(primary: SpeechProvider, fallback: SpeechProvider): SpeechProvider {
