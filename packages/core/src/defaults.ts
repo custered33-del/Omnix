@@ -191,7 +191,8 @@ export const DEFAULT_PROPS: { [K in NodeType]: () => NodePropsMap[K] } = {
     anchorY: 0,
     keyframes: {},
     onionSkin: { enabled: true, before: 2, after: 1 },
-    playback: 'once',
+    // Drawn frames keep cycling for the layer's length; once would flash them and stop.
+    playback: 'loop',
   }),
   codeWorkspace: (): CodeWorkspaceProps => ({ name: 'Code', allowNetwork: false, packages: [], entry: null }),
   codeFile: (): CodeFileProps => ({ path: 'main.py', language: 'python', content: '' }),

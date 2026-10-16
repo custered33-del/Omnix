@@ -60,9 +60,11 @@ export function Stage({ ctx, handlers, editor, label, children }: { ctx: Timelin
   const dispH = Math.max(1, Math.round(sp.height * k));
   const geo: StageGeometry = { k, ox: (box.w - dispW) / 2, oy: (box.h - dispH) / 2 };
 
+  // Draw after every render. (Waiting for the next animation frame here would never draw during
+  // playback: each tick re-renders and would cancel the frame before it ran.)
   useEffect(() => {
     if (!k) return;
-    const raf = requestAnimationFrame(() => {
+    {
       const c = canvasRef.current;
       if (!c) return;
       const dpr = window.devicePixelRatio || 1;
@@ -81,8 +83,7 @@ export function Stage({ ctx, handlers, editor, label, children }: { ctx: Timelin
       g.clearRect(0, 0, c.width, c.height);
       g.drawImage(out as unknown as CanvasImageSource, 0, 0);
       drawOverlay();
-    });
-    return () => cancelAnimationFrame(raf);
+    }
   });
 
   const drawOverlay = () => {
