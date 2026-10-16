@@ -18,3 +18,4 @@ import './versions/module.js';
 import './batch/module.js';
 import './presets/module.js';
 import './plugins/module.js';
+import './video/module.js';

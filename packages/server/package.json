@@ -13,6 +13,7 @@
     "omnix-mcp": "src/mcp/stdio.ts"
   },
   "dependencies": {
+    "@huggingface/transformers": "^4.3.1",
     "@modelcontextprotocol/sdk": "^1.32.1",
     "@napi-rs/canvas": "^1.0.11",
     "@omnix/core": "workspace:*",

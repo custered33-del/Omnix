@@ -10722,5 +10722,387 @@
         "changed": 4
       }
     }
+  },
+  {
+    "name": "video_transcript",
+    "title": "Hear what is said",
+    "category": "video",
+    "access": "read",
+    "description": "Transcribe the speech in a sequence: every line with its start and end time on the timeline, so you know what is said when (to cut on a sentence, place a title as a word is spoken, or find a moment). Runs a speech model on the user's computer (free; the first time it downloads the model). Results are kept until the clips' sound changes. Without the model, it reports when speech happens but not the words.",
+    "inputSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Project id (from list_projects)."
+        },
+        "sequenceId": {
+          "type": "string"
+        },
+        "clipIds": {
+          "description": "Only these clips (default: everything audible)",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "language": {
+          "description": "For example \"en\"; default: detected",
+          "type": "string",
+          "maxLength": 10
+        }
+      },
+      "required": [
+        "projectId",
+        "sequenceId"
+      ]
+    },
+    "outputSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "hasWords": {
+          "type": "boolean"
+        },
+        "lines": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "start": {
+                "type": "number"
+              },
+              "end": {
+                "type": "number"
+              },
+              "text": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "start",
+              "end",
+              "text"
+            ],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": [
+        "hasWords",
+        "lines"
+      ],
+      "additionalProperties": false
+    },
+    "example": {
+      "input": {
+        "projectId": "prj_8Kq2...",
+        "sequenceId": "seq_main"
+      },
+      "output": {
+        "hasWords": true,
+        "lines": [
+          {
+            "start": 1.2,
+            "end": 3.4,
+            "text": "This lamp follows the sun."
+          }
+        ]
+      }
+    }
+  },
+  {
+    "name": "video_look",
+    "title": "See the video",
+    "category": "video",
+    "access": "read",
+    "description": "Look at a sequence: frames sampled across a time range (or one clip), each with a grid in sequence pixels and its time, so you can see what is where (for example where a hand or a face is) and give exact coordinates to other tools. For each frame it also lists what is on screen in the edit (clips, pictures, titles and animation) with its box, top-most first, and what is being said then if a transcript exists.",
+    "inputSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Project id (from list_projects)."
+        },
+        "sequenceId": {
+          "type": "string"
+        },
+        "clipId": {
+          "description": "Look only at this clip’s time range",
+          "type": "string"
+        },
+        "start": {
+          "type": "number",
+          "minimum": 0
+        },
+        "end": {
+          "type": "number",
+          "minimum": 0
+        },
+        "count": {
+          "default": 6,
+          "description": "How many frames",
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 12
+        },
+        "maxSize": {
+          "default": 512,
+          "description": "Longest side of each frame in pixels",
+          "type": "integer",
+          "minimum": 128,
+          "maximum": 1024
+        },
+        "grid": {
+          "default": true,
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "projectId",
+        "sequenceId"
+      ]
+    },
+    "outputSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "frames": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "time": {
+                "type": "number"
+              },
+              "onScreen": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "propertyNames": {
+                    "type": "string"
+                  },
+                  "additionalProperties": {}
+                }
+              }
+            },
+            "required": [
+              "time",
+              "onScreen"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "width": {
+          "type": "number"
+        },
+        "height": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "frames",
+        "width",
+        "height"
+      ],
+      "additionalProperties": false
+    },
+    "example": {
+      "input": {
+        "projectId": "prj_8Kq2...",
+        "sequenceId": "seq_main",
+        "count": 4
+      },
+      "output": {
+        "frames": [
+          {
+            "time": 0.5,
+            "onScreen": [
+              {
+                "id": "clp_1",
+                "kind": "video",
+                "name": "Interview",
+                "box": {
+                  "x": 0,
+                  "y": 0,
+                  "width": 1920,
+                  "height": 1080
+                }
+              }
+            ]
+          }
+        ],
+        "width": 1920,
+        "height": 1080
+      }
+    }
+  },
+  {
+    "name": "video_track",
+    "title": "Follow something that moves",
+    "category": "video",
+    "access": "write",
+    "description": "Follow a point of the picture (for example the centre of a hand, found with video_look) from one time to another, and get its position over time in sequence pixels. With followClipId, that clip (a picture, sticker or title) is keyframed to move with it, centred on the point plus offsetX/offsetY. Confidence drops where the point is hidden or changes a lot; check those moments with video_look.",
+    "inputSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Project id (from list_projects)."
+        },
+        "sequenceId": {
+          "type": "string"
+        },
+        "x": {
+          "type": "number",
+          "description": "Point to follow, in sequence pixels, at time `from`"
+        },
+        "y": {
+          "type": "number"
+        },
+        "from": {
+          "type": "number",
+          "minimum": 0
+        },
+        "to": {
+          "type": "number",
+          "minimum": 0
+        },
+        "radius": {
+          "default": 40,
+          "description": "Half-size of the area that is followed, in sequence pixels",
+          "type": "number",
+          "minimum": 4,
+          "maximum": 400
+        },
+        "maxMove": {
+          "default": 80,
+          "description": "Most it moves between two tracked frames, in sequence pixels",
+          "type": "number",
+          "minimum": 4,
+          "maximum": 600
+        },
+        "fps": {
+          "default": 12,
+          "description": "Tracked positions per second",
+          "type": "number",
+          "minimum": 2,
+          "maximum": 30
+        },
+        "followClipId": {
+          "description": "A clip to move along with the point",
+          "type": "string"
+        },
+        "offsetX": {
+          "default": 0,
+          "type": "number"
+        },
+        "offsetY": {
+          "default": 0,
+          "type": "number"
+        }
+      },
+      "required": [
+        "projectId",
+        "sequenceId",
+        "x",
+        "y",
+        "from",
+        "to"
+      ]
+    },
+    "outputSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "status": {
+          "type": "string",
+          "enum": [
+            "committed",
+            "proposed",
+            "none"
+          ],
+          "description": "committed: applied; proposed: waiting for the user's review; none: nothing needed changing"
+        },
+        "commitId": {
+          "type": "string"
+        },
+        "proposalId": {
+          "type": "string"
+        },
+        "changes": {
+          "description": "How many changes the proposal now holds",
+          "type": "number"
+        },
+        "points": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "time": {
+                "type": "number"
+              },
+              "x": {
+                "type": "number"
+              },
+              "y": {
+                "type": "number"
+              },
+              "confidence": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "time",
+              "x",
+              "y",
+              "confidence"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "lowConfidence": {
+          "type": "array",
+          "items": {
+            "type": "number"
+          }
+        }
+      },
+      "required": [
+        "points",
+        "lowConfidence"
+      ],
+      "additionalProperties": false
+    },
+    "example": {
+      "input": {
+        "projectId": "prj_8Kq2...",
+        "sequenceId": "seq_main",
+        "x": 820,
+        "y": 610,
+        "from": 2,
+        "to": 5,
+        "followClipId": "clp_sticker"
+      },
+      "output": {
+        "status": "committed",
+        "commitId": "c_tr...",
+        "points": [
+          {
+            "time": 2,
+            "x": 820,
+            "y": 610,
+            "confidence": 1
+          }
+        ],
+        "lowConfidence": []
+      }
+    }
   }
 ]

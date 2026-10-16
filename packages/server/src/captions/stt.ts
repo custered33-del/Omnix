@@ -187,12 +187,29 @@ export async function transformersProvider(model = 'onnx-community/whisper-base'
   };
 }
 
+/** Use `primary`, and the timing-only provider when it fails (for example the model cannot be downloaded). */
+function withFallback(primary: SpeechProvider, fallback: SpeechProvider): SpeechProvider {
+  return {
+    id: primary.id,
+    label: primary.label,
+    async transcribe(input) {
+      try {
+        return await primary.transcribe(input);
+      } catch (e) {
+        console.error(`[omnix] ${primary.label} failed (${e instanceof Error ? e.message : String(e)}); captions get timing only.`);
+        return fallback.transcribe(input);
+      }
+    },
+  };
+}
+
 /** Pick the best available provider from configuration. */
 export async function resolveSpeechProvider(env: NodeJS.ProcessEnv = process.env): Promise<SpeechProvider> {
   if (env.OMNIX_STT_URL) return openAiCompatibleProvider({ url: env.OMNIX_STT_URL, apiKey: env.OMNIX_STT_API_KEY ?? null, model: env.OMNIX_STT_MODEL ?? 'whisper-1' });
-  if (env.OMNIX_STT_LOCAL === 'true') {
+  // Local Whisper is the default: free, private, and needs internet only once, to download the model.
+  if (env.OMNIX_STT_LOCAL !== 'false') {
     const p = await transformersProvider(env.OMNIX_STT_LOCAL_MODEL);
-    if (p) return p;
+    if (p) return withFallback(p, vadProvider);
   }
   return vadProvider;
 }

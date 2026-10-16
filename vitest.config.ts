@@ -12,6 +12,8 @@ export default defineConfig({
           include: ['packages/!(web)/test/**/*.test.ts'],
           environment: 'node',
           pool: 'forks',
+          // Tests never download the local speech model.
+          env: { OMNIX_STT_LOCAL: 'false' },
           testTimeout: 60000,
           hookTimeout: 60000,
         },
