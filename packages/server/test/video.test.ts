@@ -41,7 +41,7 @@ describe('video awareness', () => {
     const seq = p.documentId as string;
     const up = async (name: string, data: Buffer, type: string) => (await json(await ts.api(`/api/assets?name=${name}&projectId=${p.projectId}`, { method: 'POST', body: new Uint8Array(data), headers: { 'content-type': type } }))).asset as { id: string };
     const video = await up('slide.mp4', fs.readFileSync(mp4), 'video/mp4');
-    await call('video_add_clip', { projectId: p.projectId, sequenceId: seq, assetId: video.id });
+    const base = (await call('video_add_clip', { projectId: p.projectId, sequenceId: seq, assetId: video.id })).structuredContent;
 
     // Hearing: the transcript comes from the speech model (a stand-in here) in timeline time.
     const heard: SpeechProvider = { id: 'test', label: 'Test', transcribe: async () => ({ segments: [{ start: 0.5, end: 2, text: 'Look at my hand.' }], provider: 'test', hasText: true }) };
@@ -58,6 +58,10 @@ describe('video awareness', () => {
     // Following: the square's centre at 0.5 s is (180 + 300·0.5, 510) in the 1920×1080 sequence.
     const sticker = await up('star.png', await sharp({ create: { width: 100, height: 100, channels: 4, background: '#ffcc00' } }).png().toBuffer(), 'image/png');
     const st = (await call('video_add_clip', { projectId: p.projectId, sequenceId: seq, assetId: sticker.id, start: 0, out: 4 })).structuredContent;
+    // A picture placed over the video goes on its own track, above it, so it shows on top.
+    expect(st.trackId).not.toBe(base.trackId);
+    const order = (((await json(await ts.api(`/api/projects/${p.projectId}`))).state as ProjectState).nodes[seq]!.children as string[]);
+    expect(order.indexOf(st.trackId)).toBeLessThan(order.indexOf(base.trackId));
     const followed = await call('video_track', { projectId: p.projectId, sequenceId: seq, x: 330, y: 510, from: 0.5, to: 3, followClipId: st.clipId });
     const pts = followed.structuredContent.points as { time: number; x: number; y: number }[];
     const last = pts[pts.length - 1]!;

@@ -86,18 +86,32 @@ export const timelineTools = [
           if (track.parentId !== seq.id) throw new ToolError(`Track ${args.trackId} is in another sequence. Pass one of this sequence's tracks (${tracksOf(state, seq.id).map((t) => `${t.props.name}: ${t.id}`).join(', ') || 'it has none yet'}), or leave trackId out.`);
           if (track.props.trackType !== kind) throw new ToolError(`"${track.props.name}" is ${track.props.trackType === 'audio' ? 'an audio' : `a ${track.props.trackType}`} track, but ${a.name} needs ${kind === 'audio' ? 'an audio' : 'a video'} track. Leave trackId out to use the first ${kind} track.`);
         }
-        if (!track) {
-          track = makeNode('track', { name: `${TRACK_NAMES[kind]} 1`, trackType: kind });
-          ops.push({ kind: 'create', parentId: seq.id, ...(kind === 'audio' ? {} : { index: 0 }), nodes: [track] });
-        }
-        trackId = track.id;
         const still = a.kind === 'image';
         const srcDur = still ? 0 : (a.duration ?? 5);
         const inP = args.in ?? 0;
         const outP = args.out ?? (still ? inP + 5 : srcDur);
         if (!still && outP > srcDur + 1e-3) throw new ToolError(`out (${outP}s) is past the end of the media (${srcDur}s).`);
         if (outP <= inP) throw new ToolError('out must be after in.');
-        start = args.start ?? (state.nodes[track.id] ? clipsOf(state, track.id).reduce((m, c) => Math.max(m, clipEnd(c.props)), 0) : 0);
+        start = args.start ?? (track && state.nodes[track.id] ? clipsOf(state, track.id).reduce((m, c) => Math.max(m, clipEnd(c.props)), 0) : 0);
+        // Over something already on that track at the same time (a picture over the video, say): a
+        // track of its own, above, so it shows on top instead of fighting the clip below for the slot.
+        const busy = (id: string) => clipsOf(state, id).some((c) => c.props.start < start + (outP - inP) - 1e-6 && clipEnd(c.props) > start + 1e-6);
+        if (track && !args.trackId && busy(track.id)) {
+          const all = tracksOf(state, seq.id);
+          const below = track;
+          const others = all.filter((t) => t.props.trackType === kind && t.id !== below.id);
+          track = others.find((t) => !busy(t.id) && all.indexOf(t) < all.indexOf(below));
+          if (!track) {
+            track = makeNode('track', { name: kind === 'audio' ? `Audio ${others.length + 2}` : `Overlay ${others.length + 1}`, trackType: kind });
+            // Directly above the track it covers (titles stay on top).
+            ops.push({ kind: 'create', parentId: seq.id, ...(kind === 'audio' ? {} : { index: all.indexOf(below) }), nodes: [track] });
+          }
+        }
+        if (!track) {
+          track = makeNode('track', { name: `${TRACK_NAMES[kind]} 1`, trackType: kind });
+          ops.push({ kind: 'create', parentId: seq.id, ...(kind === 'audio' ? {} : { index: 0 }), nodes: [track] });
+        }
+        trackId = track.id;
         const clip = makeNode('clip', { name: args.name ?? a.name.replace(/\.[^.]+$/, ''), assetId: a.id, start, in: inP, out: outP, sourceDuration: srcDur } satisfies Partial<ClipProps>);
         clipId = clip.id;
         end = start + (outP - inP);

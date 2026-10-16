@@ -42,7 +42,9 @@ export function attachmentHeader(filename: string): string {
 export async function sendBlob(services: Services, req: express.Request, res: express.Response, blobId: string, mime: string, filename?: string, download = false): Promise<void> {
   res.set('Content-Type', mime);
   res.set('Cache-Control', 'private, max-age=31536000, immutable');
-  res.set('Content-Security-Policy', "default-src 'none'; img-src 'self' data:; media-src 'self'; style-src 'unsafe-inline'; sandbox");
+  // Only files that a browser could open as a page (SVG, HTML, XML...) can run scripts, so only they
+  // are sandboxed. Sound and video are not: Firefox silences sandboxed media played through Web Audio.
+  if (!/^(audio|video)\//i.test(mime)) res.set('Content-Security-Policy', "default-src 'none'; img-src 'self' data:; media-src 'self'; style-src 'unsafe-inline'; sandbox");
   if (download || (filename && req.query.download === '1') || !SHOWN_INLINE.test(mime)) res.set('Content-Disposition', attachmentHeader(filename ?? 'file'));
   if (services.blobs.kind === 'local') {
     const p = await services.blobs.localPath(blobId);
