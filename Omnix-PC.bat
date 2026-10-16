@@ -32,7 +32,7 @@ call npx --yes pnpm@10.28.0 install
 call npx --yes pnpm@10.28.0 build
 
 rem 3. Connect Claude Desktop to Omnix (adds Omnix to its settings, keeps everything else).
-node -e "const fs=require('fs'),p=require('path');const d=p.join(process.env.APPDATA,'Claude');fs.mkdirSync(d,{recursive:true});const f=p.join(d,'claude_desktop_config.json');let c={};try{c=JSON.parse(fs.readFileSync(f,'utf8'))}catch{};c.mcpServers=c.mcpServers||{};c.mcpServers.omnix={command:'cmd',args:['/c','npx','--yes','pnpm@10.28.0','--dir',process.cwd(),'mcp:stdio'],env:{OMNIX_URL:'http://localhost:4317'}};fs.writeFileSync(f,JSON.stringify(c,null,2));console.log('  Claude Desktop is connected to Omnix (restart Claude Desktop once).')"
+node -e "const fs=require('fs'),p=require('path');const dirs=[p.join(process.env.APPDATA,'Claude')];const pk=p.join(process.env.LOCALAPPDATA||'','Packages');try{for(const d of fs.readdirSync(pk))if(/^(AnthropicPBC\.)?Claude/i.test(d))dirs.push(p.join(pk,d,'LocalCache','Roaming','Claude'))}catch{};const entry={command:process.execPath,args:[p.join(process.cwd(),'node_modules','tsx','dist','cli.mjs'),p.join(process.cwd(),'packages','server','src','mcp','stdio.ts')],env:{OMNIX_URL:'http://localhost:4317',OMNIX_DATA_DIR:p.join(process.cwd(),'.omnix-data')}};for(const d of dirs){fs.mkdirSync(d,{recursive:true});const f=p.join(d,'claude_desktop_config.json');let c={};try{c=JSON.parse(fs.readFileSync(f,'utf8'))}catch{};c.mcpServers=c.mcpServers||{};c.mcpServers.omnix=entry;fs.writeFileSync(f,JSON.stringify(c,null,2))}console.log('  Claude Desktop is connected to Omnix. Quit Claude Desktop fully and open it again.')"
 
 rem 4. Start Omnix and open it.
 start "" http://localhost:4317

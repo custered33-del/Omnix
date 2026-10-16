@@ -66,12 +66,18 @@ async function standalone(token: string | undefined): Promise<void> {
 
 const args = process.argv.slice(2);
 const url = (process.env.OMNIX_URL ?? 'http://localhost:4317').replace(/\/$/, '');
-const token = process.env.OMNIX_TOKEN;
+// Without OMNIX_TOKEN, use the token a local Omnix writes for Claude Desktop on this computer.
+const token =
+  process.env.OMNIX_TOKEN ??
+  (await import('node:fs/promises')
+    .then((fs) => fs.readFile(`${(process.env.OMNIX_DATA_DIR ?? '.omnix-data').replace(/[\\/]$/, '')}/claude-desktop-token`, 'utf8'))
+    .then((t) => t.trim())
+    .catch(() => undefined));
 try {
   if (args.includes('--standalone')) await standalone(token);
   else {
     if (!token) {
-      log('OMNIX_TOKEN is not set. Create a personal access token in Omnix (Settings -> Claude -> Access tokens), or run with --standalone.');
+      log('No access token. Start Omnix and create your account (it then connects by itself), or set OMNIX_TOKEN to a token from Settings -> Claude.');
       process.exit(2);
     }
     await bridge(url, token);
