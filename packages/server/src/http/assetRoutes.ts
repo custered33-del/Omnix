@@ -47,8 +47,9 @@ export async function sendBlob(services: Services, req: express.Request, res: ex
   if (!/^(audio|video)\//i.test(mime)) res.set('Content-Security-Policy', "default-src 'none'; img-src 'self' data:; media-src 'self'; style-src 'unsafe-inline'; sandbox");
   if (download || (filename && req.query.download === '1') || !SHOWN_INLINE.test(mime)) res.set('Content-Disposition', attachmentHeader(filename ?? 'file'));
   if (services.blobs.kind === 'local') {
+    // The data folder is usually .omnix-data: without dotfiles 'allow', express refuses every file in it.
     const p = await services.blobs.localPath(blobId);
-    await new Promise<void>((resolve, reject) => res.sendFile(p, { headers: { 'Content-Type': mime }, acceptRanges: true, lastModified: false, etag: true }, (err) => (err ? reject(err) : resolve())));
+    await new Promise<void>((resolve, reject) => res.sendFile(p, { headers: { 'Content-Type': mime }, acceptRanges: true, lastModified: false, etag: true, dotfiles: 'allow' }, (err) => (err ? reject(err) : resolve())));
     return;
   }
   const data = await services.blobs.get(blobId);

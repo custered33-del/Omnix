@@ -182,6 +182,28 @@ describe('projects and the operation log', () => {
   });
 });
 
+describe('files from the default data folder', () => {
+  it('serves files when the data folder is .omnix-data (a name starting with a dot)', async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'omnix-dot-'));
+    const dataDir = path.join(root, '.omnix-data');
+    try {
+      const a = await createOmnix({ dataDir, webDist: null, port: 0, host: '127.0.0.1' });
+      const port = await a.listen();
+      const base = `http://127.0.0.1:${port}`;
+      const signup = await fetch(`${base}/api/auth/signup`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ email: 'a@b.co', name: 'A', password: 'password123' }) });
+      const cookie = signup.headers.get('set-cookie')!.split(';')[0]!;
+      const png = await sharp({ create: { width: 8, height: 8, channels: 4, background: '#ff0000' } }).png().toBuffer();
+      const up = await (await fetch(`${base}/api/assets?name=red.png`, { method: 'POST', headers: { cookie, 'content-type': 'image/png' }, body: new Uint8Array(png) })).json();
+      const file = await fetch(`${base}/api/assets/${up.asset.id}/file`, { headers: { cookie } });
+      expect(file.status).toBe(200);
+      expect(Buffer.from(await file.arrayBuffer()).equals(png)).toBe(true);
+      await a.close();
+    } finally {
+      await fs.rm(root, { recursive: true, force: true });
+    }
+  });
+});
+
 describe('persistence and crash recovery', () => {
   it('reloads projects after a restart, including commits logged after the last checkpoint', async () => {
     const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), 'omnix-persist-'));
