@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
-import { Search, HelpCircle, Settings, LogOut, Keyboard, Sparkles, LifeBuoy, Sun, Moon, Contrast, Monitor } from 'lucide-react';
+import { Search, Smartphone, HelpCircle, Settings, LogOut, Keyboard, Sparkles, LifeBuoy, Sun, Moon, Contrast, Monitor } from 'lucide-react';
 import { useAuth } from '../state/auth.js';
 import { realtime } from '../state/realtime.js';
 import { useCommandStore, useCommands } from '../state/commands.js';
@@ -9,6 +9,7 @@ import { useShortcuts, formatShortcut } from '../ui/shortcuts.js';
 import { t } from '../i18n/index.js';
 import { TOOL_KINDS, type ToolKind } from '@omnix/core';
 import { createProject } from '../lib/projects.js';
+import { PhoneDialog } from '../components/PhoneDialog.js';
 
 export function useConnectionStatus(): 'connecting' | 'open' | 'closed' {
   const [s, setS] = useState(realtime.status);
@@ -105,6 +106,7 @@ export function Shell() {
   const status = useConnectionStatus();
   const openPalette = useCommandStore((s) => s.openPalette);
   useGlobalCommands();
+  const [phone, setPhone] = useState(false);
   return (
     <div className="shell">
       <header className="topbar">
@@ -130,9 +132,14 @@ export function Shell() {
           <Search />
           <span className="muted">{formatShortcut('mod+k')}</span>
         </button>
+        <button className="btn btn-ghost btn-sm" onClick={() => setPhone(true)} aria-label="Open on your phone" title="Open on your phone">
+          <Smartphone />
+          <span className="phone-btn-label">Phone</span>
+        </button>
         <HelpMenu />
         <UserMenu />
       </header>
+      {phone && <PhoneDialog onClose={() => setPhone(false)} />}
       <main id="main" className="grow" tabIndex={-1}>
         <Outlet />
       </main>

@@ -1,3 +1,4 @@
+import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { z } from 'zod';
@@ -15,6 +16,17 @@ import type { User } from '../auth/users.js';
  * in which permission mode, when Claude was last active, and what is waiting for review.
  * OAuth connector grants are added to `connections` by the OAuth module.
  */
+/** Private IPv4 addresses of this computer (home Wi-Fi or wired), most likely first. */
+function lanAddresses(): string[] {
+  const out: string[] = [];
+  for (const list of Object.values(os.networkInterfaces()))
+    for (const a of list ?? []) {
+      if (a.family !== 'IPv4' || a.internal) continue;
+      if (/^(192\.168\.|10\.|172\.(1[6-9]|2\d|3[01])\.)/.test(a.address)) out.push(a.address);
+    }
+  return out.sort((a, b) => Number(!a.startsWith('192.168.')) - Number(!b.startsWith('192.168.')));
+}
+
 export interface ConnectionSummary {
   id: string;
   kind: 'token' | 'oauth';
@@ -195,6 +207,8 @@ useModule(({ services, router }) => {
         // Where Omnix is installed, for the Claude Desktop config snippet (owner only).
         ...(user.role === 'owner' ? { installDir: path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../..') } : {}),
         aiKey: !!services.config.anthropicApiKey,
+        // This computer's addresses on the home network, for opening Omnix on a phone on the same Wi-Fi.
+        lanUrls: services.config.host === '0.0.0.0' || services.config.host === '::' ? lanAddresses().map((ip) => `http://${ip}:${services.config.port}`) : [],
       });
     }),
   );

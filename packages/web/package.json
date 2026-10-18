@@ -29,6 +29,7 @@
     "@omnix/render": "workspace:*",
     "diff": "^8.0.4",
     "lucide-react": "^1.57.0",
+    "qrcode-generator": "1.4.4",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "react-router-dom": "^7.18.4",

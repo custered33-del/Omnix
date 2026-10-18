@@ -739,3 +739,20 @@ pre.copy-value {
   gap: 8px;
   padding-left: 20px;
 }
+.phone-link {
+  display: grid;
+  justify-items: center;
+  gap: 12px;
+}
+.phone-link .qr {
+  border-radius: 8px;
+  box-shadow: 0 0 0 1px var(--border);
+}
+.phone-link > :not(.qr) {
+  justify-self: stretch;
+}
+@media (max-width: 640px) {
+  .phone-btn-label {
+    display: none;
+  }
+}
