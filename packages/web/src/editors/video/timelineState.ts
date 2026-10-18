@@ -12,6 +12,8 @@ export interface TimelineEditorState {
   selectedTrack: string | null;
   mode: EditMode;
   snapping: boolean;
+  /** Record movement: every change to a clip's position, size, turn or fade adds a keyframe at the playhead. */
+  autoKey: boolean;
   /** Height of the timeline panel in px. */
   timelineHeight: number;
   /** Bottom panel shows the timeline or the audio mixer. */
@@ -45,6 +47,7 @@ export function createTimelineStore(purpose: 'video' | 'recense' | 'animation'):
     selectedTrack: null,
     mode: 'select',
     snapping: true,
+    autoKey: false,
     timelineHeight: purpose === 'animation' ? 240 : 300,
     bottom: 'timeline',
     inspectorTab: 'clip',

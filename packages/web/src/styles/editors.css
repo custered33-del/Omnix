@@ -1625,3 +1625,36 @@
 .recense-row .select:first-child {
   grid-column: 1 / -1;
 }
+/* Sound fades: a shaded ramp at the clip's start or end. */
+.tl-clip .fade {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  pointer-events: none;
+  background: rgba(0, 0, 0, 0.35);
+}
+.tl-clip .fade.in {
+  left: 0;
+  clip-path: polygon(0 0, 100% 0, 0 100%);
+}
+.tl-clip .fade.out {
+  right: 0;
+  clip-path: polygon(0 0, 100% 0, 100% 100%);
+}
+/* Record movement (auto keyframes) */
+.record-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  border: 2px solid currentColor;
+  flex: none;
+}
+.btn.record-on {
+  background: var(--danger-soft);
+  color: var(--danger);
+  border-color: var(--danger);
+}
+.btn.record-on .record-dot {
+  background: var(--danger);
+  border-color: var(--danger);
+}

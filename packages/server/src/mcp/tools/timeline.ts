@@ -186,20 +186,22 @@ export const timelineTools = [
     name: 'video_edit_clip',
     title: 'Split, trim, move or delete a clip',
     description:
-      'Timeline edits on one clip. split: cut at a sequence time into two clips. trim: move the in or out edge by delta seconds (positive shortens the in edge, lengthens the out edge). move: change start time and optionally track. delete: remove it; with ripple the later clips on that track close the gap.',
+      'Timeline edits on one clip. split: cut at a sequence time into two clips. trim: move the in or out edge by delta seconds (positive shortens the in edge, lengthens the out edge). move: change start time and optionally track. delete: remove it; with ripple the later clips on that track close the gap. fade: fade the sound in over fadeIn seconds and out over fadeOut seconds (0 removes a fade).',
     category: 'video',
     access: 'write',
     destructive: true,
     input: {
       projectId: zProjectId,
       clipId: z.string(),
-      action: z.enum(['split', 'trim', 'move', 'delete']),
+      action: z.enum(['split', 'trim', 'move', 'delete', 'fade']),
       time: z.number().min(0).optional().describe('split: sequence time'),
       edge: z.enum(['in', 'out']).optional().describe('trim: which edge'),
       delta: z.number().optional().describe('trim: seconds'),
       start: z.number().min(0).optional().describe('move: new start'),
       trackId: z.string().optional().describe('move: new track'),
       ripple: z.boolean().default(false).describe('delete: close the gap'),
+      fadeIn: z.number().min(0).max(600).optional().describe('fade: seconds'),
+      fadeOut: z.number().min(0).max(600).optional().describe('fade: seconds'),
     },
     output: zWriteResult.extend({ newClipId: z.string().optional() }),
     example: { input: { projectId: 'prj_8Kq2...', clipId: 'clp_1', action: 'split', time: 4.5 }, output: { status: 'committed', commitId: 'c_8b...', newClipId: 'clp_2...' } },
@@ -221,6 +223,9 @@ export const timelineTools = [
             const seq = sequenceOfTrack(state, args.trackId ?? clip.parentId!);
             return [moveClipOp(state, clip.id, args.start, args.trackId), ...grow(state, seq.id, args.start + (clipEnd(clip.props) - clip.props.start))];
           }
+          case 'fade':
+            if (args.fadeIn === undefined && args.fadeOut === undefined) throw new ToolError('fade needs fadeIn or fadeOut.');
+            return [{ kind: 'update', id: clip.id, set: { ...(args.fadeIn !== undefined ? { fadeIn: args.fadeIn } : {}), ...(args.fadeOut !== undefined ? { fadeOut: args.fadeOut } : {}) } }];
           default:
             return [args.ripple ? rippleDeleteOp(state, clip.id) : { kind: 'delete', id: clip.id }];
         }

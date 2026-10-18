@@ -279,6 +279,8 @@ export const PROP_SCHEMAS: Record<NodeType, z.ZodObject> = {
     opacity: z.number().min(0).max(1),
     volume: z.number().min(-60).max(24),
     keyframes: zKeyframes,
+    fadeIn: z.number().min(0).max(600).optional(),
+    fadeOut: z.number().min(0).max(600).optional(),
     effects: z.array(z.object({ id: z.string(), effect: z.union([zFilterKind, z.literal('colorGrade'), zEditFxKind]), params: z.record(z.string(), z.number()), enabled: z.boolean(), assetId: z.string().nullable().optional() })),
     transitionIn: zTransition.nullable(),
     transitionOut: zTransition.nullable(),

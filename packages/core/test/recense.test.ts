@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { applyOp, autoEditOps, beatEffectOps, clipsOf, createProjectState, detectBeats, nodesOfType, setDeterministicIds, tracksOf, validateNodeProps, type ProjectState, type SceneNode } from '../src/index.js';
+import { fadeGainAt, splitClipOp, makeNode, applyOp, autoEditOps, beatEffectOps, clipsOf, createProjectState, detectBeats, nodesOfType, setDeterministicIds, tracksOf, validateNodeProps, type ProjectState, type SceneNode } from '../src/index.js';
 
 beforeEach(() => setDeterministicIds(1));
 
@@ -77,5 +77,21 @@ describe('Recense', () => {
     const tr = tracksOf(state, seq.id).filter((t) => t.props.name === 'Shake on beat');
     expect(tr.length).toBe(1);
     expect(clipsOf(state, tr[0]!.id).map((c) => c.props.start)).toEqual([1, 3]);
+  });
+
+  it('fades a clip’s sound, and a split keeps each fade on its own end', () => {
+    const c = { start: 2, in: 0, out: 4, speed: 1, speedRamp: null, reverse: false, fadeIn: 1, fadeOut: 2 };
+    expect(fadeGainAt(c, 2)).toBe(0);
+    expect(fadeGainAt(c, 2.5)).toBeCloseTo(0.5);
+    expect(fadeGainAt(c, 3.5)).toBe(1);
+    expect(fadeGainAt(c, 5)).toBeCloseTo(0.5);
+    let state = createProjectState({ primaryTool: 'video' });
+    const track = nodesOfType(state, 'track').find((t) => t.props.trackType === 'audio')!;
+    const clip = makeNode('clip', { assetId: 'a', start: 0, in: 0, out: 4, fadeIn: 1, fadeOut: 1 });
+    state = applyOp(state, { kind: 'create', parentId: track.id, nodes: [clip] }).state;
+    state = applyOp(state, splitClipOp(state, clip.id, 2)).state;
+    const [a, b] = clipsOf(state, track.id);
+    expect([a!.props.fadeIn, a!.props.fadeOut]).toEqual([1, 0]);
+    expect([b!.props.fadeIn, b!.props.fadeOut]).toEqual([0, 1]);
   });
 });

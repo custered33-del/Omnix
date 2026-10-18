@@ -5745,7 +5745,7 @@ Example result (structured content):
 
 **Split, trim, move or delete a clip** · write, may remove content
 
-Timeline edits on one clip. split: cut at a sequence time into two clips. trim: move the in or out edge by delta seconds (positive shortens the in edge, lengthens the out edge). move: change start time and optionally track. delete: remove it; with ripple the later clips on that track close the gap.
+Timeline edits on one clip. split: cut at a sequence time into two clips. trim: move the in or out edge by delta seconds (positive shortens the in edge, lengthens the out edge). move: change start time and optionally track. delete: remove it; with ripple the later clips on that track close the gap. fade: fade the sound in over fadeIn seconds and out over fadeOut seconds (0 removes a fade).
 
 <details><summary>Input schema</summary>
 
@@ -5768,7 +5768,8 @@ Timeline edits on one clip. split: cut at a sequence time into two clips. trim: 
         "split",
         "trim",
         "move",
-        "delete"
+        "delete",
+        "fade"
       ]
     },
     "time": {
@@ -5801,6 +5802,18 @@ Timeline edits on one clip. split: cut at a sequence time into two clips. trim: 
       "default": false,
       "description": "delete: close the gap",
       "type": "boolean"
+    },
+    "fadeIn": {
+      "description": "fade: seconds",
+      "type": "number",
+      "minimum": 0,
+      "maximum": 600
+    },
+    "fadeOut": {
+      "description": "fade: seconds",
+      "type": "number",
+      "minimum": 0,
+      "maximum": 600
     }
   },
   "required": [

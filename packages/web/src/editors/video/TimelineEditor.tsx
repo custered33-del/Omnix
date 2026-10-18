@@ -15,7 +15,7 @@ import { t } from '../../i18n/index.js';
 import { createTimelineStore, timecode, toFrame, type EditMode, type TimelineEditorStore } from './timelineState.js';
 import { PlaybackEngine } from './playback.js';
 import { Timeline } from './Timeline.js';
-import { Inspector, useAnimated } from './Inspector.js';
+import { Inspector, RecordToggle, useAnimated } from './Inspector.js';
 import { MediaBin } from './MediaBin.js';
 import { Mixer } from './Mixer.js';
 import { Stage, type StageHandlers } from './Stage.js';
@@ -292,6 +292,7 @@ function TimelineToolbar({ ctx, onCaptions }: { ctx: TimelineCtx; onCaptions: ()
       <IconButton small label={t('video.snapping')} pressed={snapping} onClick={() => ed.getState().set({ snapping: !snapping })}>
         <Magnet />
       </IconButton>
+      {canEdit && <RecordToggle ctx={ctx} />}
       <span className="spacer" />
       {canEdit && (
         <button className="btn btn-sm btn-ghost" onClick={() => openStyle(ed.getState().selectedClips.length === 1 ? ed.getState().selectedClips[0]! : ctx.sequenceId)}>
@@ -335,6 +336,40 @@ function TimelineToolbar({ ctx, onCaptions }: { ctx: TimelineCtx; onCaptions: ()
 }
 
 /** Video preview: drag the selected visual clip to reposition it (keyframe-aware). */
+/** The path a keyframed clip travels, with a dot on each keyframe, so movement can be seen and adjusted. */
+function motionPath(g: CanvasRenderingContext2D, c: SceneNode<'clip'>, sp: { width: number; height: number }): void {
+  const kx = c.props.keyframes.x ?? [];
+  const ky = c.props.keyframes.y ?? [];
+  if (kx.length < 2 && ky.length < 2) return;
+  const unit = 1 / Math.max(0.01, g.getTransform().a / (window.devicePixelRatio || 1));
+  const dur = clipEnd(c.props) - c.props.start;
+  const at = (local: number) => {
+    const v = clipPropsAt(c.props, c.props.start + local);
+    return [sp.width / 2 + v.x, sp.height / 2 + v.y] as const;
+  };
+  g.save();
+  g.strokeStyle = '#e0368c';
+  g.lineWidth = 2 * unit;
+  g.setLineDash([4 * unit, 4 * unit]);
+  g.beginPath();
+  const steps = Math.min(200, Math.max(20, Math.round(dur * 30)));
+  for (let i = 0; i <= steps; i++) {
+    const [x, y] = at((dur * i) / steps);
+    if (i) g.lineTo(x, y);
+    else g.moveTo(x, y);
+  }
+  g.stroke();
+  g.setLineDash([]);
+  g.fillStyle = '#e0368c';
+  for (const k of [...new Set([...kx, ...ky].map((k) => k.time))]) {
+    const [x, y] = at(k);
+    g.beginPath();
+    g.arc(x, y, 6 * unit, 0, Math.PI * 2);
+    g.fill();
+  }
+  g.restore();
+}
+
 function VideoStage({ ctx }: { ctx: TimelineCtx }) {
   const selected = useStore(ctx.ed, (s) => s.selectedClips);
   const clip = useProject((s) => (selected.length === 1 ? s.state?.nodes[selected[0]!] : undefined)) as SceneNode<'clip'> | undefined;
@@ -434,6 +469,7 @@ function VideoStage({ ctx }: { ctx: TimelineCtx }) {
           g.scale(v.scale, v.scale);
           g.strokeRect(-sp.width / 2, -sp.height / 2, sp.width, sp.height);
           g.restore();
+          motionPath(g, c, sp);
           regionOverlay(g);
         },
       }

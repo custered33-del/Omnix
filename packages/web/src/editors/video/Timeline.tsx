@@ -573,6 +573,8 @@ function ClipView({ clip, track, pps, selected, host, onDown, onMenu, onSelect }
       {(tt === 'audio' || (tt === 'video' && meta?.hasAudio)) && meta?.waveform && <Waveform peaks={meta.waveform} clip={p} source={meta.duration ?? p.sourceDuration} width={w} height={tt === 'audio' ? 46 : 20} />}
       {p.transitionIn && <div className="trans" style={{ left: 0, width: p.transitionIn.duration * pps }} />}
       {p.transitionOut && <div className="trans out" style={{ width: p.transitionOut.duration * pps }} />}
+      {!!p.fadeIn && <span className="fade in" style={{ width: Math.min(w, p.fadeIn * pps) }} aria-hidden="true" />}
+      {!!p.fadeOut && <span className="fade out" style={{ width: Math.min(w, p.fadeOut * pps) }} aria-hidden="true" />}
       <span className="clip-label">{label}</span>
       <AiMarker nodeId={clip.id} className="on-clip" />
       {(p.speed !== 1 || p.reverse || p.speedRamp) && <span className="speed">{p.speedRamp ? 'ramp' : `${p.reverse ? '◀ ' : ''}${p.speed}×`}</span>}

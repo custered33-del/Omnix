@@ -356,6 +356,9 @@ export interface ClipProps {
   opacity: number;
   /** Clip volume in dB (audio). */
   volume: number;
+  /** Sound fades in over the first / out over the last this many seconds of the clip. */
+  fadeIn?: number;
+  fadeOut?: number;
   keyframes: Partial<Record<AnimatableProp, Keyframe[]>>;
   effects: ClipEffect[];
   transitionIn: Transition | null;

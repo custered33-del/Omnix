@@ -233,6 +233,32 @@ describe('ffmpeg builders', () => {
     }
   });
 
+  it.runIf(hasFfmpeg)('fades sound in and out', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'omnix-fade-'));
+    try {
+      const tone = path.join(dir, 'tone.wav');
+      spawnSync('ffmpeg', ['-v', 'error', '-f', 'lavfi', '-i', 'sine=frequency=440:duration=4', '-y', tone]);
+      let state = createProjectState({ primaryTool: 'video' });
+      const seq = nodesOfType(state, 'sequence')[0]!;
+      const audio = nodesOfType(state, 'track').find((t) => t.props.trackType === 'audio')!;
+      state = commit(state, { kind: 'create', parentId: audio.id, nodes: [makeNode('clip', { assetId: 'tone', start: 0, in: 0, out: 4, fadeIn: 1, fadeOut: 1 })] });
+      const graph = buildAudioGraph(state, seq.id, () => ({ path: tone, hasAudio: true }), { inputOffset: 0, duration: 4 });
+      expect(graph.filter).toContain('afade=t=in');
+      expect(graph.filter).toContain('afade=t=out:st=3.0000');
+      const out = path.join(dir, 'mix.wav');
+      const r = spawnSync('ffmpeg', buildExportArgs(presetById('audio-wav'), { frameWidth: 16, frameHeight: 16, fps: 30, duration: 4, audio: graph, outputPath: out }), { encoding: 'utf8' });
+      expect(r.status, r.stderr).toBe(0);
+      const pcm = spawnSync('ffmpeg', ['-v', 'error', '-i', out, '-ac', '1', '-ar', '8000', '-f', 'f32le', 'pipe:1'], { maxBuffer: 1 << 24 }).stdout as Buffer;
+      const samples = new Float32Array(pcm.buffer.slice(pcm.byteOffset, pcm.byteOffset + pcm.byteLength));
+      const rms = (from: number, to: number) => Math.sqrt(samples.slice(from * 8000, to * 8000).reduce((a, v) => a + v * v, 0) / ((to - from) * 8000));
+      expect(rms(0, 0.1)).toBeLessThan(rms(1.5, 2.5) * 0.2);
+      expect(rms(3.9, 4)).toBeLessThan(rms(1.5, 2.5) * 0.2);
+      expect(rms(1.5, 2.5)).toBeGreaterThan(0.05);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   it('builds a video command with letterboxing or cropping', () => {
     const args = buildExportArgs(presetById('reels'), { frameWidth: 1920, frameHeight: 1080, fps: 30, duration: 2, audio: { inputs: [], filter: '', output: null }, outputPath: '/tmp/x.mp4' });
     const fc = args[args.indexOf('-filter_complex') + 1]!;

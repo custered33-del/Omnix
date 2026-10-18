@@ -77,13 +77,20 @@ export function useAnimated(ctx: TimelineCtx, id: string, start: number, keyfram
   const time = useStore(ctx.ed, (s) => s.time);
   const local = Math.max(0, time - start);
   const s = ctx.store.getState();
-  // Keyframed props get a key at the playhead; others change their static value.
+  // Keyframed props get a key at the playhead; others change their static value. With
+  // "Record movement" on, every change makes a key (and the first one also keeps where it started).
   const build = (values: Partial<Record<AnimatableProp, number>>): Record<string, unknown> => {
     let kf = keyframes;
     const set: Record<string, unknown> = {};
+    const record = ctx.ed.getState().autoKey;
+    const at = Math.round(local * 1000) / 1000;
     for (const [prop, value] of Object.entries(values) as [AnimatableProp, number][]) {
-      if (kf[prop]?.length) kf = { ...kf, [prop]: upsertKeyframe(kf[prop], { time: Math.round(local * 1000) / 1000, value, easing: 'ease-in-out' }) };
-      else set[prop] = value;
+      if (kf[prop]?.length) kf = { ...kf, [prop]: upsertKeyframe(kf[prop], { time: at, value, easing: 'ease-in-out' }) };
+      else if (record) {
+        const before = (ctx.store.getState().state?.nodes[id]?.props as Partial<Record<AnimatableProp, number>> | undefined)?.[prop] ?? (prop === 'blur' ? 0 : value);
+        const first = at > 1e-3 ? [{ time: 0, value: before, easing: 'ease-in-out' as const }] : [];
+        kf = { ...kf, [prop]: upsertKeyframe(first, { time: at, value, easing: 'ease-in-out' }) };
+      } else set[prop] = value;
     }
     if (kf !== keyframes) set.keyframes = kf;
     return set;
@@ -125,6 +132,22 @@ export function useAnimated(ctx: TimelineCtx, id: string, start: number, keyfram
       return null;
     },
   };
+}
+
+/** "Record movement": turn on, move the playhead, then drag or change things; each change is a keyframe. */
+export function RecordToggle({ ctx, withLabel }: { ctx: TimelineCtx; withLabel?: boolean }) {
+  const on = useStore(ctx.ed, (s) => s.autoKey);
+  return (
+    <button
+      className={`btn btn-sm ${on ? 'record-on' : 'btn-ghost'}`}
+      aria-pressed={on}
+      title="When on, moving or changing a clip at the playhead adds a keyframe, so it moves over time"
+      onClick={() => ctx.ed.getState().set({ autoKey: !on })}
+    >
+      <span className="record-dot" aria-hidden="true" />
+      {withLabel !== false && 'Record movement'}
+    </button>
+  );
 }
 
 export function AnimatedField({ anim, prop, label, value, min, max, step, unit }: { anim: ReturnType<typeof useAnimated>; prop: AnimatableProp; label: string; value: number; min: number; max: number; step?: number; unit?: string }) {
@@ -171,6 +194,7 @@ function ClipInspector({ ctx, clip }: { ctx: TimelineCtx; clip: SceneNode<'clip'
         <section className="inspector-section">
           <h3>
             <span className="grow">{t('image.transform')}</span>
+            <RecordToggle ctx={ctx} />
             <IconButton small label="Previous keyframe" onClick={() => anim.jump(-1)}>
               <ChevronLeft />
             </IconButton>
@@ -186,7 +210,7 @@ function ClipInspector({ ctx, clip }: { ctx: TimelineCtx; clip: SceneNode<'clip'
           <AnimatedField anim={anim} prop="blur" label="Blur" value={v.blur} min={0} max={50} step={0.5} unit="px" />
           {easing && <EasingEditor value={easing} onChange={anim.setEasing} label="Easing from this keyframe" />}
           <p className="muted" style={{ fontSize: 'var(--fs-xs)' }}>
-            The diamond adds a keyframe at the playhead. Once a property has keyframes, edits update the key at the playhead.
+            To move something over time: turn on Record movement, go to a moment, drag the clip on the preview (or change a value), then go to another moment and drag again. The diamond adds or removes one keyframe.
           </p>
         </section>
       )}
@@ -194,6 +218,26 @@ function ClipInspector({ ctx, clip }: { ctx: TimelineCtx; clip: SceneNode<'clip'
         <section className="inspector-section">
           <h3>Audio</h3>
           <AnimatedField anim={anim} prop="volume" label={t('video.volume')} value={v.volume} min={-60} max={12} step={0.5} unit="dB" />
+          <div className="row" style={{ gap: 8 }}>
+            <div className="grow">
+              <NumberField compact label="Fade in" value={p.fadeIn ?? 0} min={0} max={30} step={0.1} unit="s" onCommit={(x) => upd({ fadeIn: x }, 'Fade in')} />
+            </div>
+            <div className="grow">
+              <NumberField compact label="Fade out" value={p.fadeOut ?? 0} min={0} max={30} step={0.1} unit="s" onCommit={(x) => upd({ fadeOut: x }, 'Fade out')} />
+            </div>
+          </div>
+          <div className="recense-chips" role="group" aria-label="Quick fades">
+            {[0.5, 1, 2].map((d) => (
+              <button key={d} className="chip" onClick={() => upd({ fadeIn: d, fadeOut: d }, 'Fade in and out')}>
+                Fade {d}s
+              </button>
+            ))}
+            {(p.fadeIn || p.fadeOut) ? (
+              <button className="chip" onClick={() => upd({ fadeIn: 0, fadeOut: 0 }, 'No fades')}>
+                No fades
+              </button>
+            ) : null}
+          </div>
         </section>
       )}
       {p.assetId && (

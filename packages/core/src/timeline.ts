@@ -84,6 +84,16 @@ export function speedAt(c: ClipLike, t: number): number {
   return pts[pts.length - 1]!.speed;
 }
 
+/** The clip's fade-in/out as a 0..1 gain at sequence time t (1 outside the fades). */
+export function fadeGainAt(c: Pick<ClipProps, 'start' | 'in' | 'out' | 'speed' | 'speedRamp' | 'reverse' | 'fadeIn' | 'fadeOut'>, t: number): number {
+  const local = t - c.start;
+  const d = clipDuration(c);
+  let g = 1;
+  if (c.fadeIn && c.fadeIn > 0) g = Math.min(g, Math.max(0, local / c.fadeIn));
+  if (c.fadeOut && c.fadeOut > 0) g = Math.min(g, Math.max(0, (d - local) / c.fadeOut));
+  return Math.min(1, g);
+}
+
 /** Evaluate a clip's animatable props at sequence time t (keyframe times are relative to clip start). */
 export function clipPropsAt(c: ClipProps, t: number): { x: number; y: number; scale: number; rotation: number; opacity: number; volume: number; blur: number } {
   const local = t - c.start;
@@ -167,7 +177,8 @@ export function splitClipOp(state: ProjectState, clipId: string, t: number, newI
   if (t <= p.start + EPS || t >= clipEnd(p) - EPS) throw new OpError('Split point must be inside the clip');
   if (p.speedRamp && p.speedRamp.length) throw new OpError('Remove the speed ramp before splitting this clip');
   const src = sourceTimeAt(p, t)!;
-  const first: Partial<ClipProps> = p.reverse ? { in: round(src), transitionOut: null } : { out: round(src), transitionOut: null };
+  // The fade-out stays with the second half and the fade-in with the first.
+  const first: Partial<ClipProps> = { ...(p.reverse ? { in: round(src) } : { out: round(src) }), transitionOut: null, ...(p.fadeOut ? { fadeOut: 0 } : {}) };
   const second = makeNode(
     'clip',
     {
@@ -176,6 +187,7 @@ export function splitClipOp(state: ProjectState, clipId: string, t: number, newI
       start: round(t),
       ...(p.reverse ? { out: round(src) } : { in: round(src) }),
       transitionIn: null,
+      ...(p.fadeIn ? { fadeIn: 0 } : {}),
       keyframes: shiftKeyframes(p.keyframes, -(t - p.start)),
     },
     newId,

@@ -1,5 +1,5 @@
 import type { ProjectState, SceneNode } from '@omnix/core';
-import { clipEnd, clipPropsAt, clipsOf, playbackTime, sourceTimeAt, speedAt, tracksOf, contentDuration } from '@omnix/core';
+import { clipEnd, clipPropsAt, fadeGainAt, clipsOf, playbackTime, sourceTimeAt, speedAt, tracksOf, contentDuration } from '@omnix/core';
 import type { BrowserRenderHost } from '../../render/browserHost.js';
 import { dbToGain, type TimelineEditorStore } from './timelineState.js';
 
@@ -185,7 +185,7 @@ export class PlaybackEngine {
         const v = this.voice(clip, track.id);
         activeVoices.add(clip.id);
         const props = clipPropsAt(p, t);
-        v.gain.gain.setTargetAtTime(muted ? 0 : dbToGain(props.volume), this.audio().currentTime, 0.02);
+        v.gain.gain.setTargetAtTime(muted ? 0 : dbToGain(props.volume) * fadeGainAt(p, t), this.audio().currentTime, 0.02);
         if (!muted) audibleTracks.add(track.id);
         v.el.playbackRate = Math.min(16, Math.max(0.0625, rate));
         if (Math.abs(v.el.currentTime - src) > DRIFT) v.el.currentTime = src;

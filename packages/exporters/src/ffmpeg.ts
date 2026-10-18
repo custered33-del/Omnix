@@ -154,6 +154,10 @@ export function buildAudioGraph(state: ProjectState, sequenceId: string, sources
         chain.push(...atempoChain(avg));
       } else chain.push(...atempoChain(p.speed));
       chain.push(`volume='${volumeExpression(p.keyframes.volume, p.volume, 0)}':eval=frame`);
+      // Fades, in timeline seconds (after the speed change), before the clip is moved into place.
+      const len = clipDuration(p);
+      if (p.fadeIn && p.fadeIn > 0) chain.push(`afade=t=in:st=0:d=${Math.min(p.fadeIn, len).toFixed(4)}`);
+      if (p.fadeOut && p.fadeOut > 0) chain.push(`afade=t=out:st=${Math.max(0, len - p.fadeOut).toFixed(4)}:d=${Math.min(p.fadeOut, len).toFixed(4)}`);
       chain.push(`adelay=${Math.round(p.start * 1000)}:all=1`);
       parts.push(`[${idx}:a]${chain.join(',')}[${label}]`);
       clipLabels.push(`[${label}]`);
