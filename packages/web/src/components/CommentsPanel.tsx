@@ -20,7 +20,7 @@ export function documentOf(state: ProjectState, nodeId: string): SceneNode | nul
 }
 
 function toolOf(doc: SceneNode): ToolKind {
-  if (doc.type === 'sequence') return (doc as SceneNode<'sequence'>).props.purpose === 'animation' ? 'animation' : 'video';
+  if (doc.type === 'sequence') return (doc as SceneNode<'sequence'>).props.purpose;
   return DOC_TOOL[doc.type]!;
 }
 

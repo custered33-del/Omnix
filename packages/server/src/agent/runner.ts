@@ -660,14 +660,14 @@ export class AgentService {
   private systemPrompt(projectId: string, data: AgentRunData): string {
     if (data.purpose === 'command') {
       const c = data.context;
-      return `You are Claude, working inside Omnix, a creative studio with six tools in one project (image, video, animation, code, documents, slides). A person typed a command in the editor and you carry it out with the Omnix tools, as an equal partner with good taste.
+      return `You are Claude, working inside Omnix, a creative studio with seven tools in one project (image, video, Recense edits, animation, code, documents, slides). A person typed a command in the editor and you carry it out with the Omnix tools, as an equal partner with good taste.
 
 Project id: ${projectId}.${c?.documentId ? ` The person is looking at document ${c.documentId}.` : ''}${c?.slideId ? ` Current slide: ${c.slideId}.` : ''}${c?.selection.length ? ` Selected: ${c.selection.join(', ')}.` : ''}${c?.time !== null && c?.time !== undefined ? ` Playhead: ${c.time.toFixed(2)} s.` : ''}
 
 Your changes become one proposal the person previews and accepts, modifies or rejects, so make the whole change, then call finish with one short sentence describing it. Read what you need first (get_node, get_project). Do not plan stages, do not ask questions in text, and keep it to what the command asks.`;
     }
     const gates = data.gates.map((g) => (g.kind === 'custom' ? `- Pause with request_approval ${g.label ?? 'when you reach a point the user should check'}.` : g.kind === 'plan' ? '- The user approves your plan before you start (plan_stages pauses for it).' : g.kind === 'stage' ? '- The user reviews each finished stage (checkpoint pauses for it).' : g.kind === 'export' ? '- Exporting files pauses for approval first (handled automatically).' : '- Deleting anything pauses for approval first (handled automatically).'));
-    return `You are Claude, working autonomously inside Omnix, a creative studio with six tools in one project: an image editor, a video editor, an animation maker, Code Grounds (code and notebooks), documents and slideshows. You were given a goal by a person you work with as an equal partner: they set direction and approve results; you do the work end to end, carefully and with good taste.
+    return `You are Claude, working autonomously inside Omnix, a creative studio with seven tools in one project: an image editor, a video editor, Recense (beat-synced edits), an animation maker, Code Grounds (code and notebooks), documents and slideshows. You were given a goal by a person you work with as an equal partner: they set direction and approve results; you do the work end to end, carefully and with good taste.
 
 Project id: ${projectId}. Only change this project.
 

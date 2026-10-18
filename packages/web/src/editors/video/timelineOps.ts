@@ -61,7 +61,9 @@ export function tryOp(build: () => Operation): Operation | null {
 
 export function trackFor(c: TimelineCtx, kind: AssetSummary['kind']): SceneNode<'track'> | undefined {
   const want: TrackType = kind === 'audio' ? 'audio' : 'video';
-  return tracksOf(state(c), c.sequenceId).find((t) => t.props.trackType === want && !t.props.locked);
+  const open = tracksOf(state(c), c.sequenceId).filter((t) => t.props.trackType === want && !t.props.locked);
+  // In an edit, new shots go on the main track, not the overlay track above it.
+  return open.find((t) => t.props.name !== 'Overlays') ?? open[0];
 }
 
 /** Clip props for placing an asset on the timeline. */
@@ -184,6 +186,9 @@ export function snapPoints(state: ProjectState, sequenceId: string, playhead: nu
         pts.push(p.start, p.start + p.duration);
       }
     }
+  // Beats of the music, so cuts land on them.
+  const beats = (state.nodes[sequenceId] as SceneNode<'sequence'> | undefined)?.props.beats;
+  if (beats) pts.push(...beats);
   return pts;
 }
 

@@ -83,8 +83,9 @@ export function Timeline({ ctx }: { ctx: TimelineCtx }) {
   const [scrollX, setScrollX] = useState(0);
 
   const tracks = tracksOf(state, sequenceId);
+  const beats = seq.props.beats;
   const contentEnd = Math.max(seq.props.duration, ...tracks.flatMap((tr) => childrenOf(state, tr.id).map((n) => (n.type === 'clip' ? clipEnd((n as SceneNode<'clip'>).props) : n.type === 'animLayer' ? (n as SceneNode<'animLayer'>).props.start + (n as SceneNode<'animLayer'>).props.duration : 0))));
-  const totalW = Math.max(viewW, (contentEnd + (seq.props.purpose === 'video' ? 20 : 2)) * pps);
+  const totalW = Math.max(viewW, (contentEnd + (seq.props.purpose !== 'animation' ? 20 : 2)) * pps);
   const xOf = (t: number) => t * pps;
   const timeAt = (clientX: number) => {
     const r = lanesRef.current!.getBoundingClientRect();
@@ -124,7 +125,21 @@ export function Timeline({ ctx }: { ctx: TimelineCtx }) {
       g.stroke();
       if (isMajor) g.fillText(fmtRuler(tt, major, fps), x + 3, 10);
     }
-  }, [pps, scrollX, viewW, fps]);
+    // Beats of the music (Recense): small pink marks along the bottom of the ruler.
+    if (beats?.length) {
+      g.fillStyle = '#e0368c';
+      for (const b of beats) {
+        const x = b * pps - scrollX;
+        if (x < -4 || x > viewW + 4) continue;
+        g.beginPath();
+        g.moveTo(x, RULER - 7);
+        g.lineTo(x + 3.5, RULER);
+        g.lineTo(x - 3.5, RULER);
+        g.closePath();
+        g.fill();
+      }
+    }
+  }, [pps, scrollX, viewW, fps, beats]);
 
   // Keep the playhead visible while playing.
   const playing = useStore(ed, (s) => s.playing);
@@ -478,7 +493,7 @@ export function Timeline({ ctx }: { ctx: TimelineCtx }) {
           })}
           <div className="tl-playhead" style={{ left: xOf(time) }} aria-hidden="true" />
           {Object.values(presence)
-            .filter((o) => (o.location?.tool === 'video' || o.location?.tool === 'animation') && o.location.nodeId === sequenceId && o.location.time !== undefined)
+            .filter((o) => (o.location?.tool === 'video' || o.location?.tool === 'recense' || o.location?.tool === 'animation') && o.location.nodeId === sequenceId && o.location.time !== undefined)
             .map((o) => (
               <div key={o.clientId} className="tl-other-playhead" style={{ left: xOf(o.location!.time!), borderColor: o.color }} aria-hidden="true">
                 <span style={{ background: o.color }}>{o.author.name}</span>
@@ -510,7 +525,7 @@ export function Timeline({ ctx }: { ctx: TimelineCtx }) {
             <div className="tl-comment-pop" style={{ left: Math.max(4, xOf(rulerComposer) - 20) }} onPointerDown={(e) => e.stopPropagation()}>
               <NewComment
                 onSubmit={(text) => {
-                  const id = addComment(store, { tool: seq.props.purpose === 'animation' ? 'animation' : 'video', nodeId: sequenceId, time: rulerComposer }, text);
+                  const id = addComment(store, { tool: seq.props.purpose, nodeId: sequenceId, time: rulerComposer }, text);
                   setRulerComposer(null);
                   if (id) setOpenComment(id);
                 }}

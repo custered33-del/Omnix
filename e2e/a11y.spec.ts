@@ -36,7 +36,7 @@ const PAGES = [
   ['/setup?ai=gpt', 'setup guide: ChatGPT & Codex'],
   ['/help/troubleshooting', 'troubleshooting'],
 ] as const;
-const TOOLS = ['Image editor', 'Video editor', 'Animation maker', 'Code Grounds', 'Document', 'Slideshow'] as const;
+const TOOLS = ['Image editor', 'Video editor', 'Recense', 'Animation maker', 'Code Grounds', 'Document', 'Slideshow'] as const;
 
 /** The signed-in person's theme (kept on the server, so it is reset after each test). */
 async function setTheme(page: Page, theme: 'system' | 'high-contrast'): Promise<void> {

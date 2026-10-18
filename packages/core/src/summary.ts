@@ -21,7 +21,7 @@ export interface ProjectOutline {
 export type DocumentOutline =
   | { tool: 'image'; id: string; name: string; width: number; height: number; layers: LayerOutline[] }
   | {
-      tool: 'video' | 'animation';
+      tool: 'video' | 'recense' | 'animation';
       id: string;
       name: string;
       width: number;

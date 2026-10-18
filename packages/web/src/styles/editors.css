@@ -1576,3 +1576,52 @@
   touch-action: none;
   user-select: none;
 }
+
+/* Recense (edits) */
+.recense-panel {
+  display: grid;
+  gap: 12px;
+  padding: 8px 12px 12px;
+  border-bottom: 1px solid var(--border);
+}
+.recense-panel section {
+  display: grid;
+  gap: 6px;
+}
+.recense-panel h3 {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  font-size: var(--fs-sm);
+}
+.recense-panel h3 svg {
+  width: 14px;
+  height: 14px;
+  color: var(--accent);
+}
+.recense-panel p {
+  margin: 0;
+  font-size: var(--fs-xs);
+}
+.recense-styles {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+.recense-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.recense-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 4px;
+}
+.recense-row .select {
+  min-width: 0;
+}
+.recense-row .select:first-child {
+  grid-column: 1 / -1;
+}

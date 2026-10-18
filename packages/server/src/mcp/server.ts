@@ -9,7 +9,7 @@ import { ProjectError } from '../projects/service.js';
 
 export const OMNIX_VERSION = '0.1.0';
 
-export const OMNIX_INSTRUCTIONS = `Omnix is a creative studio with six tools in one project: an image editor (layers), a video editor and an animation maker (a shared timeline), Code Grounds (files, notebooks, sandboxed runs), documents, and slideshows.
+export const OMNIX_INSTRUCTIONS = `Omnix is a creative studio with seven tools in one project: an image editor (layers), a video editor, Recense (TikTok-style edits: beat sync, edit transitions and moving effects; recense_* tools) and an animation maker (a shared timeline), Code Grounds (files, notebooks, sandboxed runs), documents, and slideshows.
 
 How to work in Omnix:
 1. Call list_projects, then get_project to see every tool's content at once. Read list_notes (session memory) when resuming so you respect earlier decisions and rejected options.

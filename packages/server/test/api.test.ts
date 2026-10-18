@@ -68,7 +68,7 @@ describe('auth', () => {
 
 describe('projects and the operation log', () => {
   it('creates projects of every type with thumbnails', async () => {
-    for (const tool of ['image', 'video', 'animation', 'code', 'document', 'slides']) {
+    for (const tool of ['image', 'video', 'recense', 'animation', 'code', 'document', 'slides']) {
       const p = await newProject(tool, `My ${tool}`);
       const t = await ts.api(`/api/projects/${p.id}/thumbnail`);
       expect(t.status).toBe(200);

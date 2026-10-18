@@ -1,9 +1,10 @@
-import { Image as ImageIcon, Film, Sparkle, Code2, FileText, Presentation, type LucideProps } from 'lucide-react';
+import { Image as ImageIcon, Film, Zap, Sparkle, Code2, FileText, Presentation, type LucideProps } from 'lucide-react';
 import type { ToolKind } from '@omnix/core';
 
 const ICONS: Record<ToolKind, (p: LucideProps) => React.ReactElement> = {
   image: (p) => <ImageIcon {...p} />,
   video: (p) => <Film {...p} />,
+  recense: (p) => <Zap {...p} />,
   animation: (p) => <Sparkle {...p} />,
   code: (p) => <Code2 {...p} />,
   document: (p) => <FileText {...p} />,
@@ -13,6 +14,7 @@ const ICONS: Record<ToolKind, (p: LucideProps) => React.ReactElement> = {
 export const TOOL_COLORS: Record<ToolKind, string> = {
   image: '#2a78d6',
   video: '#eb6834',
+  recense: '#e0368c',
   animation: '#d55181',
   code: '#1baf7a',
   document: '#6250d6',

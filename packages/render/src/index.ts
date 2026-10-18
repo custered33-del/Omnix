@@ -9,3 +9,4 @@ export * from './sequence.js';
 export * from './embeds.js';
 export * from './slides.js';
 export * from './thumbnails.js';
+export * from './editFx.js';

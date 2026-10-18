@@ -22,6 +22,7 @@ import { Stage, type StageHandlers } from './Stage.js';
 import { CaptionsDialog } from './CaptionsDialog.js';
 import { addTitle, deleteSelected, duplicateSelected, splitAtPlayhead, type TimelineCtx } from './timelineOps.js';
 import { AnimationPanel } from '../animation/AnimationPanel.js';
+import { RecensePanel } from '../recense/RecensePanel.js';
 import { useAnimationStage } from '../animation/useAnimationStage.js';
 import '../../styles/editors.css';
 
@@ -85,7 +86,7 @@ export function TimelineEditor({ sequenceId }: { sequenceId: string }) {
   const isAnim = purpose === 'animation';
   return (
     <div className="timeline-editor" style={{ ['--tl-height' as string]: `${timelineHeight}px` }}>
-      {isAnim ? <AnimationPanel ctx={ctx} /> : <MediaBin ctx={ctx} onCaptions={() => setCaptionsOpen(true)} />}
+      {isAnim ? <AnimationPanel ctx={ctx} /> : <MediaBin ctx={ctx} onCaptions={() => setCaptionsOpen(true)} {...(purpose === 'recense' ? { top: <RecensePanel ctx={ctx} /> } : {})} />}
       <div className="tl-preview">
         {isAnim ? <AnimStage ctx={ctx} /> : <VideoStage ctx={ctx} />}
         <Transport ctx={ctx} />

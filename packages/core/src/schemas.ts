@@ -94,8 +94,10 @@ export const zSmartFilter = z.object({
   opacity: z.number().min(0).max(1),
 });
 
+export const zEditFxKind = z.enum(['shake', 'zoomPunch', 'flash', 'rgbSplit', 'glitch', 'strobe', 'letterbox', 'vhs']);
+
 export const zTransition = z.object({
-  kind: z.enum(['crossfade', 'dip-to-black', 'wipe-left', 'wipe-right', 'slide-left', 'zoom']),
+  kind: z.enum(['crossfade', 'dip-to-black', 'wipe-left', 'wipe-right', 'slide-left', 'zoom', 'whip-left', 'whip-right', 'zoom-punch', 'spin', 'flash', 'glitch']),
   duration: z.number().min(0).max(30),
   easing: zEasing,
 });
@@ -240,13 +242,15 @@ export const PROP_SCHEMAS: Record<NodeType, z.ZodObject> = {
   }),
   sequence: z.object({
     name: z.string(),
-    purpose: z.enum(['video', 'animation']),
+    purpose: z.enum(['video', 'recense', 'animation']),
     width: z.number().int().min(16).max(8192),
     height: z.number().int().min(16).max(8192),
     fps: z.number().min(1).max(240),
     duration: z.number().min(0).max(36000),
     background: zColor,
     playback: z.enum(['once', 'loop', 'pingpong']),
+    beats: z.array(z.number().min(0)).max(20000).optional(),
+    bpm: z.number().min(0).max(400).nullable().optional(),
   }),
   track: z.object({
     name: z.string(),
@@ -275,7 +279,7 @@ export const PROP_SCHEMAS: Record<NodeType, z.ZodObject> = {
     opacity: z.number().min(0).max(1),
     volume: z.number().min(-60).max(24),
     keyframes: zKeyframes,
-    effects: z.array(z.object({ id: z.string(), effect: z.union([zFilterKind, z.literal('colorGrade')]), params: z.record(z.string(), z.number()), enabled: z.boolean(), assetId: z.string().nullable().optional() })),
+    effects: z.array(z.object({ id: z.string(), effect: z.union([zFilterKind, z.literal('colorGrade'), zEditFxKind]), params: z.record(z.string(), z.number()), enabled: z.boolean(), assetId: z.string().nullable().optional() })),
     transitionIn: zTransition.nullable(),
     transitionOut: zTransition.nullable(),
     title: zTitleSpec.nullable(),

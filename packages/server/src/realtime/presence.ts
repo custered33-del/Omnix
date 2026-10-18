@@ -3,7 +3,7 @@ import { changedNodeIds, type Author, type Operation, type ProjectState, type Sc
 
 /** Where a collaborator is looking/pointing, so others see live cursors in every tool. */
 export interface PresenceLocation {
-  tool: 'image' | 'video' | 'animation' | 'code' | 'document' | 'slides' | 'dashboard';
+  tool: 'image' | 'video' | 'recense' | 'animation' | 'code' | 'document' | 'slides' | 'dashboard';
   /** The document/node being viewed (canvas, sequence, file, document, slide). */
   nodeId?: string;
   x?: number;
@@ -105,7 +105,7 @@ export function locationOfChange(state: ProjectState, op: Operation): PresenceLo
     const node = chain[0]!;
     const p = node.props as { x?: unknown; y?: unknown; start?: unknown };
     if (doc.type === 'sequence') {
-      const tool = (doc as SceneNode<'sequence'>).props.purpose === 'animation' ? 'animation' : 'video';
+      const tool = (doc as SceneNode<'sequence'>).props.purpose;
       return { tool, nodeId: doc.id, ...(typeof p.start === 'number' ? { time: p.start } : {}) };
     }
     const tool = DOC_TOOLS[doc.type]!;

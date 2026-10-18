@@ -59,6 +59,17 @@ export function primaryDocumentNodes(tool: ToolKind, name: string): SceneNode[] 
       link(seq, t1, v1, a1);
       return [seq, t1, v1, a1];
     }
+    case 'recense': {
+      // Vertical, like TikTok and Reels. Effects sit above the clips so they hit everything below.
+      const seq = makeNode('sequence', { name, purpose: 'recense', width: 1080, height: 1920, fps: 30, duration: 15 });
+      const t1 = makeNode('track', { name: 'Text', trackType: 'title' });
+      const fx = makeNode('track', { name: 'Effects', trackType: 'effect' });
+      const ov = makeNode('track', { name: 'Overlays', trackType: 'video' });
+      const v1 = makeNode('track', { name: 'Clips', trackType: 'video' });
+      const a1 = makeNode('track', { name: 'Music', trackType: 'audio' });
+      link(seq, t1, fx, ov, v1, a1);
+      return [seq, t1, fx, ov, v1, a1];
+    }
     case 'animation': {
       const seq = makeNode('sequence', {
         name,
@@ -229,7 +240,7 @@ export function toolOfNode(state: ProjectState, id: string): ToolKind | null {
       case 'canvas':
         return 'image';
       case 'sequence':
-        return (n as SceneNode<'sequence'>).props.purpose === 'animation' ? 'animation' : 'video';
+        return (n as SceneNode<'sequence'>).props.purpose;
       case 'codeWorkspace':
         return 'code';
       case 'document':

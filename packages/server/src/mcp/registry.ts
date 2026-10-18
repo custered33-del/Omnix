@@ -80,7 +80,7 @@ export interface ToolResult {
   images?: { data: Buffer; mimeType: string }[];
 }
 
-export type ToolCategory = 'project' | 'assets' | 'image' | 'video' | 'animation' | 'code' | 'document' | 'slides' | 'ai' | 'agent' | 'collaboration' | 'export' | 'plugin';
+export type ToolCategory = 'project' | 'assets' | 'image' | 'video' | 'recense' | 'animation' | 'code' | 'document' | 'slides' | 'ai' | 'agent' | 'collaboration' | 'export' | 'plugin';
 
 export interface ToolDef<S extends z.ZodRawShape = z.ZodRawShape> {
   name: string;

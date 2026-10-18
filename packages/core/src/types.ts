@@ -1,6 +1,6 @@
-/** The six tools in Omnix. Every project has a primary tool, but may contain documents for all six. */
-export type ToolKind = 'image' | 'video' | 'animation' | 'code' | 'document' | 'slides';
-export const TOOL_KINDS: readonly ToolKind[] = ['image', 'video', 'animation', 'code', 'document', 'slides'];
+/** The seven tools in Omnix. Every project has a primary tool, but may contain documents for all of them. */
+export type ToolKind = 'image' | 'video' | 'recense' | 'animation' | 'code' | 'document' | 'slides';
+export const TOOL_KINDS: readonly ToolKind[] = ['image', 'video', 'recense', 'animation', 'code', 'document', 'slides'];
 
 export type AuthorType = 'human' | 'ai' | 'system';
 

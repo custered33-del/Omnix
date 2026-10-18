@@ -16,7 +16,7 @@ interface Hit {
   snippet: string;
 }
 
-const TOOL_OF: Record<string, ToolKind> = { image: 'image', video: 'video', animation: 'animation', code: 'code', document: 'document', slides: 'slides' };
+const TOOL_OF: Record<string, ToolKind> = { image: 'image', video: 'video', recense: 'recense', animation: 'animation', code: 'code', document: 'document', slides: 'slides' };
 
 /** Search text across every tool in the project and jump to it (cross-tool context, feature 50). */
 export function FindDialog({ onClose }: { onClose: () => void }) {

@@ -1,10 +1,11 @@
-import type { ClipProps, ProjectState, SceneNode, Transition } from '@omnix/core';
-import { clipEnd, clipPropsAt, clipsOf, childrenOf, ease, requireNodeOfType, sourceTimeAt, tracksOf, playbackTime } from '@omnix/core';
+import type { ClipProps, FilterKind, ProjectState, SceneNode, Transition } from '@omnix/core';
+import { clipDuration, clipEnd, clipPropsAt, isEditFx, clipsOf, childrenOf, ease, requireNodeOfType, sourceTimeAt, tracksOf, playbackTime } from '@omnix/core';
 import { applyFilter, colorGrade, removeBackground, gaussianBlur } from '@omnix/imaging';
 import { ctxOf, drawable, fontStack, readRaster, writeRaster, type CanvasLike, type Ctx2D, type Drawable, type RenderHost } from './host.js';
 import { drawAnimLayer } from './animation.js';
 import { drawRichText } from './text.js';
 import { roundedRectPath } from './shapes.js';
+import { applyEditFx, drawWithMotion } from './editFx.js';
 
 /**
  * Renders one frame of a sequence (video or animation). Tracks are listed top-first,
@@ -52,12 +53,9 @@ export function renderSequenceFrame(host: RenderHost, state: ProjectState, seque
       case 'effect': {
         for (const clip of clipsOf(state, track.id)) {
           const p = clip.props;
-          if (t < p.start || t >= clipEnd(p) || options.draft) continue;
-          let r = readRaster(out);
-          for (const fx of p.effects.filter((e) => e.enabled)) {
-            r = fx.effect === 'colorGrade' ? colorGrade(r, fx.params, fx.assetId ? env.host.lut?.(fx.assetId) : undefined) : applyFilter(r, fx.effect, scaleParams(fx.params, scale));
-          }
-          writeRaster(out, r);
+          if (t < p.start || t >= clipEnd(p)) continue;
+          // Moving effects stay on in draft mode (they are the edit); still filters wait for full quality.
+          applyEffects(env, out, p, t, !!options.draft);
         }
         break;
       }
@@ -77,6 +75,28 @@ interface SeqEnv {
   seqH: number;
   fps: number;
   options: SequenceRenderOptions;
+}
+
+/** A clip's effects on a finished picture, in order. Moving (edit) effects use the time into the clip. */
+function applyEffects(env: SeqEnv, canvas: CanvasLike, p: ClipProps, t: number, movingOnly = false): void {
+  const on = p.effects.filter((e) => e.enabled && (!movingOnly || isEditFx(e.effect)));
+  let i = 0;
+  while (i < on.length) {
+    const fx = on[i]!;
+    if (isEditFx(fx.effect)) {
+      applyEditFx(env.host, canvas, fx.effect, fx.params, t - p.start, clipDuration(p));
+      i++;
+      continue;
+    }
+    // Run consecutive still filters on one read of the pixels.
+    let r = readRaster(canvas);
+    while (i < on.length && !isEditFx(on[i]!.effect)) {
+      const f = on[i]!;
+      r = f.effect === 'colorGrade' ? colorGrade(r, f.params, f.assetId ? env.host.lut?.(f.assetId) : undefined) : applyFilter(r, f.effect as FilterKind, scaleParams(f.params, env.scale));
+      i++;
+    }
+    writeRaster(canvas, r);
+  }
 }
 
 function scaleParams(params: Record<string, number>, scale: number): Record<string, number> {
@@ -173,6 +193,58 @@ function drawTransition(env: SeqEnv, ctx: Ctx2D, tr: Transition, p: number, outg
       layer(outgoing, 1 - p, 0, 1 + 0.15 * p);
       layer(incoming, p, 0, 1.25 - 0.25 * p);
       break;
+    case 'whip-left':
+    case 'whip-right': {
+      // A fast pan with motion blur, strongest mid-way.
+      const dir = tr.kind === 'whip-left' ? -1 : 1;
+      const blur = W * 0.35 * Math.sin(Math.PI * p);
+      if (outgoing) drawWithMotion(ctx, outgoing, dir * W * p, dir * blur);
+      if (incoming) drawWithMotion(ctx, incoming, -dir * W * (1 - p), dir * blur);
+      break;
+    }
+    case 'zoom-punch': {
+      // Zoom into the outgoing shot, land on the incoming one zoomed in, settle back.
+      const ghost = (draw: ((c: Ctx2D) => void) | null, s: number, spread: number) => {
+        layer(draw, 1, 0, s);
+        for (let g = 1; g <= 3; g++) layer(draw, 0.2, 0, s * (1 + spread * g));
+      };
+      if (p < 0.5) ghost(outgoing, 1 + 0.8 * (2 * p) ** 2, 0.12 * p);
+      else ghost(incoming, 1 + 0.8 * (2 * (1 - p)) ** 2, 0.12 * (1 - p));
+      break;
+    }
+    case 'spin': {
+      const turn = (draw: ((c: Ctx2D) => void) | null, angle: number, s: number) => {
+        if (!draw) return;
+        ctx.save();
+        ctx.translate(W / 2, H / 2);
+        ctx.rotate(angle);
+        ctx.scale(s, s);
+        ctx.translate(-W / 2, -H / 2);
+        draw(ctx);
+        ctx.restore();
+      };
+      if (p < 0.5) turn(outgoing, Math.PI * p * p * 2, 1 + p);
+      else turn(incoming, -Math.PI * (1 - p) * (1 - p) * 2, 1 + (1 - p));
+      break;
+    }
+    case 'flash': {
+      layer(p < 0.5 ? outgoing : incoming, 1);
+      ctx.save();
+      ctx.fillStyle = `rgba(255,255,255,${(1 - Math.abs(p - 0.5) * 2).toFixed(3)})`;
+      ctx.fillRect(0, 0, W, H);
+      ctx.restore();
+      break;
+    }
+    case 'glitch': {
+      const draw = p < 0.5 ? outgoing : incoming;
+      if (!draw) break;
+      const tmp = env.host.createCanvas(W, H);
+      draw(ctxOf(tmp));
+      applyEditFx(env.host, tmp, 'glitch', { amount: 1 - Math.abs(p - 0.5) * 1.4, seed: Math.floor(p * 12) + 3 }, 0, 1);
+      if (Math.abs(p - 0.5) < 0.2) applyEditFx(env.host, tmp, 'rgbSplit', { amount: 0.8 }, 0, 1);
+      ctx.drawImage(drawable(tmp), 0, 0);
+      break;
+    }
   }
 }
 
@@ -222,11 +294,9 @@ function drawClip(env: SeqEnv, ctx: Ctx2D, p: ClipProps, t: number, extended = f
         softness: p.backgroundRemoval.softness,
       }).raster;
     }
-    for (const fx of p.effects.filter((e) => e.enabled)) {
-      r = fx.effect === 'colorGrade' ? colorGrade(r, fx.params, fx.assetId ? host.lut?.(fx.assetId) : undefined) : applyFilter(r, fx.effect, scaleParams(fx.params, scale));
-    }
     if (props.blur > 0.25) r = gaussianBlur(r, props.blur * scale);
     writeRaster(target, r);
+    applyEffects(env, target, p, t);
     ctx.save();
     ctx.globalAlpha *= props.opacity;
     ctx.drawImage(drawable(target), 0, 0);

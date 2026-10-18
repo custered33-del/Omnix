@@ -36,7 +36,7 @@ export interface TimelineEditorState {
 
 export type TimelineEditorStore = StoreApi<TimelineEditorState>;
 
-export function createTimelineStore(purpose: 'video' | 'animation'): TimelineEditorStore {
+export function createTimelineStore(purpose: 'video' | 'recense' | 'animation'): TimelineEditorStore {
   return createStore<TimelineEditorState>((set) => ({
     time: 0,
     playing: false,

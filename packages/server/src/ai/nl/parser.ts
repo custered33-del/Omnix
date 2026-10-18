@@ -130,7 +130,7 @@ function docWord(c: Ctx): string {
     case 'canvas':
       return 'image';
     case 'sequence':
-      return (d as SceneNode<'sequence'>).props.purpose === 'animation' ? 'animation' : 'video';
+      return (d as SceneNode<'sequence'>).props.purpose === 'recense' ? 'edit' : (d as SceneNode<'sequence'>).props.purpose;
     case 'deck':
       return 'slideshow';
     default:

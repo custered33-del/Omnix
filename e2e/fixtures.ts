@@ -10,7 +10,10 @@ export const media = (() => {
   const music = path.join(dir, 'music.mp3');
   execFileSync('ffmpeg', ['-v', 'error', '-y', '-f', 'lavfi', '-i', 'testsrc=size=640x360:rate=30:duration=6', '-f', 'lavfi', '-i', 'sine=frequency=440:duration=6', '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-shortest', clip]);
   execFileSync('ffmpeg', ['-v', 'error', '-y', '-f', 'lavfi', '-i', 'sine=frequency=220:duration=8', music]);
-  return { clip, music };
+  // A kick drum every half second (120 BPM), for finding beats.
+  const beat = path.join(dir, 'beat.mp3');
+  execFileSync('ffmpeg', ['-v', 'error', '-y', '-f', 'lavfi', '-i', "aevalsrc='0.9*sin(2*PI*70*t)*exp(-25*mod(t,0.5))':s=44100:d=8", beat]);
+  return { clip, music, beat };
 })();
 
 let accountMade = false;
@@ -31,7 +34,7 @@ export async function signIn(page: Page): Promise<void> {
   await page.waitForSelector('.create-row');
 }
 
-export async function createProject(page: Page, tool: 'Image editor' | 'Video editor' | 'Animation maker' | 'Code Grounds' | 'Document' | 'Slideshow'): Promise<void> {
+export async function createProject(page: Page, tool: 'Image editor' | 'Video editor' | 'Recense' | 'Animation maker' | 'Code Grounds' | 'Document' | 'Slideshow'): Promise<void> {
   await page.click(`.create-tile:has-text("${tool}")`);
   await page.waitForURL(/\/projects\//);
 }

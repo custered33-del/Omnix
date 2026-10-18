@@ -130,7 +130,7 @@ export function embeddableSources(state: ProjectState, exclude?: string): Source
       out.push({ embed: { kind: 'canvas', ref: n.id }, label: (n as SceneNode<'canvas'>).props.name, detail: 'Image', icon: <ImageIcon size={16} /> });
     } else if (n.type === 'sequence') {
       const sp = (n as SceneNode<'sequence'>).props;
-      out.push({ embed: { kind: 'sequence-frame', ref: n.id, time: 0 }, label: sp.name, detail: sp.purpose === 'animation' ? 'Animation' : 'Video', icon: sp.purpose === 'animation' ? <Sparkles size={16} /> : <Film size={16} /> });
+      out.push({ embed: { kind: 'sequence-frame', ref: n.id, time: 0 }, label: sp.name, detail: sp.purpose === 'animation' ? 'Animation' : sp.purpose === 'recense' ? 'Recense edit' : 'Video', icon: sp.purpose === 'animation' ? <Sparkles size={16} /> : <Film size={16} /> });
     } else if (n.type === 'slide' && !(exclude && closest(state, n.id, 'deck')?.id === exclude)) {
       const title = childrenOf(state, n.id).find((e) => e.type === 'slideElement' && (e as SceneNode<'slideElement'>).props.role === 'title') as SceneNode<'slideElement'> | undefined;
       out.push({ embed: { kind: 'slide', ref: n.id }, label: title ? inlineToPlain(title.props.text ?? '') : (n as SceneNode<'slide'>).props.name, detail: 'Slide', icon: <Presentation size={16} /> });

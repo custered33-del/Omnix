@@ -81,7 +81,7 @@
     "title": "Get project overview",
     "category": "project",
     "access": "read",
-    "description": "Read a whole project across all six tools at once: every canvas (layers), sequence (tracks and clips), code workspace (files, notebook cells), document (outline) and deck (slides), plus session-memory notes. Start here before editing.",
+    "description": "Read a whole project across all seven tools at once: every canvas (layers), sequence (tracks and clips), code workspace (files, notebook cells), document (outline) and deck (slides), plus session-memory notes. Start here before editing.",
     "inputSchema": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "type": "object",
@@ -533,7 +533,7 @@
     "title": "Create a project",
     "category": "project",
     "access": "write",
-    "description": "Start a new project for the user in one of the six tools (image, video, animation, code, document, slides), or from a template (templateId from list_presets with kind \"template\"; the template decides the tool). Other documents can be added to it later with add_document. The new project allows AI from the start because the user asked for it through you; it is added to this connection automatically.",
+    "description": "Start a new project for the user in one of the seven tools (image, video, recense for TikTok-style edits, animation, code, document, slides), or from a template (templateId from list_presets with kind \"template\"; the template decides the tool). Other documents can be added to it later with add_document. The new project allows AI from the start because the user asked for it through you; it is added to this connection automatically.",
     "inputSchema": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "type": "object",
@@ -550,6 +550,7 @@
           "enum": [
             "image",
             "video",
+            "recense",
             "animation",
             "code",
             "document",
@@ -617,6 +618,7 @@
           "enum": [
             "image",
             "video",
+            "recense",
             "animation",
             "code",
             "document",
@@ -11102,6 +11104,311 @@
           }
         ],
         "lowConfidence": []
+      }
+    }
+  },
+  {
+    "name": "recense_find_beats",
+    "title": "Find the beats",
+    "category": "recense",
+    "access": "write",
+    "description": "Find the tempo and beats of the music in an edit (a Recense sequence, or any video sequence) and save them on the timeline, so cuts and effects can land on them. Uses the given clip, or the first clip on an audio track.",
+    "inputSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Project id (from list_projects)."
+        },
+        "sequenceId": {
+          "type": "string"
+        },
+        "clipId": {
+          "description": "The music clip (default: first clip on an audio track)",
+          "type": "string"
+        }
+      },
+      "required": [
+        "projectId",
+        "sequenceId"
+      ]
+    },
+    "outputSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "status": {
+          "type": "string",
+          "enum": [
+            "committed",
+            "proposed",
+            "none"
+          ],
+          "description": "committed: applied; proposed: waiting for the user's review; none: nothing needed changing"
+        },
+        "commitId": {
+          "type": "string"
+        },
+        "proposalId": {
+          "type": "string"
+        },
+        "changes": {
+          "description": "How many changes the proposal now holds",
+          "type": "number"
+        },
+        "bpm": {
+          "type": "number"
+        },
+        "beats": {
+          "type": "array",
+          "items": {
+            "type": "number"
+          }
+        }
+      },
+      "required": [
+        "status",
+        "bpm",
+        "beats"
+      ],
+      "additionalProperties": false
+    },
+    "example": {
+      "input": {
+        "projectId": "prj_8Kq2...",
+        "sequenceId": "seq_main"
+      },
+      "output": {
+        "status": "committed",
+        "commitId": "c_b...",
+        "bpm": 128,
+        "beats": [
+          0.47,
+          0.94,
+          1.41
+        ]
+      }
+    }
+  },
+  {
+    "name": "recense_beat_effect",
+    "title": "Put an effect on the beats",
+    "category": "recense",
+    "access": "write",
+    "description": "Make an effect hit on the beats (found with recense_find_beats): shake, zoomPunch, flash, rgbSplit, glitch, strobe, letterbox, vhs. It goes on its own effect track (\"Shake on beat\") above the clips, so it hits everything below. every=2 hits every other beat; offset shifts which beat starts. Running it again for the same effect replaces its hits.",
+    "inputSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Project id (from list_projects)."
+        },
+        "sequenceId": {
+          "type": "string"
+        },
+        "effect": {
+          "type": "string",
+          "enum": [
+            "shake",
+            "zoomPunch",
+            "flash",
+            "rgbSplit",
+            "glitch",
+            "strobe",
+            "letterbox",
+            "vhs"
+          ]
+        },
+        "every": {
+          "default": 1,
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 32
+        },
+        "offset": {
+          "default": 0,
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 31
+        },
+        "from": {
+          "type": "number",
+          "minimum": 0
+        },
+        "to": {
+          "type": "number",
+          "minimum": 0
+        },
+        "length": {
+          "description": "Seconds per hit (default suits the effect)",
+          "type": "number",
+          "minimum": 0.03,
+          "maximum": 10
+        },
+        "amount": {
+          "description": "Strength 0..1",
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        }
+      },
+      "required": [
+        "projectId",
+        "sequenceId",
+        "effect"
+      ]
+    },
+    "outputSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "status": {
+          "type": "string",
+          "enum": [
+            "committed",
+            "proposed",
+            "none"
+          ],
+          "description": "committed: applied; proposed: waiting for the user's review; none: nothing needed changing"
+        },
+        "commitId": {
+          "type": "string"
+        },
+        "proposalId": {
+          "type": "string"
+        },
+        "changes": {
+          "description": "How many changes the proposal now holds",
+          "type": "number"
+        },
+        "hits": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "status",
+        "hits"
+      ],
+      "additionalProperties": false
+    },
+    "example": {
+      "input": {
+        "projectId": "prj_8Kq2...",
+        "sequenceId": "seq_main",
+        "effect": "zoomPunch",
+        "every": 2
+      },
+      "output": {
+        "status": "committed",
+        "commitId": "c_f...",
+        "hits": 16
+      }
+    }
+  },
+  {
+    "name": "recense_auto_edit",
+    "title": "Make an edit",
+    "category": "recense",
+    "access": "write",
+    "destructive": true,
+    "description": "Make a whole edit in one go: find the beats if needed, cut the shots (the given assets, or the videos and pictures already in the edit) to the music, filling the frame, and add a style's effects. Styles: hype (zoomPunch, flash, shake); smooth (letterbox, zoom-punch cuts); glitch (rgbSplit, glitch, vhs, glitch cuts); whip (shake, whip-left cuts); flashy (strobe, zoomPunch, flash cuts). It replaces the clips on the main video track and the style's effect tracks; everything can be undone and tweaked after.",
+    "inputSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Project id (from list_projects)."
+        },
+        "sequenceId": {
+          "type": "string"
+        },
+        "style": {
+          "default": "hype",
+          "type": "string",
+          "enum": [
+            "hype",
+            "smooth",
+            "glitch",
+            "whip",
+            "flashy"
+          ]
+        },
+        "assetIds": {
+          "description": "Shots, in order (default: what is in the edit)",
+          "maxItems": 200,
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "projectId",
+        "sequenceId"
+      ]
+    },
+    "outputSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "status": {
+          "type": "string",
+          "enum": [
+            "committed",
+            "proposed",
+            "none"
+          ],
+          "description": "committed: applied; proposed: waiting for the user's review; none: nothing needed changing"
+        },
+        "commitId": {
+          "type": "string"
+        },
+        "proposalId": {
+          "type": "string"
+        },
+        "changes": {
+          "description": "How many changes the proposal now holds",
+          "type": "number"
+        },
+        "cuts": {
+          "type": "number"
+        },
+        "effects": {
+          "type": "number"
+        },
+        "bpm": {
+          "type": [
+            "number",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "status",
+        "cuts",
+        "effects",
+        "bpm"
+      ],
+      "additionalProperties": false
+    },
+    "example": {
+      "input": {
+        "projectId": "prj_8Kq2...",
+        "sequenceId": "seq_main",
+        "style": "hype"
+      },
+      "output": {
+        "status": "committed",
+        "commitId": "c_e...",
+        "cuts": 24,
+        "effects": 40,
+        "bpm": 128
       }
     }
   }

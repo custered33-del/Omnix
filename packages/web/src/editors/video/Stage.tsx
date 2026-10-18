@@ -134,7 +134,7 @@ export function Stage({ ctx, handlers, editor, label, children }: { ctx: Timelin
         const now = performance.now();
         if (now - lastReport.current > 80 && p.x >= 0 && p.y >= 0 && p.x <= sp.width && p.y <= sp.height) {
           lastReport.current = now;
-          ctx.store.getState().reportLocation({ tool: sp.purpose === 'animation' ? 'animation' : 'video', nodeId: ctx.sequenceId, x: Math.round(p.x), y: Math.round(p.y), time: Math.round(time * 100) / 100 });
+          ctx.store.getState().reportLocation({ tool: sp.purpose, nodeId: ctx.sequenceId, x: Math.round(p.x), y: Math.round(p.y), time: Math.round(time * 100) / 100 });
         }
       }}
       onPointerUp={(e) => {
@@ -154,7 +154,7 @@ export function Stage({ ctx, handlers, editor, label, children }: { ctx: Timelin
       <PinLayer
         label={t('comments.title')}
         pins={pinComments.map((c) => ({ comment: c, x: geo.ox + c.props.anchor.x! * k, y: geo.oy + c.props.anchor.y! * k }))}
-        composer={composer ? { x: geo.ox + composer.x * k, y: geo.oy + composer.y * k, anchor: { tool: sp.purpose === 'animation' ? 'animation' : 'video', nodeId: ctx.sequenceId, x: composer.x, y: composer.y, time: composer.time } } : null}
+        composer={composer ? { x: geo.ox + composer.x * k, y: geo.oy + composer.y * k, anchor: { tool: sp.purpose, nodeId: ctx.sequenceId, x: composer.x, y: composer.y, time: composer.time } } : null}
         onCompose={() => setComposer(null)}
         onCancelCompose={() => setComposer(null)}
       />

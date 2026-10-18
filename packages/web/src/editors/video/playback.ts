@@ -156,7 +156,7 @@ export class PlaybackEngine {
       }
     }
     st.set({ time: t });
-    if (sp.purpose === 'video') this.syncMedia(state, playbackTime('once', t, end));
+    if (sp.purpose !== 'animation') this.syncMedia(state, playbackTime('once', t, end));
   }
 
   /** Bring audio voices and video elements in line with sequence time t. */

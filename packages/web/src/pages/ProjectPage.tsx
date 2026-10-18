@@ -44,7 +44,7 @@ export function toolOfDoc(n: SceneNode): ToolKind | null {
     case 'canvas':
       return 'image';
     case 'sequence':
-      return (n as SceneNode<'sequence'>).props.purpose === 'animation' ? 'animation' : 'video';
+      return (n as SceneNode<'sequence'>).props.purpose;
     case 'codeWorkspace':
       return 'code';
     case 'document':
@@ -246,7 +246,7 @@ function ProjectView({ store }: { store: ProjectStore }) {
               label={t('project.addDocument')}
               items={[
                 { label: t('project.addDocument'), heading: true },
-                ...(['image', 'video', 'animation', 'code', 'document', 'slides'] as ToolKind[]).map((k) => ({ label: t(`tools.${k}Long`), icon: <ToolIcon tool={k} />, onSelect: () => addDocument(k) })),
+                ...(['image', 'video', 'recense', 'animation', 'code', 'document', 'slides'] as ToolKind[]).map((k) => ({ label: t(`tools.${k}Long`), icon: <ToolIcon tool={k} />, onSelect: () => addDocument(k) })),
               ]}
             >
               <Plus />
@@ -337,7 +337,7 @@ function ProjectView({ store }: { store: ProjectStore }) {
             {active && <h2 className="sr-only">{docName(active)}</h2>}
             <Suspense fallback={<div style={{ display: 'grid', placeItems: 'center', height: '100%' }}><Spinner /></div>}>
               {active && tool === 'image' && <ImageEditor key={active.id} canvasId={active.id} />}
-              {active && (tool === 'video' || tool === 'animation') && <TimelineEditor key={active.id} sequenceId={active.id} />}
+              {active && (tool === 'video' || tool === 'recense' || tool === 'animation') && <TimelineEditor key={active.id} sequenceId={active.id} />}
               {active && tool === 'code' && <CodeEditor key={active.id} workspaceId={active.id} />}
               {active && tool === 'document' && <DocumentEditor key={active.id} documentId={active.id} />}
               {active && tool === 'slides' && <SlidesEditor key={active.id} deckId={active.id} />}

@@ -238,8 +238,8 @@ export type PlaybackMode = 'once' | 'loop' | 'pingpong';
 
 export interface SequenceProps {
   name: string;
-  /** Video and animation share one timeline engine; this picks the editor UI. */
-  purpose: 'video' | 'animation';
+  /** Video, Recense (edits) and animation share one timeline engine; this picks the editor UI. */
+  purpose: 'video' | 'recense' | 'animation';
   width: number;
   height: number;
   fps: number;
@@ -247,6 +247,10 @@ export interface SequenceProps {
   duration: number;
   background: Color;
   playback: PlaybackMode;
+  /** Beat times in seconds (from the music), shown on the timeline and used to place cuts and effects. */
+  beats?: number[];
+  /** Tempo of the music, when known. */
+  bpm?: number | null;
 }
 
 export type TrackType = 'video' | 'audio' | 'title' | 'effect' | 'animation';
@@ -271,7 +275,25 @@ export interface TrackProps {
   ducking: DuckingSettings;
 }
 
-export type TransitionKind = 'crossfade' | 'dip-to-black' | 'wipe-left' | 'wipe-right' | 'slide-left' | 'zoom';
+export type TransitionKind =
+  | 'crossfade'
+  | 'dip-to-black'
+  | 'wipe-left'
+  | 'wipe-right'
+  | 'slide-left'
+  | 'zoom'
+  // Edit transitions (Recense): fast, punchy cuts.
+  | 'whip-left'
+  | 'whip-right'
+  | 'zoom-punch'
+  | 'spin'
+  | 'flash'
+  | 'glitch';
+export const TRANSITION_KINDS: readonly TransitionKind[] = ['crossfade', 'dip-to-black', 'wipe-left', 'wipe-right', 'slide-left', 'zoom', 'whip-left', 'whip-right', 'zoom-punch', 'spin', 'flash', 'glitch'];
+
+/** Moving effects for edits. They change over the clip's time (a shake shakes, a flash fades). */
+export type EditFxKind = 'shake' | 'zoomPunch' | 'flash' | 'rgbSplit' | 'glitch' | 'strobe' | 'letterbox' | 'vhs';
+export const EDIT_FX_KINDS: readonly EditFxKind[] = ['shake', 'zoomPunch', 'flash', 'rgbSplit', 'glitch', 'strobe', 'letterbox', 'vhs'];
 
 export interface Transition {
   kind: TransitionKind;
@@ -281,7 +303,7 @@ export interface Transition {
 
 export interface ClipEffect {
   id: string;
-  effect: FilterKind | 'colorGrade';
+  effect: FilterKind | 'colorGrade' | EditFxKind;
   params: Record<string, number>;
   enabled: boolean;
   /** colorGrade: an optional .cube LUT asset (a look, for example from a style reference). */
@@ -728,6 +750,7 @@ export const ALLOWED_CHILDREN: Record<NodeType, readonly NodeType[]> = {
 export const TOOL_ROOT_TYPE: Record<ToolKind, NodeType> = {
   image: 'canvas',
   video: 'sequence',
+  recense: 'sequence',
   animation: 'sequence',
   code: 'codeWorkspace',
   document: 'document',

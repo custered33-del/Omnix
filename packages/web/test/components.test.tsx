@@ -102,7 +102,7 @@ describe('Dashboard', () => {
     );
     expect(await screen.findByText('Launch teaser')).toBeInTheDocument();
     expect(screen.getByText(/Good to see you, Seb/)).toBeInTheDocument();
-    for (const name of ['Image editor', 'Video editor', 'Animation maker', 'Code Grounds', 'Document', 'Slideshow']) expect(screen.getByRole('button', { name: new RegExp(name) })).toBeInTheDocument();
+    for (const name of ['Image editor', 'Video editor', 'Recense', 'Animation maker', 'Code Grounds', 'Document', 'Slideshow']) expect(screen.getByRole('button', { name: new RegExp(name) })).toBeInTheDocument();
     // No chat box: the dashboard is calm by design.
     expect(screen.queryByRole('textbox', { name: /chat|message|ask/i })).toBeNull();
   });

@@ -160,7 +160,7 @@ export function slidesFromDocumentOps(state: ProjectState, documentId: string, d
 /** Change a video's frame size, filling around each shot with a blurred, darker copy of it. */
 export async function reframeOps(services: Services, state: ProjectState, sequenceId: string, width: number, height: number, fill: 'blur' | 'none'): Promise<{ ops: Operation[]; fillClips: number }> {
   const seq = state.nodes[sequenceId] as SceneNode<'sequence'> | undefined;
-  if (!seq || seq.type !== 'sequence' || seq.props.purpose !== 'video') throw new Error('sequenceId is not a video sequence.');
+  if (!seq || seq.type !== 'sequence' || seq.props.purpose === 'animation') throw new Error('sequenceId is not a video sequence.');
   const ops: Operation[] = [{ kind: 'update', id: seq.id, set: { width, height } }];
   let n = 0;
   if (fill === 'blur') {

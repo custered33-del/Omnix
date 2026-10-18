@@ -11,7 +11,7 @@ import { ASSET_MIME } from './Timeline.js';
 import { addAssetClip, addTitle, type TimelineCtx } from './timelineOps.js';
 
 /** Media used by this project, ready to drag onto the timeline. */
-export function MediaBin({ ctx, onCaptions }: { ctx: TimelineCtx; onCaptions: () => void }) {
+export function MediaBin({ ctx, onCaptions, top }: { ctx: TimelineCtx; onCaptions: () => void; top?: React.ReactNode }) {
   const projectId = ctx.store.getState().projectId;
   const [assets, setAssets] = useState<AssetSummary[] | null>(null);
   const [picker, setPicker] = useState(false);
@@ -78,6 +78,7 @@ export function MediaBin({ ctx, onCaptions }: { ctx: TimelineCtx; onCaptions: ()
         )}
         <input ref={fileRef} type="file" hidden multiple accept="video/*,audio/*,image/*" onChange={(e) => e.target.files && void upload(e.target.files)} />
       </div>
+      {top}
       {canEdit && (
         <div className="col" style={{ gap: 6, padding: '8px 12px' }}>
           <button className="btn btn-sm" onClick={() => addTitle(ctx)}>

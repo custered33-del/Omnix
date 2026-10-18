@@ -270,6 +270,35 @@ describe('sequence frames', () => {
     expect(px(renderSequenceFrame(h, state, seqId, 10), 80, 45)).toEqual([0, 0, 0, 255]);
   });
 
+  it('draws every edit transition and moving effect (Recense)', () => {
+    let { state, seqId, videoId } = videoProject();
+    // A half-red, half-green picture so moves and splits change pixels.
+    const pic = createCanvas(16, 9);
+    const g = pic.getContext('2d');
+    g.fillStyle = '#ff0000';
+    g.fillRect(0, 0, 8, 9);
+    g.fillStyle = '#00ff00';
+    g.fillRect(8, 0, 8, 9);
+    const h = host({ pic: pic as unknown as Drawable, blue: solid(16, 9, '#0000ff') });
+    const a = makeNode('clip', { assetId: 'pic', start: 0, in: 0, out: 2 });
+    const b = makeNode('clip', { assetId: 'blue', start: 2, in: 0, out: 2 });
+    state = commit(state, { kind: 'create', parentId: videoId, nodes: [a] });
+    state = commit(state, { kind: 'create', parentId: videoId, nodes: [b] });
+    const plain = readRaster(renderSequenceFrame(h, state, seqId, 1.95)).data.join();
+    for (const kind of ['whip-left', 'whip-right', 'zoom-punch', 'spin', 'flash', 'glitch'] as const) {
+      const s = commit(state, { kind: 'update', id: b.id, set: { transitionIn: { kind, duration: 0.4, easing: 'linear' } } });
+      const mid = readRaster(renderSequenceFrame(h, s, seqId, 2.15)).data.join();
+      expect(mid, kind).not.toBe(readRaster(renderSequenceFrame(h, s, seqId, 2.6)).data.join());
+    }
+    const fxTrack = makeNode('track', { name: 'Effects', trackType: 'effect' });
+    state = commit(state, { kind: 'create', parentId: seqId, index: 0, nodes: [fxTrack] });
+    for (const effect of ['shake', 'zoomPunch', 'flash', 'rgbSplit', 'glitch', 'strobe', 'letterbox', 'vhs'] as const) {
+      const fx = makeNode('clip', { name: effect, start: 1.9, in: 0, out: 0.5, effects: [{ id: 'fx1', effect, params: { amount: 1 }, enabled: true }] });
+      const s = commit(state, { kind: 'create', parentId: fxTrack.id, nodes: [fx] });
+      expect(readRaster(renderSequenceFrame(h, s, seqId, 1.95)).data.join(), effect).not.toBe(plain);
+    }
+  });
+
   it('applies keyframed opacity and draws titles on top', () => {
     let { state, seqId, videoId, titlesId } = videoProject();
     const a = makeNode('clip', {

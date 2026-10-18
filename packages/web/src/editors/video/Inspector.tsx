@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useStore } from 'zustand';
 import { Diamond, ChevronLeft, ChevronRight, Plus, Trash2, Eye, EyeOff, Sparkles, SquareDashed } from 'lucide-react';
 import type { AnimatableProp, ClipEffect, ClipProps, Easing, FilterKind, Keyframe, SceneNode, Transition, TransitionKind } from '@omnix/core';
-import { clipPropsAt, setSpeedOp, tracksOf, upsertKeyframe } from '@omnix/core';
+import { EDIT_FX_DEFAULTS, EDIT_FX_KINDS, TRANSITION_KINDS, clipPropsAt, isEditFx, setSpeedOp, tracksOf, upsertKeyframe } from '@omnix/core';
 import { COLOR_GRADE_DEFAULTS, FILTER_DEFAULTS } from '@omnix/imaging';
 import { animLayerTransform } from '@omnix/render';
 import { useProject } from '../../state/project.js';
@@ -17,7 +17,7 @@ import { tryOp, type TimelineCtx } from './timelineOps.js';
 import { activeAnimLayer } from '../animation/useAnimationStage.js';
 import { PresetMenu } from '../../components/PresetMenu.js';
 
-const TRANSITIONS: (TransitionKind | 'none')[] = ['none', 'crossfade', 'dip-to-black', 'wipe-left', 'wipe-right', 'slide-left', 'zoom'];
+const TRANSITIONS: (TransitionKind | 'none')[] = ['none', ...TRANSITION_KINDS];
 const FILTERS: FilterKind[] = ['gaussianBlur', 'sharpen', 'noise', 'pixelate', 'grayscale', 'sepia', 'vignette', 'emboss', 'edgeDetect'];
 
 const RAMPS: Record<string, { label: string; ramp: { t: number; speed: number }[] | null }> = {
@@ -376,6 +376,11 @@ function TitleSection({ ctx, clip }: { ctx: TimelineCtx; clip: SceneNode<'clip'>
 }
 
 function effectRange(effect: ClipEffect['effect'], k: string): { min: number; max: number; step: number } {
+  if (isEditFx(effect)) {
+    if (k === 'speed') return { min: 1, max: 40, step: 1 };
+    if (k === 'rate') return { min: 1, max: 30, step: 1 };
+    return { min: 0, max: 1, step: 0.05 };
+  }
   if (effect === 'colorGrade') {
     if (k === 'exposure') return { min: -3, max: 3, step: 0.05 };
     if (k === 'intensity') return { min: 0, max: 1, step: 0.05 };
@@ -402,6 +407,8 @@ function EffectsSection({ ctx, clip }: { ctx: TimelineCtx; clip: SceneNode<'clip
           items={[
             { label: t('filters.colorGrade'), onSelect: () => s.commit({ kind: 'listInsert', id: clip.id, prop: 'effects', items: [{ id: `fx_${Math.random().toString(36).slice(2, 10)}`, effect: 'colorGrade', params: { ...COLOR_GRADE_DEFAULTS }, enabled: true }] }, `Add ${t('filters.colorGrade')}`) },
             ...FILTERS.map((f) => ({ label: t(`filters.${f}`), onSelect: () => s.commit({ kind: 'listInsert', id: clip.id, prop: 'effects', items: [{ id: `fx_${Math.random().toString(36).slice(2, 10)}`, effect: f, params: { ...FILTER_DEFAULTS[f] }, enabled: true }] }, `Add ${t(`filters.${f}`)}`) })),
+            // Moving effects for edits (they play over the clip's length).
+            ...EDIT_FX_KINDS.map((f) => ({ label: `${t(`filters.${f}`)} (moving)`, onSelect: () => s.commit({ kind: 'listInsert', id: clip.id, prop: 'effects', items: [{ id: `fx_${Math.random().toString(36).slice(2, 10)}`, effect: f, params: { ...EDIT_FX_DEFAULTS[f] }, enabled: true }] }, `Add ${t(`filters.${f}`)}`) })),
           ]}
         >
           <Plus />
@@ -427,7 +434,7 @@ function EffectsSection({ ctx, clip }: { ctx: TimelineCtx; clip: SceneNode<'clip
               <NumberField
                 key={k}
                 compact
-                label={fx.effect === 'colorGrade' ? t(`video.grade.${k as 'exposure'}`) : k === 'amount' ? t('adjust.amount') : k === 'radius' ? 'Radius' : k === 'size' ? t('image.size') : k}
+                label={fx.effect === 'colorGrade' ? t(`video.grade.${k as 'exposure'}`) : k === 'amount' ? t('adjust.amount') : k === 'speed' ? 'Speed' : k === 'rate' ? 'Rate' : k === 'radius' ? 'Radius' : k === 'size' ? t('image.size') : k}
                 value={val}
                 {...effectRange(fx.effect, k)}
                 onInput={(x) => s.setTransient(clip.id, { effects: effects.map((e) => (e.id === fx.id ? { ...e, params: { ...e.params, [k]: x } } : e)) })}

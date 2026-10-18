@@ -22,7 +22,7 @@ const ClientMessage = z.discriminatedUnion('type', [
     projectId: z.string(),
     location: z
       .object({
-        tool: z.enum(['image', 'video', 'animation', 'code', 'document', 'slides', 'dashboard']),
+        tool: z.enum(['image', 'video', 'recense', 'animation', 'code', 'document', 'slides', 'dashboard']),
         nodeId: z.string().optional(),
         x: z.number().optional(),
         y: z.number().optional(),

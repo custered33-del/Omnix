@@ -40,7 +40,7 @@ export const projectReadTools = [
     name: 'get_project',
     title: 'Get project overview',
     description:
-      'Read a whole project across all six tools at once: every canvas (layers), sequence (tracks and clips), code workspace (files, notebook cells), document (outline) and deck (slides), plus session-memory notes. Start here before editing.',
+      'Read a whole project across all seven tools at once: every canvas (layers), sequence (tracks and clips), code workspace (files, notebook cells), document (outline) and deck (slides), plus session-memory notes. Start here before editing.',
     category: 'project',
     access: 'read',
     input: { projectId: zProjectId, includeTree: z.boolean().optional().describe('Also return the full node tree as text (ids and labels).') },
@@ -159,14 +159,14 @@ export const projectReadTools = [
   }),
 ];
 
-const DOC_TYPE = { image: 'canvas', video: 'sequence', animation: 'sequence', code: 'codeWorkspace', document: 'document', slides: 'deck' } as const;
+const DOC_TYPE = { image: 'canvas', video: 'sequence', recense: 'sequence', animation: 'sequence', code: 'codeWorkspace', document: 'document', slides: 'deck' } as const;
 
 export const projectWriteTools = [
   defineTool({
     name: 'create_project',
     title: 'Create a project',
     description:
-      'Start a new project for the user in one of the six tools (image, video, animation, code, document, slides), or from a template (templateId from list_presets with kind "template"; the template decides the tool). Other documents can be added to it later with add_document. The new project allows AI from the start because the user asked for it through you; it is added to this connection automatically.',
+      'Start a new project for the user in one of the seven tools (image, video, recense for TikTok-style edits, animation, code, document, slides), or from a template (templateId from list_presets with kind "template"; the template decides the tool). Other documents can be added to it later with add_document. The new project allows AI from the start because the user asked for it through you; it is added to this connection automatically.',
     category: 'project',
     access: 'write',
     input: {

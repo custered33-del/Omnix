@@ -49,7 +49,7 @@ export function collectAssetNeeds(state: ProjectState, rootId: string, time?: nu
 export function primaryDocument(state: ProjectState): SceneNode | null {
   const root = rootNode(state);
   const tool = root.props.primaryTool;
-  const typeFor: Record<ToolKind, string> = { image: 'canvas', video: 'sequence', animation: 'sequence', code: 'codeWorkspace', document: 'document', slides: 'deck' };
+  const typeFor: Record<ToolKind, string> = { image: 'canvas', video: 'sequence', recense: 'sequence', animation: 'sequence', code: 'codeWorkspace', document: 'document', slides: 'deck' };
   const docs = childrenOf(state, root.id).filter((c) => c.type === typeFor[tool]);
   return docs[0] ?? childrenOf(state, root.id).find((c) => Object.values(typeFor).includes(c.type)) ?? null;
 }

@@ -296,12 +296,12 @@
   padding: 10px 0;
   border: none;
   background: none;
-  color: #a0a4ad;
+  color: #6b7280;
   cursor: text;
   font-size: 14px;
 }
 .doc-append:hover {
-  color: #6b7280;
+  color: #464b57;
 }
 .doc-margin {
   width: 300px;
