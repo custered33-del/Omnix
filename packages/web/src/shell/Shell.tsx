@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
-import { Search, Smartphone, HelpCircle, Settings, LogOut, Keyboard, Sparkles, LifeBuoy, Sun, Moon, Contrast, Monitor } from 'lucide-react';
+import { Home, FolderOpen, Bookmark, Activity, Search, Smartphone, HelpCircle, Settings, LogOut, Keyboard, Sparkles, LifeBuoy, Sun, Moon, Contrast, Monitor } from 'lucide-react';
 import { useAuth } from '../state/auth.js';
 import { realtime } from '../state/realtime.js';
 import { useCommandStore, useCommands } from '../state/commands.js';
@@ -143,6 +143,25 @@ export function Shell() {
       <main id="main" className="grow" tabIndex={-1}>
         <Outlet />
       </main>
+      {/* Phones: the main places as a tab bar at the bottom, in thumb reach. */}
+      <nav className="phone-tabs" aria-label="Main (phone)">
+        <NavLink to="/" end>
+          <Home aria-hidden="true" />
+          {t('nav.home')}
+        </NavLink>
+        <NavLink to="/assets">
+          <FolderOpen aria-hidden="true" />
+          {t('nav.assets')}
+        </NavLink>
+        <NavLink to="/presets">
+          <Bookmark aria-hidden="true" />
+          {t('nav.presets')}
+        </NavLink>
+        <NavLink to="/activity">
+          <Activity aria-hidden="true" />
+          {t('nav.activity')}
+        </NavLink>
+      </nav>
     </div>
   );
 }

@@ -1,7 +1,7 @@
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useStore } from 'zustand';
-import { ArrowLeft, Check, LoaderCircle, Undo2, Redo2, History, Sparkles, NotebookPen, Download, Settings2, Plus, Activity as ActivityIcon, Eye, X, Bookmark, Wand2, Bot, MessageSquare, MessageSquarePlus } from 'lucide-react';
+import { ArrowLeft, MoreHorizontal, PanelLeft, PanelRight, Check, LoaderCircle, Undo2, Redo2, History, Sparkles, NotebookPen, Download, Settings2, Plus, Activity as ActivityIcon, Eye, X, Bookmark, Wand2, Bot, MessageSquare, MessageSquarePlus } from 'lucide-react';
 import { primaryDocumentNodes, childrenOf, type SceneNode, type ToolKind } from '@omnix/core';
 import { createProjectStore, ProjectContext, useProject, type ProjectStore } from '../state/project.js';
 import { BrowserRenderHost } from '../render/browserHost.js';
@@ -28,6 +28,7 @@ import { PluginsPanel } from '../components/Plugins.js';
 import { allComments } from '../components/CommentPins.js';
 import { GenerativeDialog } from '../components/GenerativeDialog.js';
 import { toast } from '../ui/toast.js';
+import { usePhone, usePhoneSheet } from '../ui/phone.js';
 import { plural, t } from '../i18n/index.js';
 import { post } from '../lib/api.js';
 
@@ -38,6 +39,17 @@ const DocumentEditor = lazy(() => import('../editors/document/DocumentEditor.js'
 const SlidesEditor = lazy(() => import('../editors/slides/SlidesEditor.js').then((m) => ({ default: m.SlidesEditor })));
 
 type Panel = 'proposals' | 'history' | 'notes' | 'activity' | 'runs' | 'comments' | 'plugins' | null;
+
+/** The panels each editor shows as bottom sheets on a phone (its left and right side panels). */
+const PHONE_PANELS: Record<ToolKind, { left?: string; right?: string }> = {
+  image: { right: 'Layers' },
+  video: { left: 'Media', right: 'Clip' },
+  recense: { left: 'Edit', right: 'Clip' },
+  animation: { left: 'Layers', right: 'Properties' },
+  code: { left: 'Files', right: 'Run' },
+  document: { left: 'Outline' },
+  slides: { left: 'Slides', right: 'Design' },
+};
 
 export function toolOfDoc(n: SceneNode): ToolKind | null {
   switch (n.type) {
@@ -185,6 +197,10 @@ function ProjectView({ store }: { store: ProjectStore }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [params, state]);
 
+  const phone = usePhone();
+  const { sheet, setSheet } = usePhoneSheet();
+  // A new document starts with its panels closed.
+  useEffect(() => setSheet(null), [activeDocId, setSheet]);
   const docs = useMemo(() => (state ? childrenOf(state, state.rootId).filter((n) => toolOfDoc(n)) : []), [state]);
 
   if (status === 'loading') {
@@ -222,14 +238,14 @@ function ProjectView({ store }: { store: ProjectStore }) {
   const others = Object.values(presence);
   const openComments = allComments(state).filter((c) => !c.props.resolved).length;
   return (
-    <div className="workspace">
+    <div className="workspace" data-sheet={phone ? (sheet ?? undefined) : undefined}>
       <header className="workbar">
         <IconButton label={t('nav.home')} onClick={() => navigate('/')}>
           <ArrowLeft />
         </IconButton>
         <h1 className="sr-only">{meta.name}</h1>
         <ProjectTitle name={meta.name} editable={meta.role !== 'viewer'} onRename={(name) => void api.updateMeta({ name })} />
-        <nav className="doc-tabs" aria-label={t('project.documents')}>
+        <nav className="doc-tabs desk-only" aria-label={t('project.documents')}>
           <div className="doc-tabs-list" role="tablist" aria-label={t('project.documents')}>
           {docs.map((d) => {
             const k = toolOfDoc(d)!;
@@ -260,14 +276,14 @@ function ProjectView({ store }: { store: ProjectStore }) {
           <span className="label-wide">{meta.role === 'viewer' ? t('project.readOnly') : pending ? t('project.saving') : t('project.saved')}</span>
         </span>
         {others.length > 0 && (
-          <div className="presence" aria-label="People here">
+          <div className="presence desk-only" aria-label="People here">
             {others.slice(0, 5).map((p) => (
               <Avatar key={p.clientId} name={p.author.name} color={p.color} ai={p.author.type === 'ai'} />
             ))}
           </div>
         )}
         {!meta.aiConsent && (
-          <button className="badge" onClick={() => setSettingsOpen(true)} style={{ border: 'none', cursor: 'pointer', whiteSpace: 'nowrap' }} title={t('claude.aiOff')}>
+          <button className="badge desk-only" onClick={() => setSettingsOpen(true)} style={{ border: 'none', cursor: 'pointer', whiteSpace: 'nowrap' }} title={t('claude.aiOff')}>
             {t('claude.aiOffShort')}
           </button>
         )}
@@ -278,37 +294,57 @@ function ProjectView({ store }: { store: ProjectStore }) {
           <Redo2 />
         </IconButton>
         {meta.role !== 'viewer' && (
-          <button className="btn btn-sm btn-ghost command-trigger" onClick={() => dialogs.openCommand()} title={`${t('commands.title')} (${formatShortcut('mod+shift+k')})`}>
+          <button className="btn btn-sm btn-ghost command-trigger desk-only" onClick={() => dialogs.openCommand()} title={`${t('commands.title')} (${formatShortcut('mod+shift+k')})`}>
             <Wand2 /> <span className="hide-narrow">{t('commands.open')}</span>
           </button>
         )}
-        <button className={`btn btn-sm ${proposals.length ? 'btn-ai' : 'btn-ghost'}`} onClick={() => setPanel(panel === 'proposals' ? null : 'proposals')} aria-pressed={panel === 'proposals'} aria-label={`${t('project.proposals')} (${proposals.length})`}>
+        <button className={`btn btn-sm desk-only ${proposals.length ? 'btn-ai' : 'btn-ghost'}`} onClick={() => setPanel(panel === 'proposals' ? null : 'proposals')} aria-pressed={panel === 'proposals'} aria-label={`${t('project.proposals')} (${proposals.length})`}>
           <Sparkles />
           {proposals.length > 0 && <span className="tabular">{proposals.length}</span>}
         </button>
-        <button className={`btn btn-sm ${waitingRuns ? 'btn-ai' : 'btn-ghost'}`} onClick={() => setPanel(panel === 'runs' ? null : 'runs')} aria-pressed={panel === 'runs'} aria-label={`${t('agent.runs')}${waitingRuns ? ` (${t('agent.waiting', { n: waitingRuns })})` : activeRuns ? ` (${t('agent.active', { n: activeRuns })})` : ''}`}>
+        <button className={`btn btn-sm desk-only ${waitingRuns ? 'btn-ai' : 'btn-ghost'}`} onClick={() => setPanel(panel === 'runs' ? null : 'runs')} aria-pressed={panel === 'runs'} aria-label={`${t('agent.runs')}${waitingRuns ? ` (${t('agent.waiting', { n: waitingRuns })})` : activeRuns ? ` (${t('agent.active', { n: activeRuns })})` : ''}`}>
           <Bot />
           {(waitingRuns > 0 || activeRuns > 0) && <span className="tabular">{waitingRuns || activeRuns}</span>}
         </button>
-        <button className="btn btn-sm btn-ghost" onClick={() => setPanel(panel === 'comments' ? null : 'comments')} aria-pressed={panel === 'comments'} aria-label={`${t('comments.title')} (${plural('comments.count', openComments)})`} title={t('comments.title')}>
+        <button className="btn btn-sm btn-ghost desk-only" onClick={() => setPanel(panel === 'comments' ? null : 'comments')} aria-pressed={panel === 'comments'} aria-label={`${t('comments.title')} (${plural('comments.count', openComments)})`} title={t('comments.title')}>
           <MessageSquare />
           {openComments > 0 && <span className="tabular">{openComments}</span>}
         </button>
-        <IconButton label={t('project.history')} pressed={panel === 'history'} onClick={() => setPanel(panel === 'history' ? null : 'history')}>
+        <IconButton className="desk-only" label={t('project.history')} pressed={panel === 'history'} onClick={() => setPanel(panel === 'history' ? null : 'history')}>
           <History />
         </IconButton>
-        <IconButton label={t('project.notes')} pressed={panel === 'notes'} onClick={() => setPanel(panel === 'notes' ? null : 'notes')}>
+        <IconButton className="desk-only" label={t('project.notes')} pressed={panel === 'notes'} onClick={() => setPanel(panel === 'notes' ? null : 'notes')}>
           <NotebookPen />
         </IconButton>
-        <IconButton label={t('activity.title')} pressed={panel === 'activity'} onClick={() => setPanel(panel === 'activity' ? null : 'activity')}>
+        <IconButton className="desk-only" label={t('activity.title')} pressed={panel === 'activity'} onClick={() => setPanel(panel === 'activity' ? null : 'activity')}>
           <ActivityIcon />
         </IconButton>
-        <IconButton label={t('project.export')} onClick={() => setExportOpen(true)}>
+        <IconButton className="desk-only" label={t('project.export')} onClick={() => setExportOpen(true)}>
           <Download />
         </IconButton>
-        <IconButton label={t('project.settings')} onClick={() => setSettingsOpen(true)}>
+        <IconButton className="desk-only" label={t('project.settings')} onClick={() => setSettingsOpen(true)}>
           <Settings2 />
         </IconButton>
+        {/* On a phone everything above lives in one menu. */}
+        <MenuButton
+          className="icon-btn phone-only"
+          label="More"
+          items={() => [
+            ...(docs.length > 1 ? [{ label: t('project.documents'), heading: true }, ...docs.map((d) => ({ label: `${d.id === activeDocId ? '✓ ' : ''}${docName(d)}`, icon: <ToolIcon tool={toolOfDoc(d)!} />, onSelect: () => api.setActiveDoc(d.id) })), { label: '', separator: true }] : []),
+            ...(meta.role !== 'viewer' ? [{ label: t('commands.open'), icon: <Wand2 />, onSelect: () => dialogs.openCommand() }] : []),
+            { label: `${t('project.proposals')}${proposals.length ? ` (${proposals.length})` : ''}`, icon: <Sparkles />, onSelect: () => setPanel('proposals') },
+            { label: t('agent.runs'), icon: <Bot />, onSelect: () => setPanel('runs') },
+            { label: `${t('comments.title')}${openComments ? ` (${openComments})` : ''}`, icon: <MessageSquare />, onSelect: () => setPanel('comments') },
+            { label: t('project.history'), icon: <History />, onSelect: () => setPanel('history') },
+            { label: t('project.notes'), icon: <NotebookPen />, onSelect: () => setPanel('notes') },
+            { label: t('activity.title'), icon: <ActivityIcon />, onSelect: () => setPanel('activity') },
+            { label: '', separator: true },
+            { label: t('project.export'), icon: <Download />, onSelect: () => setExportOpen(true) },
+            { label: t('project.settings'), icon: <Settings2 />, onSelect: () => setSettingsOpen(true) },
+          ]}
+        >
+          <MoreHorizontal />
+        </MenuButton>
       </header>
       <div className="workarea">
         <div style={{ display: 'flex', flexDirection: 'column', minHeight: 0, minWidth: 0 }}>
@@ -388,6 +424,33 @@ function ProjectView({ store }: { store: ProjectStore }) {
           </aside>
         )}
       </div>
+      {phone && sheet && <div className="phone-scrim" onClick={() => setSheet(null)} aria-hidden="true" />}
+      {phone && tool && (
+        <nav className="phone-bar" aria-label="Panels">
+          {PHONE_PANELS[tool].left && (
+            <button aria-pressed={sheet === 'left'} onClick={() => setSheet(sheet === 'left' ? null : 'left')}>
+              <PanelLeft aria-hidden="true" />
+              {PHONE_PANELS[tool].left}
+            </button>
+          )}
+          {PHONE_PANELS[tool].right && (
+            <button aria-pressed={sheet === 'right'} onClick={() => setSheet(sheet === 'right' ? null : 'right')}>
+              <PanelRight aria-hidden="true" />
+              {PHONE_PANELS[tool].right}
+            </button>
+          )}
+          {meta.role !== 'viewer' && (
+            <button onClick={() => (setSheet(null), dialogs.openCommand())}>
+              <Wand2 aria-hidden="true" />
+              Ask AI
+            </button>
+          )}
+          <button aria-pressed={panel === 'comments'} onClick={() => (setSheet(null), setPanel(panel === 'comments' ? null : 'comments'))}>
+            <MessageSquare aria-hidden="true" />
+            {t('comments.title')}
+          </button>
+        </nav>
+      )}
       {exportOpen && active && <ExportDialog node={active} onClose={() => setExportOpen(false)} />}
       {dialogs.command && <CommandBar key={dialogs.command.text} initialText={dialogs.command.text} autoRun={dialogs.command.autoRun} onClose={() => dialogs.close('command')} onReview={review} />}
       {dialogs.style && <StyleDialog targetId={dialogs.style.targetId} onClose={() => dialogs.close('style')} />}

@@ -386,7 +386,7 @@ function ToolOptions({ ed, ctx }: { ed: ImageEditorStore; ctx: A.ImageCtx }) {
         >
           {t('image.align')}
         </MenuButton>
-        <span className="muted hint-inline">Drag to move · corner handles resize (Shift keeps proportions) · arrows nudge</span>
+        <span className="muted hint-inline desk-only">Drag to move · corner handles resize (Shift keeps proportions) · arrows nudge</span>
       </div>
     );
   }

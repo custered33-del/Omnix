@@ -226,7 +226,7 @@ function Transport({ ctx }: { ctx: TimelineCtx }) {
       <span className="timecode" aria-live="off" aria-label={`Time ${timecode(time, fps)}`}>
         {timecode(time, fps)}
       </span>
-      <span className="muted tabular" style={{ fontSize: 'var(--fs-sm)' }}>
+      <span className="muted tabular desk-only" style={{ fontSize: 'var(--fs-sm)' }}>
         / {timecode(end, fps)}
       </span>
       {seq.props.purpose === 'animation' && (
@@ -278,7 +278,7 @@ function TimelineToolbar({ ctx, onCaptions }: { ctx: TimelineCtx; onCaptions: ()
           </button>
         ))}
       </div>
-      <span className="muted" style={{ fontSize: 'var(--fs-xs)', minWidth: 120 }}>
+      <span className="muted desk-only" style={{ fontSize: 'var(--fs-xs)', minWidth: 120 }}>
         {mode === 'select' && 'Drag clips, trim edges'}
         {mode === 'ripple' && 'Trims push later clips'}
         {mode === 'roll' && 'Drag a cut between clips'}

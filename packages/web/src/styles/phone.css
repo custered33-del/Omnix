@@ -1,0 +1,327 @@
+/*
+ * Phone layout. On a narrow screen each editor shows one main area; its side panels slide up
+ * from the bottom (from the bar at the bottom of the screen), and controls are big enough for a thumb.
+ * Editor rules are prefixed with .workspace so they win over each editor's own stylesheet.
+ */
+.phone-only,
+.phone-tabs,
+.phone-bar {
+  display: none;
+}
+
+@media (max-width: 700px) {
+  html,
+  body {
+    overflow-x: hidden;
+  }
+  .desk-only {
+    display: none !important;
+  }
+  .phone-only {
+    display: inline-flex;
+  }
+
+  /* ---------- Home, library, presets, activity ---------- */
+  .topbar {
+    padding: 0 var(--sp-3);
+    gap: var(--sp-2);
+  }
+  .topnav {
+    display: none;
+  }
+  .palette-btn .muted {
+    display: none;
+  }
+  .page {
+    padding: var(--sp-5) var(--sp-4) calc(84px + env(safe-area-inset-bottom));
+  }
+  .page h1 {
+    font-size: 26px;
+  }
+  .create-row {
+    grid-template-columns: 1fr 1fr;
+    gap: var(--sp-2);
+  }
+  .create-tile {
+    min-width: 0;
+    padding: var(--sp-3);
+  }
+  .phone-tabs {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 60;
+    padding: 6px 4px calc(6px + env(safe-area-inset-bottom));
+    background: var(--surface);
+    border-top: 1px solid var(--border);
+  }
+  .phone-tabs a {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    padding: 6px 0;
+    border-radius: var(--r-md);
+    color: var(--muted);
+    font-size: 12px;
+    font-weight: 550;
+    text-decoration: none;
+  }
+  .phone-tabs a svg {
+    width: 22px;
+    height: 22px;
+  }
+  .phone-tabs a.active {
+    color: var(--accent);
+    background: var(--accent-soft);
+  }
+
+  /* ---------- A project: top bar, bottom bar, sheets ---------- */
+  .workspace {
+    height: 100dvh;
+    grid-template-rows: 52px minmax(0, 1fr) auto;
+  }
+  .workbar {
+    gap: 2px;
+    padding: 0 4px;
+  }
+  .workbar .title-input {
+    max-width: none;
+    min-width: 0;
+    flex: 1;
+    width: 100%;
+  }
+  .workbar > .spacer {
+    display: none;
+  }
+  .workbar .icon-btn,
+  .phone-bar button {
+    min-width: 44px;
+    min-height: 44px;
+  }
+  .workbar .save-status {
+    flex: none;
+  }
+  .phone-bar {
+    display: grid;
+    grid-auto-flow: column;
+    grid-auto-columns: 1fr;
+    gap: 4px;
+    padding: 6px 6px calc(6px + env(safe-area-inset-bottom));
+    background: var(--surface);
+    border-top: 1px solid var(--border);
+    z-index: 45;
+  }
+  .phone-bar button {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    border: none;
+    border-radius: var(--r-md);
+    background: none;
+    color: var(--text-2);
+    font: inherit;
+    font-size: 12px;
+    font-weight: 550;
+    padding: 4px 2px;
+  }
+  .phone-bar button svg {
+    width: 22px;
+    height: 22px;
+  }
+  .phone-bar button[aria-pressed='true'] {
+    color: var(--accent);
+    background: var(--accent-soft);
+  }
+  .phone-scrim {
+    position: fixed;
+    inset: 0;
+    z-index: 39;
+    background: var(--overlay);
+  }
+  /* Project panels (comments, history, AI changes…) cover the screen. */
+  .workspace .workarea {
+    display: block;
+    position: relative;
+    min-height: 0;
+  }
+  .workspace .workarea > div:first-child {
+    height: 100%;
+  }
+  .workspace .drawer {
+    position: fixed;
+    left: 0;
+    right: 0;
+    top: 52px;
+    bottom: calc(62px + env(safe-area-inset-bottom));
+    width: auto;
+    z-index: 44;
+    border-left: none;
+  }
+
+  /* Side panels: hidden until their button in the bottom bar opens them as a sheet. */
+  .workspace .tl-media,
+  .workspace .tl-inspector,
+  .workspace .image-editor > .inspector,
+  .workspace .slide-sorter,
+  .workspace .slide-inspector,
+  .workspace .code-files,
+  .workspace .code-side,
+  .workspace .doc-outline {
+    display: none;
+  }
+  .workspace[data-sheet='left'] .tl-media,
+  .workspace[data-sheet='left'] .slide-sorter,
+  .workspace[data-sheet='left'] .code-files,
+  .workspace[data-sheet='left'] .doc-outline,
+  .workspace[data-sheet='right'] .tl-inspector,
+  .workspace[data-sheet='right'] .image-editor > .inspector,
+  .workspace[data-sheet='right'] .slide-inspector,
+  .workspace[data-sheet='right'] .code-side {
+    display: block;
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: calc(62px + env(safe-area-inset-bottom));
+    max-height: 64dvh;
+    width: auto;
+    overflow-y: auto;
+    z-index: 40;
+    border: none;
+    border-radius: 16px 16px 0 0;
+    background: var(--surface);
+    box-shadow: var(--shadow-3);
+    animation: sheet-up 0.18s ease-out;
+  }
+  .workspace[data-sheet='left'] .code-files,
+  .workspace[data-sheet='right'] .code-side {
+    display: flex;
+    height: 64dvh;
+  }
+  /* A grab handle, so a sheet reads as something that slid up. */
+  .workspace[data-sheet] :is(.tl-media, .tl-inspector, .inspector, .slide-sorter, .code-files, .code-side, .doc-outline)::before {
+    content: '';
+    display: block;
+    width: 40px;
+    height: 4px;
+    margin: 8px auto 2px;
+    border-radius: 2px;
+    background: var(--border-strong);
+  }
+  @keyframes sheet-up {
+    from {
+      transform: translateY(24px);
+      opacity: 0.6;
+    }
+  }
+
+  /* Toolbars: one row that scrolls sideways instead of spilling off the screen. */
+  .workspace :is(.editor-toolbar, .tl-toolbar, .doc-toolbar, .slides-toolbar) {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .workspace :is(.editor-toolbar, .tl-toolbar, .doc-toolbar, .slides-toolbar) > * {
+    flex: none;
+  }
+
+  /* ---------- Video, Recense and animation: picture on top, timeline below ---------- */
+  .workspace .timeline-editor {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr) minmax(220px, 46%);
+  }
+  .workspace .tl-preview {
+    grid-row: 1;
+    grid-column: 1;
+  }
+  .workspace .tl-splitter {
+    display: none;
+  }
+  .workspace .tl-timeline {
+    grid-row: 2;
+  }
+  .workspace .tl-transport {
+    gap: 2px;
+    padding: 4px;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+  }
+  .workspace .tl-transport .icon-btn {
+    min-width: 40px;
+    min-height: 40px;
+  }
+  .workspace .tl-body {
+    grid-template-columns: 92px minmax(0, 1fr);
+  }
+  .workspace .tl-head .icon-btn {
+    display: none;
+  }
+  .workspace .tl-head .icon-btn:last-child {
+    display: inline-flex;
+  }
+
+  /* ---------- Image editor: tools along the bottom, canvas fills the rest ---------- */
+  .workspace .image-editor {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr) auto;
+  }
+  .workspace .image-editor > .tool-rail {
+    grid-row: 3;
+    flex-direction: row;
+    overflow-x: auto;
+    overflow-y: hidden;
+    border-right: none;
+    border-top: 1px solid var(--border);
+    padding: 4px;
+    scrollbar-width: none;
+  }
+  .workspace .image-editor > .tool-rail .icon-btn {
+    flex: none;
+    width: 44px;
+    height: 44px;
+  }
+  .workspace .image-editor > .tool-rail .rail-sep {
+    width: 1px;
+    height: auto;
+    margin: 6px 4px;
+  }
+
+  /* ---------- Slideshow, code, document: the main area only ---------- */
+  .workspace .slides-body,
+  .workspace .code-editor {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .workspace .slides-center {
+    grid-template-rows: minmax(0, 1fr) 140px;
+  }
+  .workspace .doc-scroll {
+    padding: var(--sp-3) var(--sp-2) 120px;
+  }
+  .workspace .doc-page {
+    padding: 28px 20px;
+  }
+
+  /* Dialogs use the whole width. */
+  .dialog {
+    width: calc(100vw - 16px) !important;
+    max-width: none !important;
+    max-height: calc(100dvh - 16px);
+  }
+}
+
+/* Touch screens: no hover tooltips (a tap would leave them stuck on screen). */
+@media (hover: none) {
+  .tooltip {
+    display: none !important;
+  }
+}
+@media (max-width: 700px) {
+  .hint-inline {
+    display: none;
+  }
+}
